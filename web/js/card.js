@@ -33,7 +33,15 @@
     morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️', after_hours: '🌙'
   };
 
-  function font(weight, stretch, size) { return weight + ' ' + stretch + ' ' + size + 'px ' + FAMILY; }
+  /**
+   * Set the canvas font. The plain version goes in first because it is valid everywhere;
+   * a browser that does not accept a width keyword in the canvas font shorthand ignores
+   * the second assignment and keeps the first, and every layout below measures what it got.
+   */
+  function setFont(ctx, weight, stretch, size) {
+    ctx.font = weight + ' ' + size + 'px ' + FAMILY;
+    if (stretch && stretch !== NORMAL) ctx.font = weight + ' ' + stretch + ' ' + size + 'px ' + FAMILY;
+  }
 
   /** A name fit for a public card: first name only; raw phone numbers and e-mails are masked. */
   function cardName(name) {
@@ -84,12 +92,12 @@
   /** Largest size (≤ max) and widest cut at which `text` fits in `width` on one line. */
   function fitOne(ctx, text, width, weight, max, min, stretches) {
     for (var i = 0; i < stretches.length; i++) {
-      ctx.font = font(weight, stretches[i], max);
+      setFont(ctx, weight, stretches[i], max);
       var w = ctx.measureText(text).width;
       if (w <= width) return { size: max, stretch: stretches[i], width: w };
       if (i === stretches.length - 1) {
         var size = Math.max(min, Math.floor(max * width / w));
-        ctx.font = font(weight, stretches[i], size);
+        setFont(ctx, weight, stretches[i], size);
         return { size: size, stretch: stretches[i], width: ctx.measureText(text).width };
       }
     }
@@ -130,25 +138,25 @@
     var one = [WIDE, SEMI_WIDE, NORMAL, NARROW];
     for (size = 116; size >= 88; size -= 4) {
       for (i = 0; i < one.length; i++) {
-        ctx.font = font(900, one[i], size);
+        setFont(ctx, 900, one[i], size);
         if (ctx.measureText(text).width <= width) return { size: size, stretch: one[i], lines: [text] };
       }
     }
     var two = [WIDE, NORMAL, NARROW, XNARROW];
     for (size = 108; size >= 56; size -= 6) {
       for (i = 0; i < two.length; i++) {
-        ctx.font = font(900, two[i], size);
+        setFont(ctx, 900, two[i], size);
         lines = wrap(ctx, text, width);
         if (lines.length <= 2) return { size: size, stretch: two[i], lines: lines };
       }
     }
-    ctx.font = font(900, XNARROW, 56);
+    setFont(ctx, 900, XNARROW, 56);
     lines = wrap(ctx, text, width);
     return { size: 56, stretch: XNARROW, lines: [lines[0], ellipsize(ctx, lines.slice(1).join(' '), width)] };
   }
 
   function label(ctx, text, x, y, color, align) {
-    ctx.font = font(800, SEMI_WIDE, 25);
+    setFont(ctx, 800, SEMI_WIDE, 25);
     ctx.fillStyle = color;
     ctx.textAlign = align || 'left';
     ctx.textBaseline = 'alphabetic';
@@ -184,7 +192,7 @@
     // ── header: label pill + chat name ──
     var y = 78;
     var pillText = F.inReview(s.period.label).toUpperCase();
-    ctx.font = font(800, SEMI_WIDE, 26);
+    setFont(ctx, 800, SEMI_WIDE, 26);
     if ('letterSpacing' in ctx) ctx.letterSpacing = '3px';
     var pillW = Math.min(inner, ctx.measureText(pillText).width + 56);
     ctx.fillStyle = 'rgba(255,255,255,0.2)';
@@ -198,7 +206,7 @@
     y += 58 + 34;
 
     var title = fitTitle(ctx, s.chat.name, inner);
-    ctx.font = font(900, title.stretch, title.size);
+    setFont(ctx, 900, title.stretch, title.size);
     ctx.fillStyle = '#fff';
     ctx.textBaseline = 'alphabetic';
     title.lines.forEach(function (line, i) {
@@ -214,7 +222,7 @@
     blocks.push({ h: 306, draw: function (top) {
       var num = fitOne(ctx, totalText, 780, 900, 218, 90, [NORMAL, NARROW, XNARROW]);
       var unit = F.plural(s.totals.messages, 'message');
-      ctx.font = font(900, WIDE, 50);
+      setFont(ctx, 900, WIDE, 50);
       var unitW = ctx.measureText(unit).width;
       var w = Math.max(num.width, unitW) + 108;
       tilt(ctx, PAD + w / 2, top + 153, -2, function () {
@@ -222,10 +230,10 @@
         ctx.textAlign = 'left';
         ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = '#0a6cff';
-        ctx.font = font(900, num.stretch, num.size);
+        setFont(ctx, 900, num.stretch, num.size);
         ctx.fillText(totalText, PAD + 50, top + 48 + 158);
         ctx.fillStyle = '#0b0b0f';
-        ctx.font = font(900, WIDE, 50);
+        setFont(ctx, 900, WIDE, 50);
         ctx.fillText(unit, PAD + 54, top + 48 + 158 + 62);
       });
     } });
@@ -236,7 +244,7 @@
         var emoji = PERSONA_EMOJI[s.personality.id] || '💬';
         var text = s.personality.title;
         var fit = fitOne(ctx, text, 640, 900, 62, 34, [SEMI_WIDE, NORMAL, NARROW, XNARROW]);
-        ctx.font = font(900, fit.stretch, fit.size);
+        setFont(ctx, 900, fit.stretch, fit.size);
         text = ellipsize(ctx, text, 640);
         var textW = ctx.measureText(text).width;
         var w = textW + 96 + 104;
@@ -249,7 +257,7 @@
           ctx.fillStyle = '#fff';
           ctx.fillText(emoji, x + 40, top + 94);
           label(ctx, 'Personality', x + 150, top + 62, '#ffd60a');
-          ctx.font = font(900, fit.stretch, fit.size);
+          setFont(ctx, 900, fit.stretch, fit.size);
           ctx.fillStyle = '#fff';
           ctx.textBaseline = 'alphabetic';
           ctx.fillText(text, x + 148, top + 62 + 20 + fit.size * 0.74);
@@ -277,18 +285,18 @@
               ctx.textBaseline = 'alphabetic';
               ctx.textAlign = 'left';
               ctx.fillStyle = 'rgba(3,32,12,0.5)';
-              ctx.font = font(900, NORMAL, 40);
+              setFont(ctx, 900, NORMAL, 40);
               ctx.fillText(String(i + 1), PAD + 44, ry);
               var pctText = F.pct(p.share, 1);
-              ctx.font = font(800, NORMAL, 34);
+              setFont(ctx, 800, NORMAL, 34);
               var pctW = ctx.measureText(pctText).width;
               ctx.fillStyle = '#03200c';
               ctx.textAlign = 'right';
               ctx.fillText(pctText, PAD + leftW - 44, ry);
               ctx.textAlign = 'left';
-              ctx.font = font(900, NORMAL, 44);
+              setFont(ctx, 900, NORMAL, 44);
               var nameW = leftW - 44 - 52 - 44 - pctW - 24;
-              if (ctx.measureText(cardName(p.name)).width > nameW) ctx.font = font(900, NARROW, 44);
+              if (ctx.measureText(cardName(p.name)).width > nameW) setFont(ctx, 900, NARROW, 44);
               ctx.fillText(ellipsize(ctx, cardName(p.name), nameW), PAD + 96, ry);
             });
           });
@@ -303,7 +311,7 @@
             label(ctx, 'Peak hour', px + 40, pyTop + 66, 'rgba(11,11,15,0.6)');
             var hourText = F.hour(peak);
             var fit = fitOne(ctx, hourText, pw - 80, 900, 112, 60, [NORMAL, NARROW, XNARROW]);
-            ctx.font = font(900, fit.stretch, fit.size);
+            setFont(ctx, 900, fit.stretch, fit.size);
             ctx.fillStyle = '#0b0b0f';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'alphabetic';
@@ -331,10 +339,10 @@
     ctx.textBaseline = 'alphabetic';
     ctx.textAlign = 'left';
     ctx.fillStyle = '#fff';
-    ctx.font = font(900, SEMI_WIDE, 30);
+    setFont(ctx, 900, SEMI_WIDE, 30);
     ctx.fillText(Config.PRODUCT_NAME, PAD, H - 56);
     var nameW = ctx.measureText(Config.PRODUCT_NAME).width;
-    ctx.font = font(600, NORMAL, 26);
+    setFont(ctx, 600, NORMAL, 26);
     ctx.fillStyle = 'rgba(255,255,255,0.78)';
     ctx.fillText('  ·  made on device', PAD + nameW, H - 56);
     ctx.textAlign = 'right';

@@ -9,7 +9,8 @@
  *             innerHTML, and styles are set through the CSSOM (the page CSP forbids inline
  *             style attributes).
  * - ink       'light' | 'dark': colour of the player chrome on top of this slide.
- * - world     the slide's signature colour (desktop backdrop, theme-color).
+ * - world     the slide's signature colour (theme-color, header badge).
+ * - backdrop  the colour behind a framed desktop stage; defaults to `world`.
  * - fits      functions the player calls with the size of one design pixel whenever the
  *             stage is laid out; they shrink type until it fits.
  * - counts    numbers that count up: { el, to, at, dur, format }.
@@ -107,6 +108,7 @@
       body: el.lastChild,
       ink: opts.ink || 'light',
       world: opts.world,
+      backdrop: opts.backdrop || opts.world,
       duration: opts.duration || 6000,
       label: opts.label || '',
       fits: [],
@@ -237,6 +239,8 @@
 
     var labelText = h('span', '', F.inReview(s.period.label));
     var label = A(bubble('white', 'left', labelText, 'cover__label'), 'pop-l', T0 + 520);
+    // Somebody loved it: a heart tapback lands on the title bubble.
+    label.appendChild(A(G.tapback('love', 'cover__tb'), 'drop', T0 + 1150, 0.5));
     var stack = h('div', 'cover__stack', [
       A(h('div', 'cover__typing', typing()), 'typing', 200, 1.5),
       meta.length ? A(h('p', 'cover__meta', meta.join('  ·  ')), 'up', T0) : null,
@@ -247,6 +251,7 @@
 
     add(slide.body, [stack, A(h('p', 'cover__hint', 'Tap to skip ahead  ·  hold to pause'), 'fade', T0 + 1500)]);
     slide.cues.push({ at: T0, haptic: 'medium' });
+    slide.cues.push({ at: T0 + 1150, haptic: 'light' });
     return slide;
   }
 
@@ -629,7 +634,7 @@
   function moty(s) {
     var m = s.most_reacted[0];
     if (!m || !(m.reactions > 0 || m.text)) return null;
-    var slide = make('moty', { ink: 'dark', world: '#e9e9eb', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : '') });
+    var slide = make('moty', { ink: 'dark', world: '#e9e9eb', backdrop: '#0a84ff', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : '') });
     decos(slide, ['moty__d1', 'moty__d2']);
 
     var len = Array.from(m.text).length;
@@ -760,7 +765,9 @@
       A(kicker('Chat awards'), 'up', 100),
       A(h('h2', 'headline', list.length === 1 ? 'And the award goes to…' : 'And the winners are…'), 'up', 220),
       gap('m'),
-      grid
+      grid,
+      // Opt-in AI-written awards are labelled as such (docs/SCHEMA.md §4).
+      list.some(function (a) { return a.ai; }) ? A(h('p', 'awards__ai', 'These awards were written by AI.'), 'fade', 550 + list.length * 230 + 300) : null
     ]);
     slide.cues.push({ at: 550, haptic: 'light' });
     return slide;

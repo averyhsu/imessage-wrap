@@ -298,6 +298,7 @@
     S.stage.setAttribute('data-ink', next.ink);
     S.stage.setAttribute('data-slide', next.id);
     S.mount.style.setProperty('--world', next.world);
+    S.mount.style.setProperty('--backdrop', next.backdrop);
     var theme = document.querySelector('meta[name="theme-color"]');
     if (theme) theme.setAttribute('content', next.world);
 

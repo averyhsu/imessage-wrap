@@ -26,7 +26,8 @@
   -webkit-user-select: none;
   user-select: none;
   -webkit-touch-callout: none;
-  touch-action: manipulation;
+  touch-action: pinch-zoom;
+  overscroll-behavior: none;
   --u: 1px;
   --world: #0a84ff;
 }
@@ -37,7 +38,7 @@
   right: 0;
   bottom: 0;
   left: 0;
-  background-color: var(--world);
+  background-color: var(--backdrop, var(--world));
   transition: background-color 0.7s ease;
   opacity: 0;
 }
@@ -390,6 +391,7 @@
   letter-spacing: -0.022em;
   margin-top: calc(var(--u) * 10);
   text-wrap: balance;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -421,6 +423,7 @@
   position: relative;
   isolation: isolate;
   display: block;
+  width: -webkit-fit-content;
   width: -moz-fit-content;
   width: fit-content;
   max-width: 100%;
@@ -430,6 +433,7 @@
   color: var(--bt);
   font: 500 calc(var(--u) * 17) / 1.27 var(--font-text);
   letter-spacing: -0.012em;
+  word-break: break-word;
   overflow-wrap: anywhere;
 }
 
@@ -676,12 +680,13 @@
 .cover__name {
   font: 900 calc(var(--u) * 68) / 0.9 var(--font-display);
   letter-spacing: -0.03em;
+  word-break: break-word;
   overflow-wrap: anywhere;
   text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 24) rgba(0, 20, 90, 0.25);
   padding-bottom: 0.06em;
 }
 
-.cover__name .w { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
+.cover__name .w { display: inline-block; max-width: 100%; word-break: break-word; overflow-wrap: anywhere; }
 
 .cover__label {
   --r: calc(var(--u) * 27);
@@ -696,8 +701,18 @@
   overflow: visible;
 }
 
-.cover__label > span { display: inline-block; }
-.cover__label.fit--clip > span { display: block; overflow: hidden; text-overflow: ellipsis; }
+.cover__label > span:first-child { display: inline-block; }
+.cover__label.fit--clip > span:first-child { display: block; overflow: hidden; text-overflow: ellipsis; }
+
+.cover__tb {
+  position: absolute;
+  top: calc(var(--u) * -17);
+  right: calc(var(--u) * -21);
+  width: calc(var(--u) * 40);
+  height: calc(var(--u) * 40);
+  font-size: calc(var(--u) * 22);
+  box-shadow: 0 calc(var(--u) * 4) calc(var(--u) * 12) rgba(0, 20, 90, 0.3);
+}
 
 .cover__hint {
   position: absolute;
@@ -866,6 +881,7 @@
 
 .persona__emoji {
   display: block;
+  width: -webkit-fit-content;
   width: -moz-fit-content;
   width: fit-content;
   font-size: calc(var(--u) * 66);
@@ -1259,6 +1275,11 @@
   overflow: hidden;
 }
 
+.moty__runner .moty__tally { gap: calc(var(--u) * 4) calc(var(--u) * 12); padding: calc(var(--u) * 2) 0; }
+.moty__runner .moty__tally > span { font-size: calc(var(--u) * 15); gap: calc(var(--u) * 4); color: #3a3a3c; }
+.moty__runner .moty__tally .glyph { font-size: calc(var(--u) * 19); }
+.moty__runner .bubble > .moty__tally { display: flex; overflow: visible; }
+
 .moty__runner p {
   margin: calc(var(--u) * 5) 0 0 calc(var(--u) * 10);
   font: 500 calc(var(--u) * 12) / 1.2 var(--font-text);
@@ -1413,6 +1434,12 @@
 .awards__grid--1 .award__title, .awards__grid--2 .award__title, .awards__grid--3 .award__title { margin-top: 0; }
 .awards__grid--1 .award__winner, .awards__grid--2 .award__winner, .awards__grid--3 .award__winner { font-size: calc(var(--u) * 34); }
 .awards__grid--1 .award__detail, .awards__grid--2 .award__detail, .awards__grid--3 .award__detail { font-size: calc(var(--u) * 13); }
+
+.awards__ai {
+  margin-top: calc(var(--u) * 10);
+  font: 600 calc(var(--u) * 11.5) / 1.2 var(--font-text);
+  color: rgba(11, 11, 15, 0.6);
+}
 
 /* ── 12. summary ───────────────────────────────────────────────────────────── */
 

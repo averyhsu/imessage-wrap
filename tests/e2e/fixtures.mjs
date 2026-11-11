@@ -109,6 +109,7 @@ const duo = makeStats({ name: 'me & u', members: 2, total: 9204, label: '2026', 
 duo.awards = [];
 
 const dozen = makeStats({ name: 'Cousins + plus-ones + the dog', members: 12, total: 31876, label: '2026' });
+dozen.awards.forEach((a) => { a.ai = true; }); // opt-in AI-written awards carry this flag
 
 const longName = makeStats({
   name: 'The Extremely Long Group Chat Name That Just Keeps Going And Going And Nobody Will Rename 🎉🎉', members: 9, total: 48213, label: 'Summer 2026', names: longNames,

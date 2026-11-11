@@ -543,6 +543,10 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
   await showSettled(s.page, 10);
   eq(await s.page.locator('.slide.is-active .award__detail').count(), 0, 'awards without detail render without the detail line');
   eq(await s.page.locator('.slide.is-active .award').count(), 6, 'all six awards still render');
+  eq(await s.page.locator('.slide.is-active .awards__ai').count(), 0, 'rule-based awards carry no AI note');
+  await idsFor(fixtures.dozen);
+  await showSettled(s.page, 10);
+  ok((await s.page.locator('.slide.is-active .awards__ai').innerText()).includes('written by AI'), 'AI-written awards are labelled');
 
   // Reduced motion: no count-up, entrances fade.
   const calm = await open({ reducedMotion: 'reduce' });
@@ -561,7 +565,7 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
 // ── 7. landing page ────────────────────────────────────────────────────────────────────
 await section('landing', 'Landing page', async () => {
   for (const [vpName, vp] of [['phone-390x844', viewports['phone-390x844']], ['se-320x568', viewports['se-320x568']], ['desktop-1440x900', viewports['desktop-1440x900']]]) {
-    const s = await open({ viewport: vp, scale: vpName === 'phone-390x844' ? 2 : 1 });
+    const s = await open({ viewport: vp });
     const { page } = s;
     await page.goto(server.url);
     await page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));

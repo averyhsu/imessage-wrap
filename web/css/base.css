@@ -134,6 +134,8 @@ a { color: inherit; }
 /* The page decides what to show before first paint (js/boot.js sets these classes). */
 html.is-story .landing,
 html.is-embed .landing { display: none; }
+html.is-story,
+html.is-embed { overscroll-behavior: none; }
 html.is-story body,
 html.is-embed body { overflow: hidden; }
 
