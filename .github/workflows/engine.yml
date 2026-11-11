@@ -33,13 +33,19 @@ env:
 
 jobs:
   linux:
-    name: Python ${{ matrix.python }} + Node 22 (Ubuntu)
-    runs-on: ubuntu-latest
+    name: Python ${{ matrix.python }} + Node 22 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        python: ['3.9', '3.13']
+        include:
+          # Python 3.9 is the oldest supported version (and what macOS ships
+          # as /usr/bin/python3); it is no longer built for the newest image.
+          - python: '3.9'
+            os: ubuntu-24.04
+          - python: '3.13'
+            os: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -20,6 +20,7 @@ let objectReplacement = "\u{FFFC}"
 
 var samples: [[String: Any]] = []
 var failures = 0
+setvbuf(stdout, nil, _IONBF, 0)     // keep the log complete if Foundation raises an exception
 
 func hex(_ data: Data) -> String {
     return data.map { String(format: "%02x", $0) }.joined()
@@ -37,6 +38,7 @@ func pattern(_ count: Int) -> String {
 }
 
 func record(_ name: String, _ value: NSAttributedString, mutable: Bool, messagesLayout: Bool) {
+    print("archiving \(name) (\(value.string.utf8.count) bytes of UTF-8)")
     let data = NSArchiver.archivedData(withRootObject: value)
     // the archive must round-trip through Apple's own decoder
     if let back = NSUnarchiver.unarchiveObject(with: data) as? NSAttributedString {
@@ -67,7 +69,11 @@ func plain(_ name: String, _ text: String) {
 }
 
 // ---- every length encoding ----------------------------------------------------
-for count in [0, 1, 2, 12, 126, 127, 128, 129, 200, 255, 256, 257, 300, 1000, 2359,
+// (An empty string cannot carry attributes: NSUnarchiver raises a range
+// exception on such an archive, so the empty case is archived without any.)
+record("len0", NSAttributedString(string: ""), mutable: false, messagesLayout: false)
+record("len0_mutable", NSMutableAttributedString(string: ""), mutable: true, messagesLayout: false)
+for count in [1, 2, 12, 126, 127, 128, 129, 200, 255, 256, 257, 300, 1000, 2359,
               32767, 32768, 40000, 65535, 65536, 70000] {
     plain("len\(count)", pattern(count))
 }
