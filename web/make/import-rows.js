@@ -28,8 +28,11 @@
  *          #senders
  *          Maya
  *                               <- an empty line means "sent by me"
- *      Both lists must have the same number of lines. A #texts section is not
- *      supported (message text can contain line breaks).
+ *      Both lists should have the same number of lines. When they do not,
+ *      nothing is guessed about which line went missing: a warning gives both
+ *      counts and only the first N lines of each list are used, N being the
+ *      length of the shorter one (the rest is dropped). A #texts section is
+ *      not supported (message text can contain line breaks).
  *   2. JSON Lines: one object per line, {"date": ..., "sender": ..., "text": ...}.
  *   3. A JSON array of such objects.
  *   4. CSV or TSV with a header row. Quoted fields may contain commas, line
@@ -42,6 +45,14 @@
  *   direction  direction, is_from_me, type   ("outgoing" / "sent" / "me" / 1 = mine)
  * Without a direction column, an empty sender (or one named "Me") is the owner.
  * A row is always a message: rows without text count, with zero words.
+ *
+ * Sender names are cleaned exactly like every other name (docs/SCHEMA.md 2,
+ * "Clean names": no control characters, line breaks or direction overrides)
+ * before they are counted or returned, and the same goes for anything quoted
+ * in a warning. A sender that is a phone number or an e-mail address is
+ * returned as written, like a handle from a database: the engine masks it
+ * ("...0123", the part before the "@") when it computes the stats, so it never
+ * reaches the recap or the link.
  *
  * Dates: ISO 8601 (with or without a zone), Unix seconds or milliseconds, and
  * the usual written forms ("11/10/2026, 9:41 PM", "2026-11-10 21:41:07",
@@ -120,8 +131,17 @@
       .replace(/^ | $/g, '');
   }
 
+  /**
+   * The engine's "clean names" rule, then the spaces collapsed: nothing that
+   * could break a line, ring a bell or reorder the text around it survives.
+   */
+  function cleanName(value) {
+    return tidy(String(value).replace(/[\t\n\r\u2028\u2029]/g, ' ')
+      .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFFFC\uFFFD]/g, ''));
+  }
+
   function quote(value) {
-    var text = String(value);
+    var text = cleanName(value);
     return JSON.stringify(text.length > 40 ? text.slice(0, 40) + '...' : text);
   }
 
@@ -149,7 +169,9 @@
         })
       };
     } catch (error) {
-      throw new RangeError('unknown time zone ' + JSON.stringify(name));
+      var problem = new RangeError('unknown time zone ' + JSON.stringify(cleanName(name)));
+      problem.code = 'range';
+      throw problem;
     }
   }
 
@@ -422,7 +444,7 @@
       this.notes.add('date', where + ': could not read the date ' + quote(dateValue === undefined ? '' : dateValue) + '; skipped.');
       return;
     }
-    var name = sender === null || sender === undefined ? '' : tidy(sender);
+    var name = sender === null || sender === undefined ? '' : cleanName(sender);
     if (mine === null) mine = name === '' || this.ctx.me.indexOf(name.toLowerCase()) !== -1;
     if (mine) this.fromMe += 1;
     else this.senders[name || 'Unknown'] = true;
@@ -634,13 +656,13 @@
    * Parse an export. `text` is the pasted or uploaded content (a string).
    * See the top of this file for the formats, the options and the result.
    * Never throws for bad input (problems come back in `warnings`); throws
-   * RangeError only for an unknown options.tz.
+   * a RangeError with code "range" only for an unknown options.tz.
    */
   function parseExport(text, options) {
     var o = options || {};
     var notes = new Notes();
     var me = (Array.isArray(o.me) ? o.me : o.me ? [o.me] : []).concat(['me'])
-      .map(function (name) { return tidy(name).toLowerCase(); });
+      .map(function (name) { return cleanName(name).toLowerCase(); });
     var ctx = { zone: makeZone(o.tz), dayFirst: o.dayFirst === undefined ? null : !!o.dayFirst, me: me, appleEpoch: false };
     var builder = new Builder(ctx, notes);
     var result = { rows: builder.rows, warnings: [], format: 'unknown', columns: null, summary: null };
@@ -703,6 +725,9 @@
   return {
     parseExport: parseExport,
     // exposed for the tests
-    _internals: { parseDate: parseDate, parseDelimited: parseDelimited, pickColumns: pickColumns, tidy: tidy, engineDate: engineDate }
+    _internals: {
+      parseDate: parseDate, parseDelimited: parseDelimited, pickColumns: pickColumns, tidy: tidy,
+      cleanName: cleanName, engineDate: engineDate
+    }
   };
 });
