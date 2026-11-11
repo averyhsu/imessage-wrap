@@ -35,7 +35,7 @@
     if (typeof v === 'object') return '';
     var s = String(v)
       // control characters, zero-width joiners used as padding, bidi overrides, object replacement
-      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F‪-‮⁦-⁩￼�]/g, '')
+      .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFFFC\uFFFD]/g, '')
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/ {2,}/g, ' ')
       .trim();
