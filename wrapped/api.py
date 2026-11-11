@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import subprocess
+import sys
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union
 
 from . import db as _db
@@ -28,9 +30,38 @@ from . import stats as _stats
 from .typedstream import decode_attributed_body
 
 __all__ = ["Source", "open_source", "list_chats", "compute_stats", "decode_text",
-           "chat_for_message", "build_link", "short_names"]
+           "chat_for_message", "build_link", "short_names", "account_first_name"]
 
 short_names = _stats.short_names
+
+
+def account_first_name(platform: Optional[str] = None, run: Any = None) -> str:
+    """The first name of this Mac's user account (``id -F``), or ``"Me"``.
+
+    The default for the owner's name: a recap the whole chat reads should not
+    call its owner "Me". The answer is the first word of the account's full
+    name, cleaned like every name. Not a Mac, no such command, no answer in
+    three seconds, an empty answer, or a "name" that is really a number or an
+    address: all of these give ``"Me"``. Never raises.
+
+    ``platform`` (default ``sys.platform``) and ``run`` (default
+    ``subprocess.run``) are there for tests."""
+    if (platform or sys.platform) != "darwin":
+        return "Me"
+    try:
+        proc = (run or subprocess.run)(             # a fixed command, no shell
+            ["/usr/bin/id", "-F"], capture_output=True, text=True, timeout=3,
+            stdin=subprocess.DEVNULL)
+        if getattr(proc, "returncode", 0):
+            return "Me"
+        full = _stats.clean_name(proc.stdout, _stats.NAME_LIMIT)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return "Me"
+    if _stats.mask_handle(full) != full:            # a number or an address is not a name
+        return "Me"
+    words = _stats._words(full)
+    name = words[0] if words else ""
+    return name if name and name != "?" else "Me"
 
 Contacts = Union[None, bool, str, Iterable[Any], Mapping[str, str]]
 

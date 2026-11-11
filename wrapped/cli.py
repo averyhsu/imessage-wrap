@@ -9,6 +9,10 @@ sets ``func`` (a callable taking the parsed arguments and returning an exit
 status). The optional ``wrapped.mac`` package adds its own commands through
 ``wrapped.mac.cli.register(subparsers)`` using the same convention.
 
+The recap calls its owner by ``--me NAME``, else ``$WRAPPED_ME``, else the
+first name of this Mac's user account, else "Me"; when nobody chose the name,
+``stats`` and ``link`` say on standard error which one was used.
+
 Whatever goes wrong with the input (a damaged database, a file that cannot be
 written, a stats file that is not a recap) ends in one sentence on standard
 error and exit status 1, never in a traceback. Set ``WRAPPED_DEBUG=1`` to see
@@ -49,8 +53,9 @@ def _add_source_options(parser: argparse.ArgumentParser) -> None:
                             "from; may be repeated (default: found automatically)")
     group.add_argument("--no-contacts", action="store_true",
                        help="do not look names up in Contacts (numbers show as \u20261234)")
-    group.add_argument("--me", metavar="NAME", default="Me",
-                       help="your own name in the recap (default: Me)")
+    group.add_argument("--me", metavar="NAME",
+                       help="your own name in the recap (default: $WRAPPED_ME if set, else the "
+                            "first name of this Mac's user account, else Me)")
     group.add_argument("--tz", metavar="ZONE",
                        help="IANA time zone for dates and hours, e.g. America/Chicago "
                             "(default: this computer's)")
@@ -93,22 +98,48 @@ def _day(unix: Optional[int]) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(unix)) if unix else "-"
 
 
+def _owner(args: argparse.Namespace) -> str:
+    """The owner's name for this run: ``--me``, else ``$WRAPPED_ME``, else the
+    first name of the Mac account, else "Me". Worked out once and kept on
+    ``args``; ``args.me_looked_up`` says that nobody chose it."""
+    if getattr(args, "owner", None) is None:
+        given = args.me if args.me is not None else os.environ.get("WRAPPED_ME")
+        args.me_looked_up = given is None
+        args.owner = _owner_name(api.account_first_name() if given is None else given)
+    return args.owner
+
+
+def _say_who(args: argparse.Namespace) -> None:
+    """One line on standard error when the recap's owner was not named by the
+    user: which name is used, and how to change it."""
+    name = _owner(args)
+    if not args.me_looked_up:
+        return
+    if name == "Me":
+        sys.stderr.write('%s: you are "Me" in this recap. Use --me NAME to put your name there.\n'
+                         % PRODUCT_NAME)
+    else:
+        sys.stderr.write('%s: you are "%s" in this recap (the first name of this Mac\'s account). '
+                         "Use --me NAME to change it.\n" % (PRODUCT_NAME, name))
+
+
 def _stats_for(args: argparse.Namespace) -> Any:
     if args.year is not None and not 1 <= args.year <= 9999:
         raise ValueError("--year must be between 1 and 9999, for example --year 2026")
     if sum(bool(x) for x in (args.year is not None, args.all_time, args.start or args.end)) > 1:
         raise ValueError("choose one of --year, --all-time or --start/--end")
     with _open(args) as source:
-        stats = source.stats(args.chat, year=args.year, me=args.me, tz=args.tz,
+        stats = source.stats(args.chat, year=args.year, me=_owner(args), tz=args.tz,
                              all_time=args.all_time, start=args.start, end=args.end)
     if not args.full_names:
-        stats = short_names(stats, me=_owner_name(args.me))
+        stats = short_names(stats, me=_owner(args))
+    _say_who(args)
     return stats
 
 
 def cmd_chats(args: argparse.Namespace) -> int:
     with _open(args) as source:
-        chats = source.chats(args.me)
+        chats = source.chats(_owner(args))
         info = source.diagnostics()
         kind = source.kind
     if args.json:
