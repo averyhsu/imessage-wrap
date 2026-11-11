@@ -173,6 +173,17 @@
     } catch (e) { /* leave the address as it is */ }
   }
 
+  var routedHref = null;    // the address the page last acted on
+
+  function routeHere() {
+    route();
+    routedHref = root.location.href;
+  }
+
+  function onAddress() {
+    if (root.location.href !== routedHref) routeHere();
+  }
+
   function route() {
     var loc = Codec.parseLocation(root.location);
     // Embed mode needs the native shell on the other end of the bridge. A plain browser
@@ -242,13 +253,16 @@
     if (demoBtn) demoBtn.addEventListener('click', onPlayDemo);
     if (art) art.addEventListener('click', onPlayDemo);
     if (again) again.addEventListener('click', onPlayRecap);
-    root.addEventListener('popstate', function () { pushed = false; route(); });
-    root.addEventListener('hashchange', route);
+    // A change of the part after the # fires both popstate and hashchange, in that order.
+    // popstate always routes (it is also how "back" from the demo arrives); hashchange only
+    // routes when nothing has acted on that address yet, or the story would start twice.
+    root.addEventListener('popstate', function () { pushed = false; routeHere(); });
+    root.addEventListener('hashchange', onAddress);
     root.addEventListener('resize', sizeError);
-    route();
+    routeHere();
     html.classList.add('is-ready');
   }
 
-  root.WrappedApp = { route: route, load: load, showLanding: showLanding };
+  root.WrappedApp = { route: routeHere, load: load, showLanding: showLanding };
   init();
 })(window);

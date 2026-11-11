@@ -266,6 +266,21 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await waitForStory(page);
   eq(await page.locator('.slide.is-active .cover__name').innerText(), custom.chat.name, 'fragment link renders its own chat name');
 
+  // Changing the part after the # on an open page (a second link pasted into the same tab)
+  // plays the new recap, and starts it once: the browser reports that change twice.
+  await page.evaluate(() => {
+    window.__starts = 0;
+    const start = WrappedStory.start;
+    WrappedStory.start = function () { window.__starts += 1; return start.apply(this, arguments); };
+  });
+  await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + vector.payload);
+  await page.waitForFunction((name) => {
+    const el = document.querySelector('.slide.is-active .cover__name');
+    return el && el.innerText === name;
+  }, vector.stats.chat.name);
+  await page.waitForTimeout(300);
+  eq(await page.evaluate(() => window.__starts), 1, 'a new recap in the address starts the story once');
+
   // The same recap through the query string. That form puts the recap in the request line,
   // so the page reads it once and moves it behind the #; nothing the site produces uses it.
   const duoPayload = Codec.encode(fixtures.duo);
