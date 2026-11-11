@@ -203,10 +203,13 @@ payload = base64url( raw-DEFLATE( UTF-8( JSON.stringify(stats) ) ) )   // no pad
   5. delete `awards`;
   6. keep only the first 5 `senders`.
   If it still does not fit, building the link fails with a clear error.
-- **Quotes are optional.** Builders offer a "no quotes" switch (`--no-quotes` in the CLI, a
-  checkbox on the web) that replaces every `most_reacted[].text` with `""` before encoding,
-  for people who do not want message text inside the link. The story shows the tapback
-  counts without the bubble text in that case.
+- **Quotes are opt-in.** Message text is the only message *content* a recap can carry, so a
+  link never includes it unless the person making the recap asks: `--quotes` in the
+  command-line tool and the Mac helper, a switch on the maker page (off by default, shown
+  next to the exact text it would add). Without it every `most_reacted[].text` is replaced
+  with `""` before encoding, and the story shows who wrote the message and its tapbacks
+  without the bubble text. The low-level builders (`build_link`, `fitLink`) take a `quotes`
+  argument; every user-facing entry point passes `false` unless asked.
 
 ## 6. Embed bridge (web story inside the iOS app / iMessage extension)
 

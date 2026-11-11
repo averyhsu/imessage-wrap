@@ -145,7 +145,8 @@ threadback agent --chat "Dinner Club" --keep-awake
   The log (`~/.threadback/agent.log`) never contains message text.
 - `--keep-awake` stops the Mac from idle-sleeping while the helper runs. Closing the lid still
   puts it to sleep.
-- `--no-link` sends the image and the text only. `--no-quotes` keeps message text out of the link.
+- `--no-link` sends the image and the text only. `--quotes` adds the text of the three
+  most-reacted messages to the link; without it the link carries numbers and names only.
 - Press Ctrl-C to stop. Nothing keeps running in the background.
 
 ## Optional: AI-written awards
@@ -182,8 +183,8 @@ if you allowed that chat:
 - a few lines of text with the same kind of numbers;
 - the link. **The link carries the recap inside itself** (after the `#`), which is why no
   server is needed and nothing is uploaded; it also means anyone the link is forwarded to can
-  open the recap. It includes the text of the up to three most-reacted messages unless you use
-  `--no-quotes`.
+  open the recap. It contains numbers and names only, unless you start the helper with
+  `--quotes`, which adds the text of the up to three most-reacted messages.
 
 **Replies come from you.** There is no bot account: messages are sent by your Mac, from your
 Apple ID, and look like you typed them. Everyone in the chat sees them.

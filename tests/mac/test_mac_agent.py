@@ -124,7 +124,8 @@ class AgentCase(unittest.TestCase):
         card, text, link = self.sender.sent
         self.assertTrue(card["path"].endswith("threadback-dinner-club-2026.png"))
         self.assertIn("Dinner Club 🍝", text["text"])
-        self.assertEqual(link["text"], "https://example.invalid/story/#w1=FAKEPAYLOAD")  # the URL stands alone
+        # the URL stands alone, and carries no message text unless --quotes was given
+        self.assertEqual(link["text"], "https://example.invalid/story/#w1=FAKEPAYLOAD-noquotes")
         self.assertNotIn("http", text["text"])
         self.assertEqual(card["guid"], "any;+;chat111")
 
@@ -350,7 +351,8 @@ class AgentCase(unittest.TestCase):
         self.assertEqual(names, ["link.txt", "recap.txt", "threadback-dinner-club-2026.png"])
         self.assertEqual((folders[0] / "threadback-dinner-club-2026.png").read_bytes(), PNG)
         self.assertIn("48,213 messages", (folders[0] / "recap.txt").read_text(encoding="utf-8"))
-        self.assertEqual((folders[0] / "link.txt").read_text().strip(), "https://example.invalid/story/#w1=FAKEPAYLOAD")
+        self.assertEqual((folders[0] / "link.txt").read_text().strip(),
+                         "https://example.invalid/story/#w1=FAKEPAYLOAD-noquotes")
         self.assertTrue(all(r.status == DRY_RUN for r in agent.outcomes[0].results.values()))
         self.assertTrue(any("card=dry-run" in ln and "link=dry-run" in ln for ln in self.logs))
 
@@ -380,12 +382,19 @@ class AgentCase(unittest.TestCase):
         self.assertEqual(self.engine.link_calls, [])
         self.assertNotIn("link below", self.sender.sent[1]["text"])
 
-    def test_no_quotes_is_passed_to_the_link_builder(self):
-        agent = self.started(quotes=False)
+    def test_message_text_is_in_the_link_only_when_asked_for(self):
+        agent = self.started()                      # the default: no message text
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
         agent.run_once()
         self.assertEqual(self.engine.link_calls, [False])
         self.assertTrue(self.sender.sent[2]["text"].endswith("-noquotes"))
+
+    def test_quotes_is_passed_to_the_link_builder(self):
+        agent = self.started(quotes=True)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        agent.run_once()
+        self.assertEqual(self.engine.link_calls, [True])
+        self.assertTrue(self.sender.sent[2]["text"].endswith("FAKEPAYLOAD"))
 
     # -- robustness -------------------------------------------------------------
 
@@ -542,12 +551,12 @@ class Scope(unittest.TestCase):
         self.assertIn("  - Book Club (4 members)", text)
         self.assertNotIn("Maya, Dev", text)
         self.assertIn("every 120 seconds", text)
-        self.assertIn("including the most-reacted messages", text)
+        self.assertIn("numbers and names only; no message text", text)      # the default
         everything = consent_text(
-            AgentConfig(db_path=Path("x"), state_path=Path("y"), all_chats=True, quotes=False), self.CHATS, 3
+            AgentConfig(db_path=Path("x"), state_path=Path("y"), all_chats=True, quotes=True), self.CHATS, 3
         )
         self.assertIn("EVERY group chat on this Mac (3 right now", everything)
-        self.assertIn("numbers and first names only", everything)
+        self.assertIn("including the text of the most-reacted messages, because you passed --quotes", everything)
         no_link = consent_text(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], link=False), self.CHATS[:1], 3)
         self.assertIn("two messages", no_link)
         self.assertNotIn("a link", no_link)

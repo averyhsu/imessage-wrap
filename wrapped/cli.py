@@ -128,7 +128,7 @@ def cmd_link(args: argparse.Namespace) -> int:
         stats = _stats_for(args)
     else:
         raise ValueError("which chat? Give its name or id, or --stats FILE")
-    result = payload.fit_link(stats, quotes=not args.no_quotes,
+    result = payload.fit_link(stats, quotes=bool(args.quotes) and not args.no_quotes,
                               base_url=args.base_url or payload.BASE_URL)
     sys.stdout.write(result["url"] + "\n")
     if result["steps"]:
@@ -165,8 +165,11 @@ def build_parser() -> argparse.ArgumentParser:
     link.add_argument("chat", metavar="CHAT", nargs="?", help="chat id, or part of its name")
     link.add_argument("--stats", metavar="FILE",
                       help="build the link from a stats JSON file instead of a chat")
+    link.add_argument("--quotes", action="store_true",
+                      help="include the text of the most-reacted messages in the link "
+                           "(off unless you ask for it)")
     link.add_argument("--no-quotes", action="store_true",
-                      help="leave message text out of the link")
+                      help="leave message text out of the link (the default)")
     link.add_argument("--base-url", metavar="URL", help=argparse.SUPPRESS)
     _add_period_options(link)
     _add_source_options(link)

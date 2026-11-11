@@ -49,7 +49,7 @@ class AgentConfig:
     poll_interval: float = 2.0
     dry_run: bool = False
     out_dir: Optional[Path] = None  # where a dry run writes card + text + link
-    quotes: bool = True  # False keeps message text out of the link
+    quotes: bool = False  # True puts the most-reacted messages' text in the link (--quotes)
     link: bool = True  # False sends the card and text only
     join_attempts: int = 10  # a message row can appear before its chat join row
     join_delay: float = 0.3
@@ -395,7 +395,8 @@ def consent_text(config: AgentConfig, allowed: Sequence[ChatRef], total_groups: 
         lines += [
             "Each reply is three messages that everyone in the chat will see: a recap image,",
             "a short text recap, and a link that carries the recap"
-            + (" (including the most-reacted messages)." if config.quotes else " (numbers and first names only)."),
+            + (" (including the text of the most-reacted messages, because you passed --quotes)."
+               if config.quotes else " (numbers and names only; no message text)."),
         ]
     else:
         lines.append("Each reply is two messages that everyone in the chat will see: a recap image and a short text recap.")

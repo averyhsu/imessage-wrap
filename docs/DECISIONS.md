@@ -227,10 +227,37 @@ until the owner's device spike confirms group-chat sender fidelity.
 
 ### D9 — Riskiest assumption, tested first
 "An iOS app containing an iMessage extension can be built, run in the Simulator and
-screenshotted on a GitHub Actions macOS runner with no local Xcode." Result: see
-[`STATUS.md`](../STATUS.md) (run IDs are recorded there as they land).
+screenshotted on a GitHub Actions macOS runner with no local Xcode."
+
+**Result: true.** The first run
+([43030079757](https://github.com/averyhsu/imessage-wrap/actions/runs/43030079757), on a
+`macos-26` runner) generated the project with XcodeGen, built the app with the extension
+embedded, ran the tests in the iOS Simulator and captured a screenshot, about 17 minutes end
+to end. That made the native shell worth building. What the Simulator cannot show (a real group chat, a
+second device receiving the bubble) is listed in [`STATUS.md`](../STATUS.md).
 
 ### D10 — CI lives on the working branch until the owner merges
 This session may only push to its own branch and may not open a pull request unasked, so
 "green on main" is one owner action away: merge the branch (or ask for a PR). All workflows
 trigger on both `main` and `claude/**`.
+
+### D11 — A recap never carries a raw phone number or e-mail address
+Found while testing the finished engines end to end: a member who is not in the owner's
+contacts appeared as their full phone number, so a link dropped into a chat (and forwarded
+from there) could publish other people's numbers. Both engines now mask at the source: a
+phone number becomes `…` plus its last four digits, an e-mail address the part before the
+`@` (rule and edge cases in [`SCHEMA.md`](SCHEMA.md) §2). Masking in the engine, rather than
+in each surface, means the link, the story, the card and the text recap cannot disagree. The
+maker page lets people replace `…1234` with a name.
+
+### D12 — Message text is opt-in everywhere
+The brief's privacy rule is "message content stays on device, or the user explicitly agrees
+before anything leaves it". The only message content a recap can contain is the text of the
+up to three most-reacted messages. The first builds included it by default with a way to
+switch it off; that is consent by not objecting, which is not the rule. Now nothing carries
+message text unless the person making the recap asks: `--quotes` in the command-line tool
+and the Mac helper, a switch on the maker page that sits next to the exact text it would
+add. The on-device preview may show the quotes, because nothing has left the device yet.
+Cost: the "message of the year" slide is less striking by default (it shows who wrote it and
+the tapbacks, not the words). Accepted; it is one deliberate tap away.
+

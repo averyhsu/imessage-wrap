@@ -117,18 +117,22 @@ class CommandLine(unittest.TestCase):
             target = os.path.join(folder, "tiny.json")
             with open(target, "w", encoding="utf-8") as handle:
                 json.dump(TINY, handle)
-            status, out, err = run("link", "--stats", target)
+            status, out, err = run("link", "--stats", target, "--quotes")
             self.assertEqual((status, err), (0, ""))
             self.assertEqual(wrapped.stats_from_url(out.strip()), TINY)
-            status, out, err = run("link", "--stats", target, "--no-quotes")
-            quiet = wrapped.stats_from_url(out.strip())
-            self.assertEqual([q["text"] for q in quiet["most_reacted"]], ["", "", ""])
-            self.assertEqual(quiet["totals"], TINY["totals"])
-            status, out, err = run("link", "--stats", "-", stdin=json.dumps(TINY))
+            # message text goes into a link only when asked for
+            for flags in ([], ["--no-quotes"], ["--quotes", "--no-quotes"]):
+                status, out, err = run("link", "--stats", target, *flags)
+                self.assertEqual((status, err), (0, ""), flags)
+                quiet = wrapped.stats_from_url(out.strip())
+                self.assertEqual([q["text"] for q in quiet["most_reacted"]], ["", "", ""], flags)
+                self.assertEqual(quiet["totals"], TINY["totals"])
+            status, out, err = run("link", "--stats", "-", "--quotes", stdin=json.dumps(TINY))
             self.assertEqual(wrapped.stats_from_url(out.strip()), TINY)
 
     def test_link_over_budget_is_trimmed_and_says_so(self):
-        status, out, err = run("link", "Extremely", "--year", "2026", "--tz", LA, *source_args())
+        status, out, err = run("link", "Extremely", "--year", "2026", "--tz", LA, "--quotes",
+                               *source_args())
         self.assertEqual(status, 0)
         url = out.strip()
         self.assertLessEqual(len(url), 4800)
