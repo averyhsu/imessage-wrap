@@ -5,7 +5,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
+from unittest import mock
 
 import support
 from support import LA
@@ -192,7 +194,7 @@ class CommandLine(unittest.TestCase):
     def test_parser(self):
         parser = cli.build_parser()
         args = parser.parse_args(["stats", "Book Club", "--year", "2026"])
-        self.assertEqual((args.chat, args.year, args.me, args.backup), ("Book Club", 2026, "Me", None))
+        self.assertEqual((args.chat, args.year, args.me, args.backup), ("Book Club", 2026, None, None))
         self.assertTrue(callable(args.func))
         args = parser.parse_args(["chats", "--backup"])
         self.assertEqual(args.backup, "")
@@ -212,6 +214,128 @@ class CommandLine(unittest.TestCase):
         self.assertEqual((status, err), (0, ""))
         self.assertEqual([f for f in support.text_leaks(out.replace("\n", " ")) if "control" in f], [])
         self.assertGreater(json.loads(out)["totals"]["messages"], 3000)
+
+
+class OwnerName(unittest.TestCase):
+    """Who the recap calls its owner when nobody says: not "Me" if the Mac
+    knows a first name. The lookup is always a stand-in here, so the answers
+    are the same on every machine."""
+
+    NOTICE = ('Threadback: you are "%s" in this recap (the first name of this Mac\'s account). '
+              "Use --me NAME to change it.\n")
+
+    @staticmethod
+    def answering(stdout="", error=None, returncode=0):
+        calls = []
+
+        def run(command, **options):
+            calls.append((command, options))
+            if error is not None:
+                raise error
+            return types.SimpleNamespace(stdout=stdout, returncode=returncode)
+        return run, calls
+
+    def test_the_first_name_of_the_mac_account(self):
+        run, calls = self.answering("Avery Quinn\n")
+        self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Avery")
+        command, options = calls[0]
+        self.assertEqual(command, ["/usr/bin/id", "-F"])
+        self.assertEqual(options.get("timeout"), 3)
+        self.assertFalse(options.get("shell"))
+        cases = {
+            "Avery\n": "Avery", "  Avery   Quinn  \n": "Avery", "Zo\xeb M\xfcller\n": "Zo\xeb",
+            "\u738b \u5c0f\u660e\n": "\u738b", "Av\u202eery\x1b X\n": "Avery",
+            "A" * 100: "A" * 40 + "\u2026",
+            # not a name: nothing, a question mark, a number, an address
+            "": "Me", "  \n": "Me", "?\n": "Me", "5550100123\n": "Me", "+1 555 010 0123\n": "Me",
+            "jane.doe@example.com\n": "Me", "\x00\x1b\n": "Me",
+        }
+        for stdout, expected in cases.items():
+            run, _calls = self.answering(stdout)
+            self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), expected,
+                             repr(stdout))
+
+    def test_anything_else_is_me(self):
+        for error in (OSError("no such command"), subprocess.TimeoutExpired(["id"], 3),
+                      UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")):
+            run, _calls = self.answering(error=error)
+            self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Me", error)
+        run, _calls = self.answering("Avery Quinn\n", returncode=1)
+        self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Me")
+        for platform in ("linux", "win32"):             # only a Mac is asked
+            run, calls = self.answering("Avery Quinn\n")
+            self.assertEqual(wrapped.account_first_name(platform=platform, run=run), "Me")
+            self.assertEqual(calls, [])
+        self.assertIsInstance(wrapped.account_first_name(), str)        # the real thing never raises
+
+    def command(self, *args, account="Avery", env=None):
+        """Run the command line in this process with a stand-in for the lookup."""
+        environment = {key: value for key, value in os.environ.items() if key != "WRAPPED_ME"}
+        environment.update(env or {})
+        with mock.patch.dict(os.environ, environment, clear=True), \
+                mock.patch.object(wrapped.api, "account_first_name", return_value=account) as lookup:
+            status, out, err = support.call_cli(*args)
+        return status, out, err, lookup.call_count
+
+    def test_the_command_line_uses_it_and_says_so(self):
+        period = ["--year", "2026", "--tz", LA]
+        status, out, err, asked = self.command("stats", "Book Club", *period, *source_args())
+        self.assertEqual((status, asked), (0, 1))
+        self.assertEqual(err, self.NOTICE % "Avery")
+        names = [s["name"] for s in json.loads(out)["senders"]]
+        self.assertIn("Avery", names)
+        self.assertNotIn("Me", names)
+        status, out, err, asked = self.command("link", "Book Club", *period, *source_args())
+        self.assertEqual((status, asked, err), (0, 1, self.NOTICE % "Avery"))
+        shared = wrapped.stats_from_url(out.strip())
+        self.assertIn("Avery", [s["name"] for s in shared["senders"]])
+        self.assertEqual(shared["late_night"]["top"]["name"], "Avery")
+        # the chat list does not show the owner: the same name is used, nothing is said
+        status, out, err, asked = self.command("chats", *source_args())
+        self.assertEqual((status, err, asked), (0, "", 1))
+
+    def test_a_name_that_was_given_is_used_without_comment(self):
+        period = ["--year", "2026", "--tz", LA]
+        for args, env, expected in (
+                (["--me", "Sam"], None, "Sam"),
+                (["--me", ""], None, "Me"),
+                (["--me", "Robin Hood"], {"WRAPPED_ME": "Somebody Else"}, "Robin Hood"),
+                ([], {"WRAPPED_ME": "Robin Hood"}, "Robin Hood"),
+                ([], {"WRAPPED_ME": "+1 555 010 0123"}, "\u20260123"),      # a label like any other
+                ([], {"WRAPPED_ME": ""}, "Me")):
+            for command in ("stats", "link"):
+                status, out, err, asked = self.command(command, "Book Club", *period, *args,
+                                                       *source_args(), env=env)
+                self.assertEqual((status, err, asked), (0, "", 0), (command, args, env))
+                stats = json.loads(out) if command == "stats" else wrapped.stats_from_url(out.strip())
+                self.assertIn(expected, [s["name"] for s in stats["senders"]], (command, args, env))
+
+    def test_without_a_name_the_recap_says_how_to_give_one(self):
+        status, out, err, asked = self.command("stats", "Book Club", "--year", "2026", "--tz", LA,
+                                               *source_args(), account="Me")
+        self.assertEqual((status, asked), (0, 1))
+        self.assertEqual(err, 'Threadback: you are "Me" in this recap. '
+                              "Use --me NAME to put your name there.\n")
+        self.assertIn("Me", [s["name"] for s in json.loads(out)["senders"]])
+        # a link from a stats file names nobody, so nothing is looked up or said
+        with tempfile.TemporaryDirectory() as folder:
+            target = os.path.join(folder, "tiny.json")
+            with open(target, "w", encoding="utf-8") as handle:
+                json.dump(TINY, handle)
+            status, out, err, asked = self.command("link", "--stats", target)
+        self.assertEqual((status, err, asked), (0, "", 0))
+        # an error is still one sentence, with nothing in front of it
+        status, out, err, asked = self.command("stats", "no such chat", *source_args())
+        self.assertEqual((status, out), (1, ""))
+        self.assertEqual(err.count("\n"), 1)
+        self.assertIn("No group chat matches", err)
+
+    def test_the_tests_themselves_pin_the_name(self):
+        self.assertEqual(os.environ.get("WRAPPED_ME"), "Me")
+        status, out, err = run("stats", "Book Club", "--year", "2026", "--tz", LA, *source_args())
+        self.assertEqual((status, err), (0, ""))
+        self.assertIn("Me", [s["name"] for s in json.loads(out)["senders"]])
+        self.assertIn("WRAPPED_ME", run("stats", "--help")[1])
 
 
 class PublicApi(unittest.TestCase):

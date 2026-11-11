@@ -56,7 +56,8 @@ class ChatList(unittest.TestCase):
 
     def test_names_counts_and_order(self):
         names = [c["name"] for c in self.chats]
-        self.assertEqual(names[1], self.fx["chats"]["stress"]["display_name"])
+        stress = self.fx["chats"]["stress"]["display_name"]        # 87 characters: cut at 80
+        self.assertEqual(names[1], stress[:80] + "\u2026")
         self.assertEqual(names[2], "Bram, Sam, \u20260007 & 1 more")
         self.assertEqual(names[3], "Book Club \U0001F4DA")
         counts = [c["messages"] for c in self.chats]

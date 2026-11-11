@@ -35,7 +35,7 @@ class Sources(unittest.TestCase):
         allowed = {
             "__future__", "argparse", "base64", "binascii", "bisect", "copy", "datetime", "fractions",
             "functools", "glob", "hashlib", "json", "math", "os", "pathlib", "plistlib", "re", "shutil",
-            "sqlite3",
+            "sqlite3", "subprocess",
             "sys", "tempfile", "time", "typing", "zlib", "zoneinfo", "wrapped",
         }
         for path in tracked("wrapped/*.py"):

@@ -84,6 +84,9 @@ async function main() {
   out.cleans = job.labels.map((s) => Engine.cleanName(s));
   out.masks = job.labels.map((s) => Engine.maskHandle(Engine.cleanName(s)));
   out.chat_labels = job.labels.map((s) => I.chatLabel(s));
+  out.persons = job.labels.map((s) => I.personLabel(s));
+  out.capped = job.labels.map((s) => [Engine.cleanName(s, Engine.NAME_LIMIT), Engine.cleanName(s, Engine.CHAT_NAME_LIMIT)]);
+  out.shorts_raw = job.shorts_raw.map((c) => Array.from(I.shortForms(c[0], c[1])));
   out.shorts = job.shorts.map((c) => Array.from(I.shortForms(c[0], c[1])));
   out.round4 = job.round4.map((p) => I.round4(p[0], p[1]));
   out.dates = job.dates.map((d) => I.splitDate(d));

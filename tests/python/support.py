@@ -27,6 +27,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 _CACHE_WAS_ON = not sys.dont_write_bytecode
 sys.dont_write_bytecode = True                          # the engine, the fixture builder
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"             # every program the tests start
+# The command line calls the owner by the Mac account's first name unless told
+# otherwise. The tests tell it: the same name on every machine.
+os.environ["WRAPPED_ME"] = "Me"
 
 
 def _forget_bytecode():
@@ -137,7 +140,7 @@ def tap(unix, sender, kind, target, **extra):
 
 # ---- nothing private in what is shown or shared -------------------------------
 
-_ADDRESS = re.compile(r"""[^\s<>()\[\]"',;:@]+@[^\s<>()\[\]"',;:@]+""")
+_NOT_IN_AN_ADDRESS = re.compile(r"""[\s<>()\[\]"',;:@]""")
 _CONTROL = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
 
 
@@ -159,8 +162,12 @@ def text_leaks(text, where="text"):
         if run >= 7:
             found.append("%s: a run of %d digits" % (where, run))
         run = 0
-    for match in _ADDRESS.finditer(text):
-        found.append("%s: an address (%r)" % (where, match.group(0)))
+    at = text.find("@")
+    while at != -1:                 # a character on each side of the sign; linear, whatever the length
+        if (0 < at < len(text) - 1 and not _NOT_IN_AN_ADDRESS.match(text[at - 1])
+                and not _NOT_IN_AN_ADDRESS.match(text[at + 1])):
+            found.append("%s: an address (%r)" % (where, text[max(0, at - 30):at + 30]))
+        at = text.find("@", at + 1)
     for match in _CONTROL.finditer(text):
         found.append("%s: control character U+%04X" % (where, ord(match.group(0))))
     return found
@@ -218,6 +225,20 @@ def leaks(stats):
         for part in parts:
             if count_decimals(part) >= 7:
                 found.append("%s: %d digits in %r" % (where, count_decimals(part), part))
+    return found
+
+
+def too_long(stats):
+    """Names in a stats object that are over the caps of docs/SCHEMA.md 2: a
+    person 40 characters plus an ellipsis, a chat 80 plus an ellipsis."""
+    found = []
+    for where, name in names_in(stats):
+        limit = 81 if where == "chat.name" else 41
+        if len(name) > limit:
+            found.append("%s: %d characters" % (where, len(name)))
+    label = (stats.get("period") or {}).get("label")
+    if isinstance(label, str) and len(label) > 81:
+        found.append("period.label: %d characters" % len(label))
     return found
 
 

@@ -1,5 +1,5 @@
 {
- "about": "Hand-written expectations for docs/SCHEMA.md section 2 (clean names, masking, short names). Both engines' unit tests read this file. clean: [input, clean name]. mask: [label, masked label after cleaning]. chat_names: [display name, the name shown for a chat without members]; a chat name is masked only when it holds an address or something shaped like a phone number (ten or more digits in one stretch, or seven or more after a +). short: the short form of each of the people of one recap. Every number is inside +1 555 01xx xxxx and every address is at example.com, apart from the two localhost cases the specification itself names.",
+ "about": "Hand-written expectations for docs/SCHEMA.md section 2 (clean names, masking, short names). Both engines' unit tests read this file. clean: [input, clean name]. mask: [label, masked label after cleaning]. person: [any sender label: a handle, an imported sender, a contact name, the owner's name; what is shown: cleaned, cut to 40 characters plus an ellipsis, then masked]. chat_names: [display name, the name shown for a chat without members]; a chat name is cut to 80 characters plus an ellipsis and masked only when it holds an address or something shaped like a phone number (ten or more digits in one stretch, or seven or more after a +). short: the short form of each of the people of one recap. Every number is inside +1 555 01xx xxxx and every address is at example.com, apart from the two localhost cases the specification itself names.",
  "clean": [
   [
    "Maya",
@@ -108,6 +108,30 @@
   [
    "\u738b \u5c0f\u660e",
    "\u738b \u5c0f\u660e"
+  ],
+  [
+   "a\u200eb\u200fc\ufeffd",
+   "abcd"
+  ],
+  [
+   "\u200e+1 555 010 0407\u200f",
+   "+1 555 010 0407"
+  ],
+  [
+   "\ufeff\ufeffbom \ufeff",
+   "bom"
+  ],
+  [
+   "zwnj \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 heart \u2764\ufe0f",
+   "zwnj \u0645\u06cc\u200c\u062e\u0648\u0627\u0647\u0645 heart \u2764\ufe0f"
+  ],
+  [
+   "flag \ud83c\udff3\ufe0f\u200d\ud83c\udf08",
+   "flag \ud83c\udff3\ufe0f\u200d\ud83c\udf08"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
   ]
  ],
  "mask": [
@@ -392,6 +416,34 @@
   [
    "Room 15550100142 crew",
    "\u20260142"
+  ],
+  [
+   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  ],
+  [
+   "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\u2026"
+  ],
+  [
+   "The Extremely Long-Named Group Chat Of Unreasonable Proportions (est. 2019) and friends",
+   "The Extremely Long-Named Group Chat Of Unreasonable Proportions (est. 2019) and \u2026"
+  ],
+  [
+   "\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89",
+   "\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\ud83c\udf89\u2026"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx +1 555 010 0142",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\u2026"
+  ],
+  [
+   "Call +1 555 010 0142 yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+   "\u20260142"
+  ],
+  [
+   "\u200eClass of 2026\u200f\ufeff",
+   "Class of 2026"
   ]
  ],
  "short": [
@@ -608,5 +660,119 @@
    "me": "Me",
    "expected": {}
   }
+ ],
+ "person": [
+  [
+   "jane.doe@example.com",
+   "jane.doe"
+  ],
+  [
+   "+1 (555) 010-0402",
+   "\u20260402"
+  ],
+  [
+   "Dr. Okafor 555-010-0403",
+   "\u20260403"
+  ],
+  [
+   "Okafor Plumbing 555 010 0404",
+   "\u20260404"
+  ],
+  [
+   "Jane Doe <jane.doe@example.com>",
+   "jane.doe"
+  ],
+  [
+   "\u200e+1 555 010 0407\u200f",
+   "\u20260407"
+  ],
+  [
+   "Ines Calloway",
+   "Ines Calloway"
+  ],
+  [
+   "Dave plumber",
+   "Dave plumber"
+  ],
+  [
+   "Flat 12 Sam",
+   "Flat 12 Sam"
+  ],
+  [
+   "Zo\u00eb M\u00fcller",
+   "Zo\u00eb M\u00fcller"
+  ],
+  [
+   "\u200eLe\u200fa\ufeff Marks",
+   "Lea Marks"
+  ],
+  [
+   "Tab\tby \u001b[0mCat",
+   "Tab by [0mCat"
+  ],
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  ],
+  [
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\u2026"
+  ],
+  [
+   "Wolfeschlegelsteinhausenbergerdorff the Elder of Tacoma",
+   "Wolfeschlegelsteinhausenbergerdorff the \u2026"
+  ],
+  [
+   "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00",
+   "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\u2026"
+  ],
+  [
+   "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00ab",
+   "\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00\ud83d\ude00a\u2026"
+  ],
+  [
+   "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
+   "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u2026"
+  ],
+  [
+   "  bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb  ",
+   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\u2026"
+  ],
+  [
+   "Wolfeschlegelsteinhausenbergerdorff the Elder of Tacoma 555-010-0410",
+   "Wolfeschlegelsteinhausenbergerdorff the \u2026"
+  ],
+  [
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx+15550100123",
+   "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx+15550\u2026"
+  ],
+  [
+   "+1 555 010 0411 Wolfeschlegelsteinhausenbergerdorff the Elder of Tacoma",
+   "\u20260411"
+  ],
+  [
+   "a.very.long.local.part.that.goes.on.and.on.forever@example.com",
+   "a.very.long.local.part.that.goes.on.and.\u2026"
+  ],
+  [
+   "jane.doe@example.com Wolfeschlegelsteinhausenbergerdorff the Elder of Tacoma",
+   "jane.doe"
+  ],
+  [
+   "",
+   ""
+  ],
+  [
+   null,
+   ""
+  ],
+  [
+   7,
+   ""
+  ],
+  [
+   "\u0000\u001b",
+   ""
+  ]
  ]
 }

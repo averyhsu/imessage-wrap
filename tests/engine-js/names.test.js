@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const {
-  ROOT, Engine, DB, NAMES, fixture, read, utc, msg, tap, countDecimals, textLeaks, namesIn, leaks
+  ROOT, Engine, DB, NAMES, fixture, read, utc, msg, tap, countDecimals, textLeaks, namesIn, leaks, tooLong
 } = require('./support.js');
 
 const Import = require(path.join(ROOT, 'web', 'make', 'import-rows.js'));
@@ -36,7 +36,7 @@ test('clean names: the shared table', () => {
 });
 
 test('clean names: every dangerous character is dropped, and cleaning is stable', () => {
-  const removed = [0xFFFC, 0xFFFD];
+  const removed = [0x200E, 0x200F, 0xFEFF, 0xFFFC, 0xFFFD];
   for (let code = 0x00; code < 0x20; code++) removed.push(code);
   for (let code = 0x7F; code < 0xA0; code++) removed.push(code);
   for (let code = 0x202A; code < 0x202F; code++) removed.push(code);
@@ -46,7 +46,8 @@ test('clean names: every dangerous character is dropped, and cleaning is stable'
     assert.equal(Engine.cleanName('a' + String.fromCharCode(code) + 'b'), expected, code.toString(16));
   }
   for (const code of [0x2028, 0x2029]) assert.equal(Engine.cleanName('a' + String.fromCharCode(code) + 'b'), 'a b');
-  for (const keep of ['\u200D', '\u200B', '\uFE0F', '\xe9', '\u{1F32E}', '\u0301', '\xa0']) {
+  for (const keep of ['\u200D', '\u200C', '\u200B', '\uFE0F', '\uFE0E', '\xe9', '\u{1F32E}', '\u0301', '\xa0',
+    '\u{E0100}']) {
     assert.equal(Engine.cleanName('a' + keep + 'b'), 'a' + keep + 'b');
   }
   for (const [raw] of NAMES.clean.concat(NAMES.mask, NAMES.chat_names)) {
@@ -146,6 +147,150 @@ test('masking: every way round the first mask is closed', () => {
   assert.equal(named.senders[0].name, 'Ines Calloway');
 });
 
+// ---- sender labels ----------------------------------------------------------------
+// A handle, an imported sender, a contact name, the owner's name: each is a
+// sender label, cleaned, cut to 40 characters and masked.
+
+const length = (text) => Array.from(text).length;
+
+test('sender labels: the shared table', () => {
+  assert.ok(NAMES.person.length > 25);
+  const t = utc(2026, 5, 5, 10);
+  for (const [raw, expected] of NAMES.person) {
+    const shown = I.personLabel(raw);
+    assert.equal(shown, expected, JSON.stringify(raw).slice(0, 80));
+    assert.deepEqual(textLeaks(shown), []);
+    assert.ok(length(shown) <= 41);
+    assert.equal(I.personLabel(shown), shown);                    // stable
+    if (typeof raw === 'string' && expected) {                    // as a contact name, a handle, the owner
+      assert.equal(run([msg(t, '+15550100777', 'hi')], { contacts: { '(555) 010-0777': raw } }).senders[0].name, expected);
+      assert.equal(run([msg(t, raw, 'hi')]).senders[0].name, expected);
+      assert.equal(run([msg(t)], { me: raw }).senders[0].name, expected);
+    }
+  }
+});
+
+test('sender labels: cards saved under a number or an address never reach a link', () => {
+  const t = utc(2026, 5, 5, 10);
+  const contacts = [['+15550100401', 'jane.doe@example.com'], ['+15550100402', '+1 (555) 010-0402'],
+    ['+15550100403', 'Dr. Okafor 555-010-0403'], ['+15550100001', 'Ines Calloway']];
+  const handles = contacts.map((pair) => pair[0]);
+  const rows = [];
+  for (let i = 0; i < 24; i++) rows.push(msg(t + i, handles[i % 4], 'hello there', { guid: 'G' + i }));
+  for (let i = 0; i < 12; i++) rows.push(tap(t + 100 + i, handles[i % 4], 2003, rows[(i + 1) % 8]));
+  rows.push(msg(t + 200, 'me', 'mine'));
+  const labels = ['jane.doe', '\u20260402', '\u20260403', 'Ines Calloway', 'Me'];
+  let st = run(rows, { contacts, participants: handles });
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), labels.slice().sort());
+  assert.equal(st.chat.name, 'jane.doe, \u20260402, \u20260403 & 1 more');
+  const short = Engine.shortNames(st);
+  assert.deepEqual(short.senders.map((s) => s.name).sort(), ['jane.doe', '\u20260402', '\u20260403', 'Ines', 'Me'].sort());
+  for (const stats of [st, short]) {
+    assert.deepEqual(leaks(stats), []);
+    const text = JSON.stringify(stats);
+    for (const secret of ['example.com', 'Okafor', '010-0402', '5550100']) assert.ok(!text.includes(secret), secret);
+    for (const quotes of [false, true]) {
+      assert.deepEqual(leaks(Engine.statsFromUrl(Engine.buildLink(stats, { quotes }))), []);
+    }
+  }
+  // the same cards as an object and as a Map; two cards for one number: the label that sorts first
+  st = run(rows, { contacts: Object.fromEntries(contacts) });
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), labels.slice().sort());
+  st = run(rows, { contacts: new Map(contacts) });
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), labels.slice().sort());
+  st = run(rows.slice(0, 1), { contacts: [['+15550100401', 'Zed'], ['+15550100401', '+1 555 010 0401']] });
+  assert.equal(st.senders[0].name, 'Zed');
+  // the owner is a sender label too
+  assert.equal(run([msg(t)], { me: '+1 555 010 0123' }).senders[0].name, '\u20260123');
+  assert.equal(run([msg(t)], { me: 'jane.doe@example.com' }).senders[0].name, 'jane.doe');
+});
+
+test('sender labels: names are capped however long they are', () => {
+  const t = utc(2026, 5, 5, 10);
+  const million = 1000000;
+  const rows = [msg(t, 'H'.repeat(million), 'hi'), msg(t + 1, '+15550100002', 'yo'), msg(t + 2)];
+  let st = run(rows, {
+    me: 'M'.repeat(million), chat_name: 'C'.repeat(million), label: 'L'.repeat(million), source: 'S'.repeat(million),
+    contacts: { '+15550100002': 'N'.repeat(million) }, participants: ['H'.repeat(million), 'P'.repeat(million)]
+  });
+  assert.deepEqual(st.chat, { name: 'C'.repeat(80) + '\u2026', members: 4 });
+  assert.equal(st.period.label, 'L'.repeat(80) + '\u2026');
+  assert.equal(st.meta.source, 'S'.repeat(40) + '\u2026');
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), ['H', 'M', 'N'].map((letter) => letter.repeat(40) + '\u2026'));
+  assert.deepEqual(tooLong(st), []);
+  assert.ok(JSON.stringify(st).length < 3000);
+  // counted in characters, not in UTF-16 units; a pair is never split
+  const party = run([msg(t)], { chat_name: '\u{1F389}'.repeat(1000), me: '\u{1F600}'.repeat(1000) });
+  assert.equal(party.chat.name, '\u{1F389}'.repeat(80) + '\u2026');
+  assert.equal(party.senders[0].name, '\u{1F600}'.repeat(40) + '\u2026');
+  // a chat named after its members is held to 80 as well
+  const handles = [0, 1, 2, 3, 4].map((i) => String.fromCharCode(0x4E00 + i).repeat(39) + 'x');
+  st = run(handles.map((h) => msg(t, h, 'hi')), { participants: handles });
+  assert.equal(length(st.chat.name), 81);
+  assert.ok(st.chat.name.endsWith('\u2026'));
+  // only the first 1,024 characters are looked at (characters, not UTF-16 units)
+  assert.equal(Engine.cleanName('\x00'.repeat(1023) + 'tail', 40), 't');
+  assert.equal(Engine.cleanName('\x00'.repeat(1024) + 'tail', 40), '');
+  assert.equal(Engine.cleanName('\x00'.repeat(1024) + 'tail'), 'tail');
+  assert.equal(Engine.cleanName('\u{1F600}'.repeat(1023) + 'tail', 2000), '\u{1F600}'.repeat(1023) + 't');
+  assert.equal(I.nameWindow('\u{1F600}'.repeat(2000)).length, 2048);
+  assert.deepEqual([Engine.NAME_LIMIT, Engine.CHAT_NAME_LIMIT], [40, 80]);
+});
+
+test('sender labels: a million characters cost no more than a short name', () => {
+  const t = utc(2026, 5, 5, 10);
+  const million = 1000000;
+  const best = (rows, options) => {
+    let fastest = Infinity;
+    for (let i = 0; i < 5; i++) {
+      const started = performance.now();
+      run(rows, options);
+      fastest = Math.min(fastest, performance.now() - started);
+    }
+    return fastest;
+  };
+  const shortHandles = Array.from({ length: 20 }, (_x, i) => 'person ' + i);
+  // built in pieces so that every handle is its own flat string, as a parser would hand it over
+  const longHandles = shortHandles.map((h) => Buffer.from((h + ' ').repeat(Math.ceil(million / 9))).toString());
+  assert.ok(Math.min(...longHandles.map((h) => h.length)) >= million);
+  const shortRows = Array.from({ length: 400 }, (_x, i) => msg(t + i, shortHandles[i % 20], 'hello there'));
+  const longRows = Array.from({ length: 400 }, (_x, i) => msg(t + i, longHandles[i % 20], 'hello there'));
+  const short = best(shortRows, { chat_name: 'Chat', me: 'Me', contacts: { '+15550100001': 'Ines' }, participants: shortHandles });
+  const contacts = { '+15550100001': 'N'.repeat(million) };
+  contacts['9'.repeat(million)] = 'x';
+  const long = best(longRows, {
+    chat_name: 'C'.repeat(million), me: 'M'.repeat(million), label: 'L'.repeat(million), contacts, participants: longHandles
+  });
+  assert.ok(long < short * 3 + 50, 'short ' + short.toFixed(2) + ' ms, long ' + long.toFixed(2) + ' ms');
+  const started = performance.now();
+  for (let i = 0; i < 200; i++) {
+    I.personLabel(longHandles[0]);
+    Engine.cleanName(longHandles[1], Engine.CHAT_NAME_LIMIT);
+    Engine.contactKey(longHandles[2]);
+  }
+  assert.ok(performance.now() - started < 500);
+});
+
+test('sender labels: short names never bring anything back', () => {
+  // a stats object from somewhere else, with raw labels still in it
+  const foreign = {
+    senders: [{ name: 'Dr. Okafor 555-010-0403' }, { name: 'jane.doe@example.com' }, { name: 'Sam Rivera' },
+      { name: 'Sam +15550100123' }, { name: 'N'.repeat(500) }, { name: 'Evil\x1b[31m\u202e Name' },
+      { name: '+1 555 010 0177' }],
+    awards: [{ winner: 'Dr. Okafor 555-010-0403' }, { winner: 'Sam Rivera' }],
+    reactions: { top_giver: { name: 'jane.doe@example.com' }, top_receiver: null }
+  };
+  const short = Engine.shortNames(foreign, '+1 555 010 0177');
+  assert.deepEqual(short.senders.map((s) => s.name),
+    ['\u20260403', 'jane.doe', 'Sam', '\u20260123', 'N'.repeat(40) + '\u2026', 'Evil[31m', '\u20260177']);
+  assert.deepEqual(short.awards.map((a) => a.winner), ['\u20260403', 'Sam']);
+  assert.equal(short.reactions.top_giver.name, 'jane.doe');
+  assert.deepEqual(leaks(short), []);
+  assert.deepEqual(tooLong(short), []);
+  // names computeStats produced are not touched by the extra pass
+  for (const item of NAMES.short) for (const name of item.names) assert.equal(I.personLabel(name), name);
+});
+
 // ---- short names ----------------------------------------------------------------
 
 test('short names: the shared table', () => {
@@ -240,6 +385,9 @@ async function check(dbKey, walKey, books, me, expectedNames) {
     if (expectedNames && expectedNames[chat.id]) assert.equal(chat.name, expectedNames[chat.id]);
     const stats = DB.statsForChat(handle, chat, { all_time: true, tz: 'UTC', now: NOW, me, contacts });
     assert.deepEqual(leaks(stats), [], chat.name);
+    assert.deepEqual(tooLong(stats), [], chat.name);
+    assert.ok(length(chat.name) <= 81);
+    for (const id of chat.participants) assert.ok(id.length <= 4096);
     stats.senders.forEach((sender) => seen.add(sender.name));
     const short = Engine.shortNames(stats, I.ownerName(me));
     assert.deepEqual(leaks(short), [], chat.name);
@@ -267,9 +415,37 @@ test('nothing private is shown: the evil fixture', async () => {
   for (const entry of info.handles) assert.ok(seen.has(entry.label), entry.label);
   for (const entry of info.contacts) assert.ok(seen.has(entry.name), entry.name);
   for (const name of ['Avery Quinn', 'Unknown', info.stranger.label]) assert.ok(seen.has(name), name);
+  for (const entry of info.numbered) assert.ok(seen.has(entry.name), entry.name);     // cards saved under a number
   seen = await check('evil_db', null, null, 'Me', names);
   for (const entry of info.handles) assert.ok(seen.has(entry.label), entry.label);
   assert.ok(seen.has('nick'));                // nick@example.com without the address book
+  for (const label of ['\u20260401', '\u20260402', '\u20260403', 'okafor']) assert.ok(seen.has(label), label);
+  // the address book as the page gets it: the names are labels already
+  const book = await DB.openDatabase({ db: read('evil_address_book') });
+  const pairs = DB.loadContacts(book);
+  book.close();
+  for (const entry of info.numbered.concat(info.contacts)) {
+    const pair = pairs.find((p) => Engine.contactKey(p[0]) === Engine.contactKey(entry.handle));
+    assert.equal(pair[1], entry.name);
+  }
+  // a chat name of a million characters costs no more than a short one
+  const handle = await DB.openDatabase({ db: read('evil_db') });
+  const best = (id) => {
+    let fastest = Infinity;
+    for (let i = 0; i < 5; i++) {
+      const started = performance.now();
+      DB.statsForChat(handle, id, { all_time: true, tz: 'UTC', now: NOW, contacts: pairs });
+      fastest = Math.min(fastest, performance.now() - started);
+    }
+    return fastest;
+  };
+  const long = best(info.chats.long_name.rowid);
+  const short = best(info.chats.text_style.rowid);
+  assert.ok(long < short * 3 + 250, 'short ' + short.toFixed(1) + ' ms, long ' + long.toFixed(1) + ' ms');
+  const stats = DB.statsForChat(handle, info.chats.long_name.rowid, { all_time: true, tz: 'UTC', now: NOW, contacts: pairs });
+  assert.equal(stats.chat.name, info.chats.long_name.name);
+  assert.ok(stats.senders.some((s) => s.name === 'N'.repeat(40) + '\u2026'));
+  handle.close();
 });
 
 test('nothing private is shown: an imported export', () => {
@@ -314,6 +490,19 @@ test('nothing private is shown: an imported export', () => {
   assert.ok(warned.warnings.length >= 1);
   for (const warning of warned.warnings) assert.deepEqual(controlOnly(textLeaks(warning)), [], warning);
   assert.equal(Import._internals.cleanName(' \x00Ma\u202Eya\t \r\n x\uFFFD '), 'Maya x');
+  // a sender of a million characters: cut like any name, and no slower to read
+  const million = 'Wolfeschlegelstein '.repeat(55556);
+  const long = [0, 1, 2, 3, 4, 5].map((i) => JSON.stringify({ date: when(i), sender: million + i, text: 'hi' })).join('\n');
+  const short = [0, 1, 2, 3, 4, 5].map((i) => JSON.stringify({ date: when(i), sender: 'Maya' + i, text: 'hi' })).join('\n');
+  const parsed = Import.parseExport(long);
+  assert.deepEqual(parsed.rows.map((row) => row.handle),
+    new Array(6).fill('Wolfeschlegelstein Wolfeschlegelstein Wo\u2026'));
+  assert.equal(parsed.summary.senders, 1);
+  assert.equal(run(parsed.rows).senders[0].name, 'Wolfeschlegelstein Wolfeschlegelstein Wo\u2026');
+  assert.equal(Import._internals.cleanName('\u{1F600}'.repeat(3000), 40), '\u{1F600}'.repeat(40) + '\u2026');
+  assert.equal(Import._internals.cleanName('a'.repeat(2047) + '\u{1F600}'), 'a'.repeat(2047));    // no half pair
+  assert.equal(Import.parseExport(short).summary.senders, 6);
+  assert.equal(Import.parseExport(JSON.stringify({ date: '2'.repeat(million.length), sender: 'Maya' })).rows.length, 0);
 });
 
 test('the importer documents what it does with lists of unequal length', () => {

@@ -187,7 +187,8 @@ test('chat list: only groups, merged rows, names, diagnostics', async () => {
   assert.deepEqual(lively.chat_ids, [info.chats.lively.rowid, info.chats.lively_sms.rowid]);
   assert.equal(lively.chat_identifier, 'chat100000000000000001');
   assert.equal(lively.members, 7);
-  assert.equal(chats[1].name, info.chats.stress.display_name);
+  // 87 characters: cut at 80
+  assert.equal(chats[1].name, Array.from(info.chats.stress.display_name).slice(0, 80).join('') + '\u2026');
   assert.equal(chats[2].name, 'Bram, Sam, \u20260007 & 1 more');
   assert.equal(chats[2].display_name, '');
   assert.equal(chats[3].name, 'Book Club \u{1F4DA}');

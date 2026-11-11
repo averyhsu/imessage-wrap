@@ -10,6 +10,7 @@ listing, for the ordinary fixture and for the hostile one.
 import copy
 import json
 import sqlite3
+import time
 import unicodedata
 import unittest
 
@@ -41,13 +42,14 @@ class CleanNames(unittest.TestCase):
 
     def test_every_dangerous_character_is_dropped(self):
         removed = (list(range(0x00, 0x20)) + list(range(0x7F, 0xA0)) + list(range(0x202A, 0x202F))
-                   + list(range(0x2066, 0x206A)) + [0xFFFC, 0xFFFD])
+                   + list(range(0x2066, 0x206A)) + [0x200E, 0x200F, 0xFEFF, 0xFFFC, 0xFFFD])
         for code in removed:
             expected = "a b" if code in (0x09, 0x0A, 0x0D) else "ab"
             self.assertEqual(S.clean_name("a%sb" % chr(code)), expected, hex(code))
         for code in (0x2028, 0x2029):                 # line and paragraph separators as well
             self.assertEqual(S.clean_name("a%sb" % chr(code)), "a b", hex(code))
-        for keep in ("\u200d", "\u200b", "\ufe0f", "\xe9", "\U0001F32E", "\u0301", "\xa0"):
+        for keep in ("\u200d", "\u200c", "\u200b", "\ufe0f", "\ufe0e", "\xe9", "\U0001F32E", "\u0301",
+                     "\xa0", "\U000E0100"):
             self.assertEqual(S.clean_name("a%sb" % keep), "a%sb" % keep, repr(keep))
 
     def test_cleaning_is_stable_and_leaves_no_control_characters(self):
@@ -138,6 +140,144 @@ class Masking(unittest.TestCase):
         # a contact name still wins over the mask
         named = run([msg(t, "tel:+15550100123")], contacts={"(555) 010-0123": "Ines Calloway"})
         self.assertEqual(named["senders"][0]["name"], "Ines Calloway")
+
+
+class SenderLabels(unittest.TestCase):
+    """A handle, an imported sender, a contact name, the owner's name: each is
+    a sender label, cleaned, cut to 40 characters and masked."""
+
+    t = utc(2026, 5, 5, 10, 0)
+
+    def test_table(self):
+        self.assertGreater(len(VECTORS["person"]), 25)
+        for raw, expected in VECTORS["person"]:
+            shown = S.person_label(raw)
+            self.assertEqual(shown, expected, repr(raw)[:80])
+            self.assertEqual(support.text_leaks(shown), [], repr(raw)[:80])
+            self.assertLessEqual(len(shown), 41)
+            self.assertEqual(S.person_label(shown), shown, repr(raw)[:80])       # stable
+
+    def test_a_contact_name_is_a_sender_label(self):
+        for raw, expected in VECTORS["person"]:
+            if isinstance(raw, str) and expected:
+                st = run([msg(self.t, "+15550100777", "hi")], contacts={"(555) 010-0777": raw})
+                self.assertEqual(st["senders"][0]["name"], expected, repr(raw)[:80])
+                self.assertEqual(run([msg(self.t, raw, "hi")])["senders"][0]["name"], expected)
+                self.assertEqual(run([msg(self.t)], me=raw)["senders"][0]["name"], expected)
+
+    def test_cards_saved_under_a_number_or_an_address(self):
+        """The second review's address book: nothing of it may reach a link."""
+        contacts = [["+15550100401", "jane.doe@example.com"], ["+15550100402", "+1 (555) 010-0402"],
+                    ["+15550100403", "Dr. Okafor 555-010-0403"], ["+15550100001", "Ines Calloway"]]
+        handles = [pair[0] for pair in contacts]
+        rows = [msg(self.t + i, handles[i % 4], "hello there", guid="G%d" % i) for i in range(24)]
+        rows += [tap(self.t + 100 + i, handles[i % 4], 2003, rows[(i + 1) % 8]) for i in range(12)]
+        rows.append(msg(self.t + 200, "me", "mine"))
+        st = run(rows, contacts=contacts, participants=handles)
+        labels = ["jane.doe", "\u20260402", "\u20260403", "Ines Calloway", "Me"]
+        self.assertEqual(sorted(s["name"] for s in st["senders"]), sorted(labels))
+        self.assertEqual(st["chat"]["name"], "jane.doe, \u20260402, \u20260403 & 1 more")
+        short = wrapped.short_names(st)
+        self.assertEqual(sorted(s["name"] for s in short["senders"]),
+                         sorted(["jane.doe", "\u20260402", "\u20260403", "Ines", "Me"]))
+        for stats in (st, short):
+            self.assertEqual(support.leaks(stats), [])
+            text = json.dumps(stats, ensure_ascii=False)
+            for secret in ("example.com", "Okafor", "010-0402", "5550100"):
+                self.assertNotIn(secret, text)
+            for quotes in (False, True):
+                shared = payload.stats_from_url(payload.build_link(stats, quotes=quotes))
+                self.assertEqual(support.leaks(shared), [])
+        # the same cards as a mapping, and two cards for one number: the label that sorts first
+        st = run(rows, contacts=dict(contacts))
+        self.assertEqual(sorted(s["name"] for s in st["senders"]), sorted(labels))
+        st = run(rows[:1], contacts=[["+15550100401", "Zed"], ["+15550100401", "+1 555 010 0401"]])
+        self.assertEqual(st["senders"][0]["name"], "Zed")
+
+    def test_the_owner_is_a_sender_label_too(self):
+        self.assertEqual(run([msg(self.t)], me="+1 555 010 0123")["senders"][0]["name"], "\u20260123")
+        self.assertEqual(run([msg(self.t)], me="jane.doe@example.com")["senders"][0]["name"], "jane.doe")
+        self.assertEqual(run([msg(self.t)], me="Avery Quinn")["senders"][0]["name"], "Avery Quinn")
+
+    def test_names_are_capped_however_long_they_are(self):
+        million = 1000000
+        rows = [msg(self.t, "H" * million, "hi"), msg(self.t + 1, "+15550100002", "yo"), msg(self.t + 2)]
+        st = run(rows, me="M" * million, chat_name="C" * million, label="L" * million,
+                 source="S" * million, contacts={"+15550100002": "N" * million},
+                 participants=["H" * million, "P" * million])
+        self.assertEqual(st["chat"], {"name": "C" * 80 + "\u2026", "members": 4})
+        self.assertEqual(st["period"]["label"], "L" * 80 + "\u2026")
+        self.assertEqual(st["meta"]["source"], "S" * 40 + "\u2026")
+        self.assertEqual(sorted(s["name"] for s in st["senders"]),
+                         [letter * 40 + "\u2026" for letter in "HMN"])
+        self.assertEqual(support.too_long(st), [])
+        self.assertLess(len(payload.canonical_json(st)), 3000)
+        # counted in characters, not in bytes or UTF-16 units; a pair is never split
+        party = run([msg(self.t)], chat_name="\U0001F389" * 1000, me="\U0001F600" * 1000)
+        self.assertEqual(party["chat"]["name"], "\U0001F389" * 80 + "\u2026")
+        self.assertEqual(party["senders"][0]["name"], "\U0001F600" * 40 + "\u2026")
+        # a chat named after its members is held to 80 as well
+        handles = ["%s%s" % (chr(0x4E00 + i) * 39, "x") for i in range(5)]
+        st = run([msg(self.t, h, "hi") for h in handles], participants=handles)
+        self.assertEqual(len(st["chat"]["name"]), 81)
+        self.assertTrue(st["chat"]["name"].endswith("\u2026"))
+        # only the first 1,024 characters are looked at
+        self.assertEqual(S.clean_name("\x00" * 1023 + "tail", 40), "t")
+        self.assertEqual(S.clean_name("\x00" * 1024 + "tail", 40), "")
+        self.assertEqual(S.clean_name("\x00" * 1024 + "tail"), "tail")
+        self.assertEqual((S.NAME_LIMIT, S.CHAT_NAME_LIMIT), (40, 80))
+
+    def test_a_million_characters_cost_no_more_than_a_short_name(self):
+        million = 1000000
+
+        def best(rows, options):
+            times = []
+            for _ in range(5):
+                started = time.perf_counter()
+                run(rows, **options)
+                times.append(time.perf_counter() - started)
+            return min(times)
+
+        short_handles = ["person %d" % i for i in range(20)]
+        long_handles = [("person %d " % i) * (million // 9) for i in range(20)]
+        self.assertGreater(min(len(h) for h in long_handles), 990000)
+        short_rows = [msg(self.t + i, short_handles[i % 20], "hello there") for i in range(400)]
+        long_rows = [msg(self.t + i, long_handles[i % 20], "hello there") for i in range(400)]
+        short = best(short_rows, dict(chat_name="Chat", me="Me", contacts={"+15550100001": "Ines"},
+                                      participants=short_handles))
+        long = best(long_rows, dict(chat_name="C" * million, me="M" * million, label="L" * million,
+                                    contacts={"+15550100001": "N" * million, "9" * million: "x"},
+                                    participants=long_handles))
+        self.assertLess(long, short * 3 + 0.05, (short, long))
+        # the helpers on their own
+        started = time.perf_counter()
+        for _ in range(200):
+            S.person_label(long_handles[0])
+            S.clean_name(long_handles[1], S.CHAT_NAME_LIMIT)
+            S.contact_key(long_handles[2])
+        self.assertLess(time.perf_counter() - started, 0.5)
+
+    def test_short_names_never_bring_anything_back(self):
+        """A stats object from somewhere else, with raw labels still in it."""
+        foreign = {
+            "senders": [{"name": "Dr. Okafor 555-010-0403"}, {"name": "jane.doe@example.com"},
+                        {"name": "Sam Rivera"}, {"name": "Sam +15550100123"}, {"name": "N" * 500},
+                        {"name": "Evil\x1b[31m\u202e Name"}, {"name": "+1 555 010 0177"}],
+            "awards": [{"winner": "Dr. Okafor 555-010-0403"}, {"winner": "Sam Rivera"}],
+            "reactions": {"top_giver": {"name": "jane.doe@example.com"}, "top_receiver": None},
+        }
+        short = wrapped.short_names(foreign, me="+1 555 010 0177")
+        self.assertEqual([s["name"] for s in short["senders"]],
+                         ["\u20260403", "jane.doe", "Sam", "\u20260123", "N" * 40 + "\u2026", "Evil[31m",
+                          "\u20260177"])
+        self.assertEqual([a["winner"] for a in short["awards"]], ["\u20260403", "Sam"])
+        self.assertEqual(short["reactions"]["top_giver"]["name"], "jane.doe")
+        self.assertEqual(support.leaks(short), [])
+        self.assertEqual(support.too_long(short), [])
+        # names compute_stats produced are not touched by the extra pass
+        for case in VECTORS["short"]:
+            for name in case["names"]:
+                self.assertEqual(S.person_label(name), name)
 
 
 class ShortNames(unittest.TestCase):
@@ -244,6 +384,7 @@ class NothingPrivateIsShown(unittest.TestCase):
                 self.assertEqual((status, err), (0, ""), chat["id"])
                 stats = json.loads(out)
                 self.assertEqual(support.leaks(stats), [], (chat["id"], flags))
+                self.assertEqual(support.too_long(stats), [], (chat["id"], flags))
                 if flags:
                     seen.update(sender["name"] for sender in stats["senders"])
             for flags in ([], ["--quotes"], ["--full-names", "--quotes"]):
@@ -270,10 +411,43 @@ class NothingPrivateIsShown(unittest.TestCase):
         for entry in info["contacts"]:
             self.assertIn(entry["name"], seen)
         self.assertLessEqual({"Avery Quinn", "Unknown", info["stranger"]["label"]}, seen)
+        for entry in info["numbered"]:                  # cards saved under a number or an address
+            self.assertIn(entry["name"], seen)
         seen = self.check(support.path("evil_db"), None, "Me", names)
         for entry in info["handles"]:
             self.assertIn(entry["label"], seen)
         self.assertIn("nick", seen)                     # nick@example.com without the address book
+        self.assertLessEqual({"\u20260401", "\u20260402", "\u20260403", "okafor"}, seen)
+        # the address book as a program gets it: the names are labels already
+        pairs = dict(wrapped.db.load_contacts(support.path("evil_address_book")))
+        for entry in info["numbered"] + info["contacts"]:
+            self.assertEqual(pairs.pop(next(k for k in pairs if S.contact_key(k) == S.contact_key(
+                entry["handle"]))), entry["name"])
+
+    def test_a_name_of_a_million_characters_in_a_database(self):
+        info = support.fixture()[1]["evil"]
+        long_chat, plain_chat = info["chats"]["long_name"], info["chats"]["text_style"]
+        book = support.path("evil_address_book")
+
+        def best(chat):
+            times = []
+            for _ in range(5):
+                started = time.perf_counter()
+                with wrapped.open_source(db=support.path("evil_db"), contacts=[book]) as source:
+                    stats = source.stats(chat["rowid"], all_time=True, tz="UTC", now=NOW)
+                times.append(time.perf_counter() - started)
+            return min(times), stats
+
+        long, stats = best(long_chat)
+        short, _stats = best(plain_chat)
+        self.assertEqual(stats["chat"]["name"], long_chat["name"])
+        self.assertEqual(len(stats["chat"]["name"]), 81)
+        self.assertIn("N" * 40 + "\u2026", [s["name"] for s in stats["senders"]])
+        self.assertEqual(support.too_long(stats), [])
+        self.assertLess(long, short * 3 + 0.25, (short, long))
+        chats = wrapped.list_chats(db=support.path("evil_db"), contacts=False)
+        self.assertLessEqual(max(len(h) for chat in chats for h in chat["participants"]), 4096)
+        self.assertLessEqual(max(len(chat["name"]) for chat in chats), 81)
 
     def test_the_real_command_line_prints_no_escape_sequences(self):
         """Once through a real process: bytes on stdout, not just strings."""
@@ -281,7 +455,8 @@ class NothingPrivateIsShown(unittest.TestCase):
                                            support.path("evil_address_book"), "--me", ME)
         self.assertEqual((status, err), (0, ""))
         self.assertEqual(support.text_leaks(out.replace("\n", " ")), [])
-        self.assertEqual(len(out.split("\n")), 1 + 2 + 8 + 2 + 1)
+        self.assertEqual(len(out.split("\n")), 1 + 2 + 9 + 2 + 1)
+        self.assertLessEqual(max(len(line) for line in out.split("\n")), 130)
         self.assertIn("Evil[31m name line two tab end", out)
         status, out, err = support.run_cli("link", "1", "--all-time", "--tz", "UTC", "--db",
                                            support.path("evil_db"), "--no-contacts")

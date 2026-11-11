@@ -233,6 +233,17 @@ def build_job(fixture_dir, info):
         "\xa0nbsp\xa0", "\u3000wide\u3000", "\ufeffbom", "a\x00 \x00b", "\t\n\r", "\u202a\u202c",
     ]
     labels += [chr(start + delta) * 7 for start in S._DIGIT_BLOCKS for delta in (-1, 0, 9, 10)]
+    # sender labels: contact cards saved under a number, and the caps (40 / 80 characters of
+    # the first 1,024, counted in code points, whatever the string is made of)
+    labels += [raw for raw, _label in support.names_vectors()["person"] if isinstance(raw, str)]
+    labels += [card[0] for card in build_fixture.EVIL_NUMBERED if isinstance(card[0], str)]
+    labels += [
+        "\U0001F600" * 1500, "\U0001F600\x00" * 2000, "\x00" * 1023 + "tail", "\x00" * 1024 + "tail",
+        "\x00\U0001F600" * 600 + "+15550100123", "\ud83d" * 1100 + "x", "a\ude00" * 600,
+        ("word " * 300).strip(), "\u200e" * 1000 + "Lea \u200f\ufeff Marks", "9" * 1030,
+        "x" * 1020 + " +15550100123", "x" * 30 + " +15550100123 " + "y" * 2000,
+        "jane" * 300 + "@example.com", "j@example.com " + "z" * 5000, "\u4e00" * 79 + "\U0001F600" * 3,
+    ]
     people = ["Sam Rivera", "Sam Chen", "Me", "\u20260123", "Dave plumber", "Ana", "Ana Lima",
               "Bo Reed", "Bo Ray", "jane.doe", "Zo\xeb M\xfcller", "\u738b \u5c0f\u660e", "\u738b \u5927\u660e",
               "\u0645\u062d\u0645\u062f \u0639\u0644\u064a", "\U0001F525 Jake", "\U0001F525 \U0001F9CA",
@@ -298,6 +309,15 @@ def build_job(fixture_dir, info):
         "fixture": fixture_dir, "sources": sources, "stats": cases, "decode": decode, "texts": texts,
         "identifiers": identifiers, "names": names, "round4": round4, "dates": dates,
         "labels": labels, "shorts": shorts, "short_stats": [],
+        # names that did not come out of compute_stats: short forms never bring a number back
+        "shorts_raw": [
+            [["Dr. Okafor 555-010-0403", "jane.doe@example.com", "Sam Rivera", "Sam +15550100123",
+              "N" * 500, "Evil\x1b[31m\u202e Name", "+1 555 010 0177"], "+1 555 010 0177"],
+            [["Sam 555-010-0403", "Sam 555-010-0404", "Sam Rivera", "Me"], None],
+            [["\x00", "", "  ", "Unknown", "\u200eLea\u200f Marks", "Lea Marks", "Lea  Marks"], "Me"],
+            [["W" * 100 + " Smith", "W" * 100 + " Jones", "W" * 39 + " X"], "W" * 1000000],
+            [["tel:+15550100123", "+1 555-010-0123 (mobile)", "Maya +15550100123", "Maya"], "Maya"],
+        ],
         # Zones whose rules have been stable for years. Each engine asks its
         # platform's tz database (zoneinfo here, ICU in JavaScript); a zone with
         # a very recent rule change (Africa/Casablanca on the macOS runner) can
@@ -479,10 +499,29 @@ class Conformance(unittest.TestCase):
         self.assertEqual(self.js["cleans"], [S.clean_name(label) for label in labels])
         self.assertEqual(self.js["masks"], [S.mask_handle(S.clean_name(label)) for label in labels])
         self.assertEqual(self.js["chat_labels"], [S._chat_label(label) for label in labels])
+        self.assertEqual(self.js["persons"], [S.person_label(label) for label in labels])
+        self.assertEqual(self.js["capped"], [[S.clean_name(label, S.NAME_LIMIT),
+                                              S.clean_name(label, S.CHAT_NAME_LIMIT)] for label in labels])
+        for person, chat in zip(self.js["persons"], self.js["chat_labels"]):
+            self.assertLessEqual(len(person), 41)
+            self.assertLessEqual(len(chat), 81)
+            self.assertEqual(support.leaks({"senders": [{"name": person}]}), [], person)
+        self.assertGreater(sum(1 for person in self.js["persons"] if len(person) == 41), 10)
         masked = sum(1 for label, out in zip(labels, self.js["masks"]) if out.startswith("\u2026"))
         self.assertGreater(masked, 85)          # every block of digits, and the phone-like labels
         for out in self.js["masks"]:
             self.assertEqual(support.leaks({"chat": {"name": out}}), [], out)
+
+    def test_short_forms_of_names_from_elsewhere(self):
+        for (names, me), theirs in zip(self.job["shorts_raw"], self.js["shorts_raw"]):
+            mine = S.short_forms(names, me) if me is not None else S.short_forms(names)
+            self.assertEqual(theirs, [list(pair) for pair in mine.items()], names)
+            for short in mine.values():
+                self.assertEqual(support.leaks({"senders": [{"name": short}]}), [], short)
+                self.assertLessEqual(len(short), 45)
+        first = S.short_forms(*self.job["shorts_raw"][0])
+        self.assertEqual(first["Dr. Okafor 555-010-0403"], "\u20260403")
+        self.assertEqual(first["jane.doe@example.com"], "jane.doe")
 
     def test_short_forms(self):
         self.assertGreater(len(self.job["shorts"]), 45)
@@ -516,8 +555,11 @@ class Conformance(unittest.TestCase):
             seen.update(sender["name"] for sender in stats["senders"])
         for entry in evil["handles"]:
             self.assertIn(entry["label"], seen)
-        for entry in evil["contacts"]:
+        for entry in evil["contacts"] + evil["numbered"]:
             self.assertIn(entry["name"], seen)
+        long_name = json.loads(self.js["stats"]["evil/long_name/True"])
+        self.assertEqual(len(long_name["chat"]["name"]), 81)
+        self.assertEqual(support.too_long(long_name), [])
         self.assertIn("Unknown", seen)
         self.assertIn(S._owner_name(EVIL_ME), seen)
         for key, chat in evil["chats"].items():

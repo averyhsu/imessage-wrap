@@ -134,7 +134,7 @@ function subsetMismatches(expected, actual, where) {
 
 const CONTROL_RANGES = [[0x00, 0x09], [0x0B, 0x1F], [0x7F, 0x9F], [0x2028, 0x2029], [0x202A, 0x202E],
   [0x2066, 0x2069]];
-const ADDRESS = /[^\s<>()[\]"',;:@]+@[^\s<>()[\]"',;:@]+/gu;
+const NOT_IN_AN_ADDRESS = /[\s<>()[\]"',;:@]/;
 
 /** How many decimal digits (of any script) a string holds. */
 function countDecimals(text) {
@@ -151,7 +151,12 @@ function textLeaks(text, where) {
   where = where || 'text';
   const found = [];
   for (const match of text.matchAll(/\p{Nd}{7,}/gu)) found.push(where + ': a run of ' + Array.from(match[0]).length + ' digits');
-  for (const match of text.matchAll(ADDRESS)) found.push(where + ': an address (' + JSON.stringify(match[0]) + ')');
+  // a character on each side of the sign; in linear time, whatever the length
+  for (let at = text.indexOf('@'); at !== -1; at = text.indexOf('@', at + 1)) {
+    if (at > 0 && at < text.length - 1 && !NOT_IN_AN_ADDRESS.test(text[at - 1]) && !NOT_IN_AN_ADDRESS.test(text[at + 1])) {
+      found.push(where + ': an address (' + JSON.stringify(text.slice(Math.max(0, at - 30), at + 30)) + ')');
+    }
+  }
   for (const ch of text) {
     const code = ch.codePointAt(0);
     if (CONTROL_RANGES.some(([low, high]) => code >= low && code <= high)) {
@@ -209,6 +214,22 @@ function leaks(stats) {
   return found;
 }
 
+/**
+ * Names in a stats object that are over the caps of docs/SCHEMA.md 2: a person
+ * 40 characters plus an ellipsis, a chat 80 plus an ellipsis.
+ */
+function tooLong(stats) {
+  const found = [];
+  for (const [where, name] of namesIn(stats)) {
+    const length = Array.from(name).length;
+    if (length > (where === 'chat.name' ? 81 : 41)) found.push(where + ': ' + length + ' characters');
+  }
+  if (stats.period && typeof stats.period.label === 'string' && Array.from(stats.period.label).length > 81) {
+    found.push('period.label is too long');
+  }
+  return found;
+}
+
 const EXPECTED = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'conformance', 'expected_tiny.json'), 'utf8'));
 // hand-written clean / mask / short-name cases, shared with the Python tests
 const NAMES = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'conformance', 'names.json'), 'utf8'));
@@ -217,5 +238,5 @@ const VECTOR = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'vectors', 'p
 module.exports = {
   ROOT, PYTHON, Engine, DB, LA, APPLE_EPOCH, EXPECTED, VECTOR, NAMES, python, fixture, read, tempDir,
   macContacts, openMac, utc, ns, msg, tap, hexToBytes, bytes, subsetMismatches, countDecimals,
-  textLeaks, namesIn, leaks
+  textLeaks, namesIn, leaks, tooLong
 };
