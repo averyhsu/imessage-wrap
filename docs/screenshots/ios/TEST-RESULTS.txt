@@ -1,63 +1,65 @@
-Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43042222401
-Commit: cf589168aacf3536f223545d379027930de9a617
+Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43047037123
+Commit: 424ffb8dc5d6a42c6ec25aa06b7e9ec754c5bc4b
 Xcode:  Xcode 26.6 Build version 17F113 
 
 == Unit tests and app UI tests (Simulator)
-Test Case '-[WrappedTests.MessageTests testComposedMessageUsesLiveLayoutWithATemplateFallback]' passed (0.043 seconds).
+Test Case '-[WrappedTests.MessageTests testComposedMessageUsesLiveLayoutWithATemplateFallback]' passed (3.420 seconds).
 Test Case '-[WrappedTests.MessageTests testFragmentLinkSurvivesArchivingTheMessage]' passed (0.003 seconds).
-Test Case '-[WrappedTests.MessageTests testFragmentLinkSurvivesCopyingTheMessage]' passed (0.014 seconds).
-Test Case '-[WrappedTests.MessageTests testFragmentLinkSurvivesMSMessageWithASession]' passed (0.001 seconds).
-Test Case '-[WrappedTests.MessageTests testLiveBubbleLaysOutWithinTheOfferedSize]' passed (0.115 seconds).
-Test Case '-[WrappedTests.MessageTests testMessagesWithoutARecapAreIgnored]' passed (0.002 seconds).
-Test Case '-[WrappedTests.MessageTests testOversizedRecapIsTrimmedBeforeItBecomesAMessage]' passed (0.061 seconds).
+Test Case '-[WrappedTests.MessageTests testFragmentLinkSurvivesCopyingTheMessage]' passed (0.010 seconds).
+Test Case '-[WrappedTests.MessageTests testFragmentLinkSurvivesMSMessageWithASession]' passed (0.006 seconds).
+Test Case '-[WrappedTests.MessageTests testLiveBubbleLaysOutWithinTheOfferedSize]' passed (0.466 seconds).
+Test Case '-[WrappedTests.MessageTests testMessagesWithoutARecapAreIgnored]' passed (0.001 seconds).
+Test Case '-[WrappedTests.MessageTests testOversizedRecapIsTrimmedBeforeItBecomesAMessage]' passed (0.115 seconds).
 Test Case '-[WrappedTests.MessageTests testQueryLinkSurvivesMSMessage]' passed (0.001 seconds).
-Test Case '-[WrappedTests.MessageTests testShareCardRendersAtFullResolution]' passed (0.181 seconds).
-Test Case '-[WrappedTests.MessageTests testTemplateOnlyLayoutWhenLiveLayoutIsOff]' passed (0.196 seconds).
-Executed 10 tests, with 0 failures (0 unexpected) in 0.617 (0.697) seconds
-Test Case '-[WrappedTests.RecapLinkTests testAppURLRoundTrip]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testBundledStoryPageExistsAndCarriesThePayload]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testDefaultStoryURLIsTheVectorURL]' passed (0.003 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testEachTrimStepDoesWhatTheContractSays]' passed (0.005 seconds).
+Test Case '-[WrappedTests.MessageTests testShareCardRendersAtFullResolution]' passed (0.355 seconds).
+Test Case '-[WrappedTests.MessageTests testTemplateOnlyLayoutWhenLiveLayoutIsOff]' passed (0.009 seconds).
+Executed 10 tests, with 0 failures (0 unexpected) in 4.385 (4.401) seconds
+Test Case '-[WrappedTests.RecapLinkTests testAppURLRoundTrip]' passed (0.002 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testBundledStoryPageExistsAndCarriesThePayload]' passed (0.004 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testDefaultStoryURLIsTheVectorURL]' passed (0.004 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testEachTrimStepDoesWhatTheContractSays]' passed (0.007 seconds).
 Test Case '-[WrappedTests.RecapLinkTests testFindsALinkInsidePastedText]' passed (0.004 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testFragmentWinsOverQuery]' passed (0.002 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testLadderStopsAtTheFirstStepThatFits]' passed (0.037 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testLinksWithoutAPayload]' passed (0.074 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testOversizedRecapIsTrimmedIntoTheBudget]' passed (0.009 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testParsesAroundOtherParameters]' passed (0.001 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testFragmentWinsOverQuery]' passed (0.001 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testLadderStopsAtTheFirstStepThatFits]' passed (0.049 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testLinksWithoutAPayload]' passed (0.036 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testOversizedRecapIsTrimmedIntoTheBudget]' passed (0.010 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testParsesAroundOtherParameters]' passed (0.002 seconds).
 Test Case '-[WrappedTests.RecapLinkTests testParsesFragmentForm]' passed (0.001 seconds).
 Test Case '-[WrappedTests.RecapLinkTests testParsesQueryForm]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testParsesTheAppScheme]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testParsesTheVectorURL]' passed (0.085 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testQueryFormIsTrimmedToo]' passed (0.006 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testParsesTheAppScheme]' passed (0.002 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testParsesTheVectorURL]' passed (0.004 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testQueryFormIsTrimmedToo]' passed (0.011 seconds).
 Test Case '-[WrappedTests.RecapLinkTests testQueryFormStoryURL]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testShortLinksAreNotTouched]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapLinkTests testShortQuotesAreNotTruncated]' passed (0.000 seconds).
-Executed 18 tests, with 0 failures (0 unexpected) in 0.234 (0.296) seconds
-Test Case '-[WrappedTests.RecapPayloadTests testBase64URLHelpersRoundTrip]' passed (0.002 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testBundledDemoIsTheVector]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testDecodesTheSharedVectorToExactlyItsStats]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testEncodedPayloadIsUnpaddedBase64URL]' passed (0.056 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testEncodeThenDecodeReturnsTheSameBytes]' passed (0.003 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testRecentsStoreKeepsNewestFirstAndSkipsTheDemo]' passed (0.017 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testReencodingTheObjectKeepsEveryValue]' passed (0.002 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testRejectsThingsThatAreNotRecaps]' passed (0.001 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testSummaryCodableRoundTrip]' passed (0.002 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testSummaryOfTheVector]' passed (0.003 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testSummaryToleratesMissingAndUnknownKeys]' passed (0.002 seconds).
-Test Case '-[WrappedTests.RecapPayloadTests testSummaryToleratesOddValues]' passed (0.001 seconds).
-Executed 12 tests, with 0 failures (0 unexpected) in 0.091 (0.115) seconds
-Executed 40 tests, with 0 failures (0 unexpected) in 0.942 (1.111) seconds
-Executed 40 tests, with 0 failures (0 unexpected) in 0.942 (1.113) seconds
-Test Case '-[WrappedUITests.WrappedUITests testCustomURLSchemeOpensARecap]' passed (112.444 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testDebugGalleryOfExtensionViews]' passed (39.544 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testDemoStoryPlaysAndAdvances]' passed (81.993 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testHomeScreen]' passed (19.611 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testOpensARecapLinkPassedAtLaunch]' passed (31.023 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testPlayDemoFromHomeButton]' passed (31.507 seconds).
-Test Case '-[WrappedUITests.WrappedUITests testUnreadableLinkStaysOnHomeWithANotice]' passed (7.489 seconds).
-Executed 7 tests, with 0 failures (0 unexpected) in 323.611 (323.624) seconds
-Executed 7 tests, with 0 failures (0 unexpected) in 323.611 (323.626) seconds
-Executed 7 tests, with 0 failures (0 unexpected) in 323.611 (323.628) seconds
+Test Case '-[WrappedTests.RecapLinkTests testShortLinksAreNotTouched]' passed (0.006 seconds).
+Test Case '-[WrappedTests.RecapLinkTests testShortQuotesAreNotTruncated]' passed (0.003 seconds).
+Executed 18 tests, with 0 failures (0 unexpected) in 0.147 (0.251) seconds
+Test Case '-[WrappedTests.RecapPayloadTests testBase64URLHelpersRoundTrip]' passed (0.003 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testBundledDemoIsTheVector]' passed (0.004 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testDecodesTheSharedVectorToExactlyItsStats]' passed (0.003 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testEncodedPayloadIsUnpaddedBase64URL]' passed (0.003 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testEncodeThenDecodeReturnsTheSameBytes]' passed (0.001 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testHandlesMaskedSenderNamesAndEmptyQuotes]' passed (0.030 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testJustComposedRecapIsRememberedBriefly]' passed (0.011 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testRecentsStoreKeepsNewestFirstAndSkipsTheDemo]' passed (0.026 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testReencodingTheObjectKeepsEveryValue]' passed (0.005 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testRejectsThingsThatAreNotRecaps]' passed (0.004 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testSummaryCodableRoundTrip]' passed (0.017 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testSummaryOfTheVector]' passed (0.001 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testSummaryToleratesMissingAndUnknownKeys]' passed (0.003 seconds).
+Test Case '-[WrappedTests.RecapPayloadTests testSummaryToleratesOddValues]' passed (0.003 seconds).
+Executed 14 tests, with 0 failures (0 unexpected) in 0.113 (0.214) seconds
+Executed 42 tests, with 0 failures (0 unexpected) in 4.645 (4.966) seconds
+Executed 42 tests, with 0 failures (0 unexpected) in 4.645 (4.972) seconds
+Test Case '-[WrappedUITests.WrappedUITests testCustomURLSchemeOpensARecap]' passed (82.218 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testDebugGalleryOfExtensionViews]' passed (26.468 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testDemoStoryPlaysAndAdvances]' passed (44.126 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testHomeScreen]' passed (28.735 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testOpensARecapLinkPassedAtLaunch]' passed (14.964 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testPlayDemoFromHomeButton]' passed (22.483 seconds).
+Test Case '-[WrappedUITests.WrappedUITests testUnreadableLinkStaysOnHomeWithANotice]' passed (11.590 seconds).
+Executed 7 tests, with 0 failures (0 unexpected) in 230.584 (230.599) seconds
+Executed 7 tests, with 0 failures (0 unexpected) in 230.584 (230.600) seconds
+Executed 7 tests, with 0 failures (0 unexpected) in 230.584 (230.601) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 == Notes printed by tests
@@ -66,29 +68,31 @@ WRAPPED_NOTE MSMessage(session:) url round trip: in=1889 chars, out=1889 chars, 
 WRAPPED_NOTE ladder lengths: [4015, 1831, 1640, 1457, 1133, 995]
 WRAPPED_NOTE trim: 7625 characters fit in 4015 after 1 step(s)
 WRAPPED_NOTE custom URL scheme: the system asked before opening=false
-WRAPPED_NOTE story bridge after load: slide 1/12
-WRAPPED_NOTE story bridge statuses while tapping: ["slide 1/12", "slide 2/12", "slide 3/12", "slide 5/12", "slide 6/12"]
+WRAPPED_NOTE story bridge after load: slide 0/12 (ready in 4.5s)
+WRAPPED_NOTE story bridge statuses while tapping: ["slide 0/12 (ready in 4.5s)", "slide 1/12 (ready in 4.5s)", "slide 2/12 (ready in 4.5s)", "slide 3/12 (ready in 4.5s)", "slide 4/12 (ready in 4.5s)"]
 WRAPPED_NOTE messages: foreground=true
-WRAPPED_NOTE hierarchy dump messages-01-launched: 67 lines
-WRAPPED_NOTE hierarchy dump messages-02-conversation-list: 67 lines
-WRAPPED_NOTE messages: first cell label='+1 (888) 555-1212, 1/1/01 ' id='' count=4
-WRAPPED_NOTE hierarchy dump messages-03-conversation: 73 lines
+WRAPPED_NOTE hierarchy dump messages-01-conversation-list: 67 lines
+WRAPPED_NOTE messages: opening conversation '+1 (888) 555-1212, 1/1/01 '
+WRAPPED_NOTE hierarchy dump messages-02-conversation: 73 lines
 WRAPPED_NOTE messages: app drawer: tapping candidate #0 type=9 id='' label='add'
-WRAPPED_NOTE hierarchy dump messages-04-app-drawer: 132 lines
-WRAPPED_NOTE messages: 'Threadback' not visible yet; trying More / swipe
-WRAPPED_NOTE messages: more: no candidate found
-WRAPPED_NOTE hierarchy dump messages-05-more: 132 lines
-WRAPPED_NOTE hierarchy dump messages-05b-after-swipe: 132 lines
-WRAPPED_NOTE messages: found our app element type=75 id='com.apple.messages.MSMessageExtensionBalloonPlugin:FAKETEAMID:io.github.averyhsu.wrapped.MessagesExtension' label='Threadback' hittable=true
-WRAPPED_NOTE hierarchy dump messages-06-extension-compact: 95 lines
+WRAPPED_NOTE hierarchy dump messages-03-app-drawer: 132 lines
+WRAPPED_NOTE messages: our app in the drawer: id='com.apple.messages.MSMessageExtensionBalloonPlugin:FAKETEAMID:io.github.averyhsu.wrapped.MessagesExtension' label='Threadback' after 1 swipe(s)
+WRAPPED_NOTE hierarchy dump messages-04-app-drawer-our-app: 132 lines
 WRAPPED_NOTE messages: launcher visible=true
-WRAPPED_NOTE hierarchy dump messages-07-bubble-staged: 110 lines
-WRAPPED_NOTE messages: send: tapping candidate #0 type=9 id='sendButton' label='Send'
-WRAPPED_NOTE hierarchy dump messages-08-bubble-sent: 149 lines
-WRAPPED_NOTE messages: recap bubble: tapping candidate #1 type=9 id='bubble.recap' label='Threadback recap. Tap to play.'
-WRAPPED_NOTE hierarchy dump messages-09-story-expanded: 138 lines
-WRAPPED_NOTE messages: summary inConversation=true openedDrawer=true launchedExtension=true sawLauncher=true staged=true sent=true tappedBubble=true
+WRAPPED_NOTE hierarchy dump messages-05-launcher-compact: 113 lines
+WRAPPED_NOTE messages: bubble staged (send button present)=true
+WRAPPED_NOTE hierarchy dump messages-06-bubble-staged: 129 lines
+WRAPPED_NOTE hierarchy dump messages-07-bubble-sent: 149 lines
+WRAPPED_NOTE messages: live bubble label='Dinner Club 🍝 · 2026 in review. 48,213 messages. Tap to play.'
+WRAPPED_NOTE messages: live bubble notes='Optional(viewWillAppear: conversation=false selected=false url=false length=0 fragment=false recap=true fromMessage=false)'
+WRAPPED_NOTE messages: story bridge status after the tap: slide 0/12 (ready in 9.5s)
+WRAPPED_NOTE hierarchy dump messages-08-story-expanded: 168 lines
+WRAPPED_NOTE hierarchy dump messages-09-story-next-slide: 167 lines
+WRAPPED_NOTE hierarchy dump messages-10-story-another-slide: 183 lines
+WRAPPED_NOTE messages: story bridge statuses while tapping: ["slide 0/12 (ready in 9.5s)", "slide 3/12 (ready in 9.5s)", "slide 5/12 (ready in 9.5s)"]
+WRAPPED_NOTE messages: story close control returned to the compact launcher=true
+WRAPPED_NOTE hierarchy dump messages-11-after-close: 155 lines
 
 == Extension inside the Simulator's Messages app (automation attempt, allowed to fail)
-Test Case '-[WrappedUITests.MessagesExtensionUITests testRecapBubbleInsideMessages]' passed (146.574 seconds).
+Test Case '-[WrappedUITests.MessagesExtensionUITests testRecapBubbleInsideMessages]' passed (173.998 seconds).
 ** TEST EXECUTE SUCCEEDED **
