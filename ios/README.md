@@ -52,7 +52,8 @@ in the same decoder):
   open outside; the extension ignores it), loads nothing into frames, and only listens to
   bridge messages from the main frame of that page.
 - **Debug hooks are debug only.** The launch arguments below and the two invisible test
-  controls in the launcher are compiled out of release builds.
+  controls in the launcher are inside `#if DEBUG`; CI builds the Release configuration as
+  well and checks that the test controls are not in its binaries.
 
 What is kept on the device: only recaps the person pasted or sent themselves, as payload
 strings in `UserDefaults` (the app and the extension each keep their own short list, shown
@@ -123,6 +124,7 @@ the notes the tests print, is linked from
 | Shown | How | Run |
 |-------|-----|-----|
 | The project generates and builds with no signing team; `WrappedMessages.appex` is embedded in the app and registered with the system (`pluginkit`). | build log | first in [43030079757](https://github.com/averyhsu/imessage-wrap/actions/runs/43030079757) |
+| The Release configuration builds too, and the debug-only test hooks (present in the Debug binaries) are absent from the Release binaries. | Release build and a search of the binaries | current run |
 | Codec against the shared vector, both link forms, the trim ladder (a 7,625-character link fits after one step). | unit tests on the Simulator | first in [43042222401](https://github.com/averyhsu/imessage-wrap/actions/runs/43042222401) |
 | Hostile input: a payload over 8,000 characters is refused before decoding; a 1,378-character deflate bomb (1 MB of zeros) stops at the 256 KB cap; truncated DEFLATE is refused. | unit tests | current run |
 | Only `threadback://recap` and the https story page are accepted as recap links (other hosts, paths, schemes, ports and user-info tricks are refused); the app registers exactly that scheme. | unit tests, UI test | current run |
@@ -155,14 +157,20 @@ Found along the way, in the Simulator:
   app. That is the system's own question and it is asked each time unless the person
   chooses otherwise in Settings.
 - How long a story takes to be on screen is printed by the tests ("ready in … s; warm …"
-  or "cold …" in `TEST-RESULTS.txt`). In run
-  [43085945658](https://github.com/averyhsu/imessage-wrap/actions/runs/43085945658), with
-  the web view warmed up it was 0.1 to 0.3 s, from the home screen and inside Messages
+  or "cold …" in `TEST-RESULTS.txt`). In runs
+  [43085945658](https://github.com/averyhsu/imessage-wrap/actions/runs/43085945658) and
+  [43088916296](https://github.com/averyhsu/imessage-wrap/actions/runs/43088916296), with
+  the web view warmed up it was 0.1 to 0.4 s, from the home screen and inside Messages
   alike; without one (the app launched straight into a story, or an extension process
   started by a tap on a bubble, which is what a recipient's first tap is) it was 1.3 to
-  1.4 s, during which the cover is on screen. Run 43080365295, on a slower runner, before
+  1.5 s, during which the cover is on screen. Run 43080365295, on a slower runner, before
   the waiting web view was kept on screen and while the page still started the story
   twice, measured 3.2 to 4.6 s. A real phone is unmeasured.
+- One outlier is not explained: a unit test that asks for a story within the first second
+  or two of the app process's life measured 10.3 s and 2.4 s for that first start (all of
+  it inside the page's own start-up; the second story in the same web view took 0.05 s).
+  Nothing like it showed in the app or in Messages, where the web view has waited for a
+  few seconds before a story is asked for. The cover is on screen meanwhile.
 - Setting `location.hash` makes the story page start the story twice (it listens to both
   `popstate` and `hashchange`); the shell therefore writes the fragment with
   `history.replaceState` and calls `WrappedApp.route()` once.

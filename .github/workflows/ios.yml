@@ -252,6 +252,49 @@ jobs:
           fi
           exit "$STATUS"
 
+      # The Release configuration: the code outside "#if DEBUG" compiles, and the debug-only
+      # test hooks (launch arguments, the launcher's invisible test controls) are not in a
+      # release binary. The marker strings are present in the Debug build and must be absent
+      # from the Release build.
+      - name: Build the Release configuration and check the debug hooks are compiled out
+        id: release
+        if: ${{ !cancelled() }}
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/release-build.log" \
+            build \
+            -project ios/Wrapped.xcodeproj \
+            -scheme Wrapped \
+            -configuration Release \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$OUT/release-dd" \
+            ONLY_ACTIVE_ARCH=YES
+          REL="$OUT/release-dd/Build/Products/Release-iphonesimulator/Wrapped.app"
+          DBG="$DERIVED/Build/Products/Debug-iphonesimulator/Wrapped.app"
+          test -d "$REL/PlugIns/WrappedMessages.appex"
+          count_in() {
+            { find "$1" -type f \( -name "Wrapped" -o -name "WrappedMessages" -o -name "*.dylib" \) -exec strings -a {} + | grep -c -F -- "$2"; } || true
+          }
+          {
+            echo "Release build: succeeded ($(du -sh "$REL" | cut -f1) app with its extension)"
+            VERIFIED=1
+            for MARKER in "launcher.sendDemoLive" "Stage the sample as a card (debug)"; do
+              IN_DEBUG=$(count_in "$DBG" "$MARKER")
+              IN_RELEASE=$(count_in "$REL" "$MARKER")
+              echo "debug-only marker '$MARKER': found $IN_DEBUG time(s) in the Debug build, $IN_RELEASE in the Release build"
+              test "$IN_RELEASE" -eq 0
+              if [ "$IN_DEBUG" -eq 0 ]; then
+                VERIFIED=0
+              fi
+            done
+            if [ "$VERIFIED" -eq 1 ]; then
+              echo "RELEASE_OK: the Release configuration builds and carries no debug test hooks"
+            else
+              echo "RELEASE_BUILT: the Release configuration builds; the search for debug hooks proves nothing, because a marker was not found in the Debug build either"
+            fi
+          } | tee "$OUT/logs/release-check.txt"
+
       - name: Collect test results
         if: ${{ !cancelled() }}
         env:
@@ -265,6 +308,16 @@ jobs:
             echo "== Unit tests and app UI tests (Simulator)"
             if [ -f "$OUT/logs/test.log" ]; then
               grep -E "Test Case .* (passed|failed|skipped)|Executed [0-9]+ tests?|\*\* TEST" "$OUT/logs/test.log" | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++' || true
+            else
+              echo "not run"
+            fi
+            echo ""
+            echo "== Release configuration (built after the tests; debug-only hooks must be absent)"
+            if [ -f "$OUT/logs/release-check.txt" ]; then
+              cat "$OUT/logs/release-check.txt"
+            elif [ -f "$OUT/logs/release-build.log" ]; then
+              echo "the Release build or its check failed:"
+              grep -E "error:|\*\* BUILD" "$OUT/logs/release-build.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-300 | head -n 20 || true
             else
               echo "not run"
             fi
@@ -377,6 +430,7 @@ jobs:
           MESSAGES_OUTCOME: ${{ steps.messages.outcome }}
           EXPERIMENTAL_OUTCOME: ${{ steps.experimental.outcome }}
           SAMPLE_OUTCOME: ${{ steps.sample.outcome }}
+          RELEASE_OUTCOME: ${{ steps.release.outcome }}
         run: |
           {
             echo "## iOS build"
@@ -398,6 +452,7 @@ jobs:
             echo "- The extension inside the Simulator's Messages app, card flow: ${MESSAGES_OUTCOME:-not run}"
             echo "- The extension inside Messages, the sample sent from its story says Sample: ${SAMPLE_OUTCOME:-not run}"
             echo "- Experimental live bubble layout inside Messages (off by default): ${EXPERIMENTAL_OUTCOME:-not run}"
+            echo "- Release configuration builds, without the debug test hooks: ${RELEASE_OUTCOME:-not run}"
             echo "- Screenshots: $(ls "$SHOTS" 2>/dev/null | grep -c '\.png$' || true) (published to \`docs/screenshots/ios/\`, full size in the \`ios-screenshots\` artifact)"
             echo "- Recordings: $(ls "$OUT/video" 2>/dev/null | tr '\n' ' ')"
             echo ""
