@@ -10,7 +10,8 @@
  *                           (frame-by-frame capture); .resume() hands the clock back
  *
  * Mechanics: segmented progress bar, auto-advance, tap right/left, hold to pause, arrow
- * keys and space, a close button and replay. One requestAnimationFrame loop drives the
+ * keys and space, a close button and replay. With "reduce motion" on, nothing moves on
+ * its own: the viewer taps to go on and the progress bar is a row of static segments. One requestAnimationFrame loop drives the
  * progress bar, the count-ups and the auto-advance; entrances are CSS animations that are
  * paused through one class on the stage.
  */
@@ -42,6 +43,16 @@
     return node;
   }
 
+  /** Recap text carries its own direction (a right-to-left name truncates at its end). */
+  function dirAuto(node) { node.setAttribute('dir', 'auto'); return node; }
+
+  function textButton(cls, action, labelText) {
+    var b = h('button', cls, labelText);
+    b.type = 'button';
+    b.setAttribute('data-action', action);
+    return b;
+  }
+
   function iconButton(cls, action, labelText, glyphs) {
     var b = h('button', cls, glyphs.map(function (g) { return G.icon(g); }));
     b.type = 'button';
@@ -65,29 +76,32 @@
     if (!mount) throw new Error('WrappedStory.start: no mount element');
 
     var embed = !!opts.embed;
-    var slides = Slides.build(stats, { embed: embed, card: function (s) { return Card.render(s); } });
-
     mount.textContent = '';
     mount.hidden = false;
     mount.className = 'story' + (embed ? ' is-embed' : '');
 
-    var slidesEl = h('div', 'slides', slides.map(function (s) { return s.el; }));
-    var segs = slides.map(function () { return h('i', 'seg', h('b')); });
     var live = h('div', 'sr-only');
     live.setAttribute('aria-live', 'polite');
 
-    var srPrev = iconButton('sr-only', 'prev', 'Previous slide', []);
-    var srNext = iconButton('sr-only', 'next', 'Next slide', []);
+    var calm = reducedMotion();
+    var slides = Slides.build(stats, { embed: embed, calm: calm, card: function (s) { return Card.render(s); } });
+    var slidesEl = h('div', 'slides', slides.map(function (s) { return s.el; }));
+    var segs = slides.map(function () { return h('i', 'seg', h('b')); });
+
+    // Previous / Next for keyboards and screen readers (touch has the tap zones, a framed
+    // desktop stage has its arrows). They come after the visible controls and show
+    // themselves when focused, so there is never an invisible stop in the tab order.
+    var skipPrev = textButton('story__skip story__skip--prev', 'prev', 'Previous slide');
+    var skipNext = textButton('story__skip story__skip--next', 'next', 'Next slide');
+    var pauseBtn = iconButton('head__btn head__pause', 'toggle', 'Pause', ['pause', 'play']);
     var chrome = h('div', 'chrome', [
       h('div', 'segs', segs),
       h('div', 'head', [
         h('span', 'head__badge', F.initial(stats.chat.name)),
-        h('span', 'head__name', stats.chat.name),
+        dirAuto(h('span', 'head__name', stats.chat.name)),
         stats.period.label ? h('span', 'head__label', stats.period.label) : null,
         h('span', 'head__space'),
-        srPrev,
-        srNext,
-        iconButton('head__btn head__pause', 'toggle', 'Pause or play', ['pause', 'play']),
+        pauseBtn,
         iconButton('head__btn head__close', 'close', 'Close', ['close'])
       ])
     ]);
@@ -96,7 +110,7 @@
     var toast = h('div', 'toast');
     toast.setAttribute('role', 'status');
 
-    var stage = h('div', 'stage', [slidesEl, chrome, toast, live]);
+    var stage = h('div', 'stage', [slidesEl, chrome, skipPrev, skipNext, toast, live]);
     stage.setAttribute('role', 'group');
     stage.setAttribute('aria-roledescription', 'story');
     stage.setAttribute('aria-label', stats.chat.name + ', ' + F.inReview(stats.period.label));
@@ -111,10 +125,24 @@
 
     S = {
       stats: stats, opts: opts, embed: embed, mount: mount, stage: stage, slides: slides, segs: segs,
-      live: live, toast: toast, probe: probe, prevArrow: prevArrow, nextArrow: nextArrow,
+      live: live, toast: toast, probe: probe, prevArrow: prevArrow, nextArrow: nextArrow, pauseBtn: pauseBtn,
       index: -1, t: 0, last: 0, raf: 0, holds: {}, leaving: [], down: null, holdTimer: 0, toastTimer: 0,
-      cardBlob: null, unit: 1, listeners: [], calm: reducedMotion(), ended: false
+      cardBlob: null, unit: 1, listeners: [], calm: calm, ended: false
     };
+    mount.classList.toggle('is-calm', calm);
+
+    // "Reduce motion" can be switched while the story is open.
+    var motion = root.matchMedia ? root.matchMedia('(prefers-reduced-motion: reduce)') : null;
+    if (motion) {
+      var onMotion = function () {
+        if (!S) return;
+        S.calm = !!motion.matches;
+        S.mount.classList.toggle('is-calm', S.calm);
+        applyTime();
+      };
+      if (motion.addEventListener) { motion.addEventListener('change', onMotion); S.listeners.push([motion, 'change', onMotion, false]); }
+      else if (motion.addListener) motion.addListener(onMotion);
+    }
 
     listen(root, 'resize', layout);
     listen(root, 'orientationchange', layout);
@@ -188,6 +216,12 @@
       hgt = Math.max(120, Math.min(vh - margin * 2, 900));
       w = Math.max(80, Math.min(vw - margin * 2, hgt * 9 / 16));
       hgt = Math.min(hgt, w * 2.17);
+      // Whole pixels, centred on whole pixels: a stage that starts at x = 483.75 is
+      // rendered a little soft.
+      w = Math.floor(w);
+      hgt = Math.floor(hgt);
+      if ((vw - w) % 2) w -= 1;
+      if ((vh - hgt) % 2) hgt -= 1;
     } else {
       var cs = getComputedStyle(S.probe);
       insetT = parseFloat(cs.paddingTop) || 0;
@@ -218,6 +252,8 @@
     var p = paused();
     S.stage.classList.toggle('is-paused', p);
     S.stage.classList.toggle('is-user-paused', !!S.holds.user);
+    // The button names its action: "Pause" while playing, "Play" once the viewer paused.
+    S.pauseBtn.setAttribute('aria-label', S.holds.user ? 'Play' : 'Pause');
     if (!p) S.last = now();
   }
 
@@ -231,7 +267,9 @@
     applyTime();
     var slide = S.slides[S.index];
     if (S.t >= slide.duration) {
-      if (S.index < S.slides.length - 1) goTo(S.index + 1, 'auto');
+      // With "reduce motion" the story waits for the viewer on every slide.
+      if (S.calm) S.t = slide.duration;
+      else if (S.index < S.slides.length - 1) goTo(S.index + 1, 'auto');
       else S.ended = true;
     }
   }
@@ -241,7 +279,8 @@
     var slide = S.slides[S.index];
     var t = S.t;
     var seg = S.segs[S.index].firstChild;
-    seg.style.transform = 'scaleX(' + Math.max(0, Math.min(1, t / slide.duration)).toFixed(4) + ')';
+    // Static segments under "reduce motion": the current one is simply filled.
+    seg.style.transform = S.calm ? 'scaleX(1)' : 'scaleX(' + Math.max(0, Math.min(1, t / slide.duration)).toFixed(4) + ')';
 
     for (var i = 0; i < slide.counts.length; i++) {
       var c = slide.counts[i];

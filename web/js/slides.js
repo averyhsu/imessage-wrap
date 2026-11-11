@@ -43,6 +43,19 @@
 
   function b(text) { return h('b', '', text); }
 
+  /**
+   * Text that came from the recap (a name, a quote, a title). dir="auto" lets a
+   * right-to-left name read and truncate from its own logical start, and isolates it so
+   * it cannot reorder the numbers and punctuation next to it.
+   */
+  function auto(node) { node.setAttribute('dir', 'auto'); return node; }
+
+  /** A person's or chat's name: <tag class="nm …" dir="auto">. */
+  function nm(tag, cls, text) { return auto(h(tag, 'nm' + (cls ? ' ' + cls : ''), text)); }
+
+  /** Something that must stay readable when its neighbour is truncated (a count, a date). */
+  function keep(node) { node.setAttribute('data-keep', ''); return node; }
+
   /** Design pixels → CSS length. */
   function u(n) { return 'calc(var(--u) * ' + (Math.round(n * 100) / 100) + ')'; }
 
@@ -195,11 +208,6 @@
 
   // ── copy ───────────────────────────────────────────────────────────────────
 
-  var PERSONA_EMOJI = {
-    quiet_ones: '🤫', night_owls: '🦉', weekend_warriors: '🎉', always_on: '🔋', early_birds: '🐦',
-    morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️', after_hours: '🌙'
-  };
-
   function clockHeadline(hour) {
     if (hour <= 4) return 'Up way past bedtime.';
     if (hour <= 8) return 'Up before the alarm.';
@@ -224,7 +232,7 @@
 
   // ── 1. cover ───────────────────────────────────────────────────────────────
 
-  function cover(s) {
+  function cover(s, env) {
     var slide = make('cover', { ink: 'light', world: '#0a7aff', duration: 5200, label: s.chat.name + ', ' + F.inReview(s.period.label) });
     decos(slide, ['cover__d1', 'cover__d2 deco--l', 'cover__d3 deco--l', 'cover__d4']);
 
@@ -234,7 +242,7 @@
     if (range) meta.push(range);
 
     var T0 = 1650; // the typing bubble resolves into the title here
-    var name = words(h('h1', 'cover__name'), s.chat.name, T0 + 60, 80);
+    var name = words(auto(h('h1', 'cover__name')), s.chat.name, T0 + 60, 80);
     fitBlock(slide, name, { max: 70, min: 24, lines: 3, lineHeight: 0.9, stretches: [116, 100, 82, 66] });
 
     var labelText = h('span', '', F.inReview(s.period.label));
@@ -249,7 +257,7 @@
     ]);
     fitLine(slide, label, { inner: labelText, max: 27, min: 13, avail: function (unit) { return stack.clientWidth - 62 * unit; } });
 
-    add(slide.body, [stack, A(h('p', 'cover__hint', 'Tap to skip ahead  ·  hold to pause'), 'fade', T0 + 1500)]);
+    add(slide.body, [stack, A(h('p', 'cover__hint', env.calm ? 'Tap to continue' : 'Tap to skip ahead  ·  hold to pause'), 'fade', T0 + 1500)]);
     slide.cues.push({ at: T0, haptic: 'medium' });
     slide.cues.push({ at: T0 + 1150, haptic: 'light' });
     return slide;
@@ -408,10 +416,10 @@
       A(kicker("This chat's personality"), 'up', 100),
       h('div', 'persona__wrap', [
         A(h('div', 'persona__typing', typing()), 'typing', 350, 1.9),
-        A(h('span', 'persona__emoji', PERSONA_EMOJI[p.id] || '💬'), 'pop', T0),
+        A(h('span', 'persona__emoji', F.personaEmoji(p.id)), 'pop', T0),
         t.the ? A(h('p', 'persona__the', 'The'), 'up', T0 + 100) : null,
         title,
-        p.blurb ? A(bubble('white', 'left', p.blurb, 'persona__blurb'), 'pop-l', after + 350) : null
+        p.blurb ? A(auto(bubble('white', 'left', p.blurb, 'persona__blurb')), 'pop-l', after + 350) : null
       ])
     ]);
     slide.cues.push({ at: T0 + 180, haptic: 'medium' });
@@ -435,7 +443,6 @@
     STARS.forEach(function (st) {
       bg.appendChild(css(G.icon('star', 'late__star'), { '--x': st[0], '--y': st[1], '--sz': st[2], '--tw': st[3] }));
     });
-    bg.appendChild(G.icon('moon', 'late__moon'));
 
     var value = h('span', '', F.int(n));
     var num = A(h('div', 'late__num num fit', value), 'up', 250, 0.9);
@@ -454,7 +461,7 @@
       if (l.top && l.top.name) {
         kids.push(A(bubble('yellow', 'right', [
           avatar(l.top.name),
-          h('span', '', [b(l.top.name), ' kept the lights on', l.top.messages > 0 ? h('em', '', F.int(l.top.messages) + ' late-night ' + F.plural(l.top.messages, 'message')) : null])
+          h('span', '', [nm('b', '', l.top.name), ' kept the lights on', l.top.messages > 0 ? h('em', '', F.int(l.top.messages) + ' late-night ' + F.plural(l.top.messages, 'message')) : null])
         ], 'late__top'), 'pop-r', 2700));
       }
       // The rest of the night shift, from the per-sender counts.
@@ -463,13 +470,16 @@
         .sort(function (a, z) { return z.late_night - a.late_night; }).slice(0, 2);
       if (also.length) {
         kids.push(A(h('div', 'late__also', [h('span', '', 'Also up')].concat(also.map(function (p) {
-          return h('b', '', [p.name, h('i', '', F.int(p.late_night))]);
+          return h('b', '', [nm('span', '', p.name), keep(h('i', '', F.int(p.late_night)))]);
         }))), 'up', 3200));
       }
     } else {
       kids.push(A(h('p', 'late__cap', 'messages after midnight. A suspiciously well-rested chat.'), 'up', 500));
     }
-    add(slide.body, kids);
+    // The moon is part of the column (not painted behind it), so a long number can never
+    // run into it. The two spacers keep the text centred on the slide exactly as if the
+    // moon were not there; when room is tight the lower one gives way first.
+    add(slide.body, [G.icon('moon', 'late__moon'), h('div', 'late__space late__space--a')].concat(kids, [h('div', 'late__space late__space--b')]));
     return slide;
   }
 
@@ -565,7 +575,7 @@
     var rowsStart = 500;
     var firstAt = rowsStart + rows.length * 140 + 300;
 
-    var name = h('span', 'fit rank__name', h('span', '', top.name));
+    var name = auto(h('span', 'fit rank__name', h('span', '', top.name)));
     fitLine(slide, name, { max: 58, min: 22, stretches: [112, 96, 80, 64] });
     var first = A(h('li', 'rank__first bubble bubble--white bubble--left', [
       A(G.icon('crown', 'rank__crown'), 'drop', firstAt + 380, 0.55),
@@ -580,8 +590,8 @@
       fill.style.width = Math.max(3, Math.min(100, (p.messages / top.messages) * 100)).toFixed(2) + '%';
       ol.appendChild(A(h('li', 'rank__row', [
         h('span', 'rank__pos', String(i + 2)),
-        h('span', 'rank__who', p.name),
-        h('span', 'rank__pct', F.pct(p.share, 1)),
+        nm('span', 'rank__who', p.name),
+        keep(h('span', 'rank__pct', F.pct(p.share, 1))),
         h('div', 'rank__track', fill)
       ]), 'up', at));
     });
@@ -591,7 +601,9 @@
       A(h('h2', 'headline', list.length === 2 ? 'It takes two.' : 'Who carried the chat'), 'up', 220),
       gap('s'),
       ol,
-      more.length ? A(h('p', 'senders__more', '+' + more.length + ' more: ' + more.map(function (p) { return p.name; }).join(', ')), 'fade', firstAt + 700) : null
+      more.length ? A(h('p', 'senders__more', [keep(h('span', '', '+' + more.length + ' more: '))].concat(more.map(function (p, i) {
+        return [i ? ', ' : null, h('bdi', '', p.name)];
+      }))), 'fade', firstAt + 700) : null
     ]);
     slide.cues.push({ at: firstAt + 380, haptic: 'medium' });
     return slide;
@@ -666,7 +678,7 @@
 
     if (m.text) {
       // The quote, with its tapbacks landing on the corner of the bubble one by one.
-      hero = A(bubble('blue', 'left', h('span', 'moty__text', m.text), 'moty__bubble'), 'pop-l', 800);
+      hero = A(bubble('blue', 'left', auto(h('span', 'moty__text', m.text)), 'moty__bubble'), 'pop-l', 800);
       css(hero, { '--fs': fs, '--clamp': clamp });
       var badges = badgeList(m.kinds, 6);
       if (badges.length) {
@@ -687,18 +699,20 @@
     if (landed) slide.cues.push({ at: landAt, haptic: 'light' });
     var doneAt = landAt + landed * landStep;
 
-    var from = h('p', 'moty__from', [avatar(m.sender, true), b(m.sender), m.date ? h('span', '', '·  ' + F.date(m.date)) : null]);
+    var from = h('p', 'moty__from', [avatar(m.sender, true), nm('b', '', m.sender), m.date ? keep(h('span', '', '·  ' + F.date(m.date))) : null]);
     var receipt = m.reactions > 0
       ? h('p', 'moty__receipt', [b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the words stayed in the chat'])
       : null;
 
     var runners = s.most_reacted.slice(1, 3).filter(function (r) { return r.reactions > 0 || r.text; });
     var runnerNodes = runners.map(function (r, i) {
-      var inner = r.text ? h('span', '', r.text) : (Object.keys(r.kinds).length ? tally(r.kinds) : h('span', '', F.int(r.reactions) + ' ' + F.plural(r.reactions, 'tapback')));
-      var meta = [b(r.sender)];
-      if (r.date) meta.push('  ·  ' + F.date(r.date, { short: true }));
-      if (r.reactions > 0) meta.push('  ·  ' + F.int(r.reactions) + ' ' + F.plural(r.reactions, 'tapback'));
-      return A(h('div', 'moty__runner', [bubble('grey', 'left', inner), h('p', '', meta)]), 'up', doneAt + 700 + i * 180);
+      var inner = r.text ? auto(h('span', '', r.text)) : (Object.keys(r.kinds).length ? tally(r.kinds) : h('span', '', F.int(r.reactions) + ' ' + F.plural(r.reactions, 'tapback')));
+      // The name gives way (ellipsis); the date and the tapback count always stay.
+      var facts = [];
+      if (r.date) facts.push(F.date(r.date, { short: true }));
+      if (r.reactions > 0) facts.push(F.int(r.reactions) + ' ' + F.plural(r.reactions, 'tapback'));
+      var caption = h('p', '', [nm('b', '', r.sender), facts.length ? keep(h('span', '', ' · ' + facts.join(' · '))) : null]);
+      return A(h('div', 'moty__runner', [bubble('grey', 'left', inner), caption]), 'up', doneAt + 700 + i * 180);
     });
 
     add(slide.body, [
@@ -731,7 +745,7 @@
 
     var value = h('span', '', F.int(totalTaps));
     var num = A(h('div', 'taps__num num fit', value), 'up', 250, 0.9);
-    var top = h('div', 'taps__top', [num, A(h('p', 'taps__cap', [F.plural(totalTaps, 'tapback') + '.', h('br'), kinds.length ? TAP_HEADLINES[kinds[0].kind] : '']), 'up', 500)]);
+    var top = h('div', 'taps__top', [num, A(h('p', 'taps__cap', [F.plural(totalTaps, 'tapback') + '.', h('br'), kinds.length ? F.pick(TAP_HEADLINES, kinds[0].kind, '') : '']), 'up', 500)]);
     fitLine(slide, num, { max: 96, min: 36, stretches: [100, 84, 70, 62], text: F.int(totalTaps), avail: function () { return top.clientWidth * 0.6; } });
     slide.counts.push({ el: value, to: totalTaps, at: 300, dur: 1300 });
 
@@ -752,8 +766,8 @@
     }
 
     var people = [];
-    if (r.top_giver) people.push(A(bubble('white', 'left', [h('small', '', 'Most generous'), b(r.top_giver.name), r.top_giver.count > 0 ? ' gave ' + F.int(r.top_giver.count) : '']), 'pop-l', 2300));
-    if (r.top_receiver) people.push(A(bubble('ink', 'right', [h('small', '', 'Most adored'), b(r.top_receiver.name), r.top_receiver.count > 0 ? ' got ' + F.int(r.top_receiver.count) : '']), 'pop-r', 2750));
+    if (r.top_giver) people.push(A(bubble('white', 'left', [h('small', '', 'Most generous'), nm('b', '', r.top_giver.name), r.top_giver.count > 0 ? ' gave ' + F.int(r.top_giver.count) : '']), 'pop-l', 2300));
+    if (r.top_receiver) people.push(A(bubble('ink', 'right', [h('small', '', 'Most adored'), nm('b', '', r.top_receiver.name), r.top_receiver.count > 0 ? ' got ' + F.int(r.top_receiver.count) : '']), 'pop-r', 2750));
 
     add(slide.body, [
       A(kicker('Tapbacks'), 'up', 100),
@@ -777,15 +791,15 @@
     var big = list.length <= 3;
     var grid = h('ul', 'awards__grid awards__grid--' + list.length);
     list.forEach(function (a, i) {
-      var winner = h('p', 'award__winner fit', h('span', '', a.winner));
+      var winner = auto(h('p', 'award__winner fit', h('span', '', a.winner)));
       fitLine(slide, winner, { max: big ? 34 : 27, min: 12, stretches: [104, 88, 74, 62] });
-      var title = h('p', 'award__title fit', h('span', '', a.title));
+      var title = auto(h('p', 'award__title fit', h('span', '', a.title)));
       fitLine(slide, title, { max: big ? 12 : 10.5, min: 7, stretches: [112, 100, 86, 72, 62] });
       grid.appendChild(A(h('li', 'award', [
         h('span', 'award__emoji', a.emoji || '🏆'),
         title,
         winner,
-        a.detail ? h('p', 'award__detail', a.detail) : null
+        a.detail ? auto(h('p', 'award__detail', a.detail)) : null
       ]), 'pop', 550 + i * 230));
     });
 

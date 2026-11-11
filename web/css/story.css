@@ -164,6 +164,8 @@
 }
 
 .head__name {
+  unicode-bidi: isolate;
+  text-align: left;
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
@@ -204,6 +206,39 @@
 .head__pause .glyph--play { display: none; }
 .stage.is-user-paused .head__pause .glyph--play { display: inline-block; }
 .stage.is-user-paused .head__pause .glyph--pause { display: none; }
+
+/* Previous / Next for keyboard and screen-reader users. Out of sight until focused, then
+   a real, visible button at the foot of the stage (never an invisible focus stop). */
+.story__skip {
+  position: absolute;
+  bottom: calc(var(--safe-b) + var(--u) * 14);
+  z-index: 25;
+  padding: calc(var(--u) * 11) calc(var(--u) * 16);
+  border-radius: 99px;
+  background: #fff;
+  color: #0b0b0f;
+  font: 800 calc(var(--u) * 14) / 1 var(--font-display);
+  box-shadow: 0 calc(var(--u) * 8) calc(var(--u) * 24) rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.story__skip--prev { left: calc(var(--u) * 14); }
+.story__skip--next { right: calc(var(--u) * 14); }
+
+.story__skip:not(:focus):not(:focus-visible) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  box-shadow: none;
+}
+
+.story__skip:focus-visible { outline: calc(var(--u) * 3) solid #0a84ff; outline-offset: calc(var(--u) * 2); }
+
+/* "Reduce motion": the viewer drives, so there is nothing to pause. */
+.story.is-calm .head__pause { display: none; }
 
 /* Arrows only exist next to a framed (desktop) stage. */
 .story__arrow {
@@ -394,6 +429,18 @@
   word-break: break-word;
   overflow-wrap: anywhere;
 }
+
+/* A name from the recap. Its direction is its own (dir="auto", isolated), so a
+   right-to-left name is cut at its logical end; the layout's left edge does not move. */
+.nm,
+.slide [dir="auto"] {
+  unicode-bidi: isolate;
+  text-align: left;
+}
+
+/* A quote reads the way it was written. */
+.moty__text[dir="auto"],
+.moty__runner .bubble > span[dir="auto"] { text-align: start; }
 
 .fit {
   display: block;
@@ -919,15 +966,24 @@
 
 .slide--late { --bg: linear-gradient(180deg, #05060f 0%, #0a0f2e 60%, #141a4d 100%); }
 
+/* The moon sits in the column, top right. The small kicker may sit beside its lower
+   edge (it is short and the moon is on the other side); the number always starts below it. */
 .late__moon {
-  position: absolute;
-  top: calc(var(--safe-t) + var(--u) * 74);
-  right: calc(var(--u) * 22);
+  flex: none;
+  align-self: flex-end;
+  margin: calc(var(--u) * 8) calc(var(--u) * -4) calc(var(--u) * -25) 0;
   font-size: calc(var(--u) * 92);
   color: var(--yellow);
   filter: drop-shadow(0 0 calc(var(--u) * 26) rgba(255, 214, 10, 0.45));
   rotate: -18deg;
 }
+
+/* Spacers: (a) above the text grows from nothing; (b) below starts at the height the moon
+   takes up in the column (8 + 92 - 25). With room to spare the text ends up centred on the
+   slide, exactly as if the moon were painted behind it; without it, (b) shrinks first. */
+.late__space { min-height: 0; }
+.late__space--a { flex: 1 1 0; }
+.late__space--b { flex: 1 1 calc(var(--u) * 75); }
 
 .late__star {
   position: absolute;
@@ -945,7 +1001,7 @@
   to { opacity: 0.95; transform: scale(1); }
 }
 
-.late { justify-content: center; }
+.late { justify-content: flex-start; }
 
 .late__num {
   margin-top: calc(var(--u) * 16);
@@ -998,18 +1054,20 @@
 
 .late__top .avatar { --av: #0b0b0f; }
 .late__top > span:last-child { min-width: 0; }
-.late__top b { font-weight: 800; }
+.late__top b { font-weight: 800; display: inline-block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; vertical-align: bottom; }
 .late__top em { display: block; font-style: normal; font-size: calc(var(--u) * 13.5); opacity: 0.72; margin-top: calc(var(--u) * 1); }
 
 .late__also {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
   align-items: center;
   gap: calc(var(--u) * 7);
   margin-top: calc(var(--u) * 22);
 }
 
 .late__also > span {
+  flex: none;
   font: 800 calc(var(--u) * 11) / 1 var(--font-display);
   font-stretch: 112%;
   letter-spacing: 0.1em;
@@ -1019,10 +1077,10 @@
 }
 
 .late__also > b {
-  max-width: 100%;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
+  display: inline-flex;
+  align-items: baseline;
+  flex: 0 1 auto;
+  min-width: 0;
   padding: calc(var(--u) * 7) calc(var(--u) * 12);
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.1);
@@ -1030,7 +1088,8 @@
   color: #fff;
 }
 
-.late__also > b > i { font-style: normal; font-weight: 500; color: rgba(255, 255, 255, 0.62); margin-left: calc(var(--u) * 5); }
+.late__also > b > span { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.late__also > b > i { flex: none; font-style: normal; font-weight: 500; color: rgba(255, 255, 255, 0.62); margin-left: calc(var(--u) * 5); white-space: nowrap; }
 
 /* ── 6. week ───────────────────────────────────────────────────────────────── */
 
@@ -1160,6 +1219,8 @@
   border-radius: 99px;
   background: #fff;
 }
+
+.senders__more > span { white-space: pre; }
 
 .senders__more {
   margin-top: calc(var(--u) * 18);
@@ -1296,15 +1357,16 @@
 .moty__runner .bubble > .moty__tally { display: flex; overflow: visible; }
 
 .moty__runner p {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
   margin: calc(var(--u) * 5) 0 0 calc(var(--u) * 10);
   font: 500 calc(var(--u) * 12) / 1.2 var(--font-text);
   color: #8e8e93;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 
-.moty__runner p b { color: #3a3a3c; font-weight: 700; }
+.moty__runner p b { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: #3a3a3c; font-weight: 700; }
+.moty__runner p span { flex: none; white-space: pre; }
 
 /* ── 10. tapbacks ──────────────────────────────────────────────────────────── */
 
