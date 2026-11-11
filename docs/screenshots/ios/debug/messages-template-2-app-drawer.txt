@@ -1,0 +1,132 @@
+Attributes: Application, 0x114ff9a40, pid: 29227, label: 'Messages'
+Element subtree:
+ →Application, 0x114ff9a40, pid: 29227, label: 'Messages'
+    Window (Main), 0x114ff8dc0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114ff8f00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114ff9040, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114ff9180, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114ff92c0, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114ff9400, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x114ff9540, {{0.0, 0.0}, {402.0, 874.0}}
+                Other, 0x114ff9680, {{0.0, 0.0}, {402.0, 874.0}}
+                  NavigationBar, 0x114ff97c0, {{0.0, 62.0}, {402.0, 95.3}}, identifier: 'Messages'
+                    Button, 0x114ff8c80, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Messages'
+                    Button, 0x114ff9b80, {{171.0, 62.0}, {60.0, 60.0}}, label: 'Contact photo'
+                      Image, 0x114ff9cc0, {{171.0, 62.0}, {60.0, 60.0}}
+                    Button, 0x114ff9e00, {{104.3, 117.0}, {193.3, 32.3}}, identifier: 'ConversationTitle', label: '+1 (555) 564-8583'
+                  Other, 0x114ff9f40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114ffa080, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114ffa1c0, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x114ffa300, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x114ffa440, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x114ffa580, {{0.0, 0.0}, {402.0, 874.0}}
+                              Other, 0x114ffa6c0, {{0.0, 0.0}, {402.0, 874.0}}
+                                Other, 0x114ffa800, {{0.0, 805.0}, {402.0, 69.0}}, identifier: 'MessageEntryView'
+                                  Other, 0x114ffa940, {{0.0, 805.0}, {402.0, 69.0}}
+                                    Button, 0x114ffaa80, {{28.0, 806.0}, {40.0, 40.0}}, label: 'add'
+                                  Other, 0x114ffabc0, {{0.0, 805.0}, {402.0, 69.0}}
+                                    Other, 0x114ffad00, {{0.0, 805.0}, {402.0, 69.0}}
+                                      Other, 0x114ffae40, {{0.0, 805.0}, {402.0, 69.0}}
+                                        Other, 0x114ffaf80, {{0.0, 805.0}, {402.0, 69.0}}
+                                          Other, 0x114ffb0c0, {{0.0, 805.0}, {402.0, 69.0}}
+                                            Other, 0x114ffb200, {{0.0, 805.0}, {402.0, 69.0}}
+                                        Other, 0x114ffb340, {{0.0, 805.0}, {402.0, 69.0}}
+                                          Other, 0x114ffb480, {{0.0, 805.0}, {402.0, 69.0}}
+                                  Other, 0x114ffb5c0, {{80.0, 805.7}, {294.0, 40.3}}
+                                    ScrollView, 0x114ffb700, {{80.0, 805.7}, {294.0, 40.3}}
+                                      TextField, 0x114ffb840, {{91.0, 805.7}, {238.7, 40.3}}, identifier: 'messageBodyField', label: 'Message', placeholderValue: 'iMessage'
+                                        Other, 0x114ffb980, {{296.7, 805.7}, {30.0, 40.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                          Other, 0x114ffbac0, {{323.7, 807.0}, {3.0, 36.0}}
+                                        Other, 0x114ffbc00, {{91.0, 822.8}, {238.7, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                          Other, 0x114ffbd40, {{94.0, 840.0}, {232.7, 3.0}}
+                                      Other, 0x114ffbe80, {{80.0, 799.8}, {273.8, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                        Other, 0x107c44dc0, {{83.0, 817.0}, {283.0, 3.0}}
+                                      Other, 0x115c68000, {{336.0, 822.7}, {30.0, 0.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                        Other, 0x115c68140, {{363.0, 784.0}, {3.0, 36.0}}
+                                      Other, 0x107f58b40, {{336.0, 822.7}, {30.0, 0.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                        Other, 0x107f58000, {{363.0, 784.0}, {3.0, 36.0}}
+                                      Other, 0x107f5b340, {{80.0, 799.8}, {273.8, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                        Other, 0x107f58140, {{83.0, 817.0}, {283.0, 3.0}}
+                                    Button, 0x107f583c0, {{342.0, 815.0}, {22.0, 22.0}}
+                                      Other, 0x107f58280, {{342.0, 815.0}, {22.0, 22.0}}
+                                        Other, 0x107f58640, {{342.0, 815.0}, {22.0, 22.0}}
+                                          Button, 0x107f58500, {{342.0, 815.0}, {22.0, 22.0}}, label: 'Dictate'
+                              CollectionView, 0x107f5b480, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'TranscriptCollectionView', label: 'Messages'
+                                Other, 0x107f5b5c0, {{0.0, -0.0}, {402.0, 874.0}}
+                                Other, 0x107f5b840, {{0.0, -0.0}, {402.0, 874.0}}
+                                Other, 0x107f58c80, {{369.0, 157.3}, {30.0, 647.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                  Other, 0x107f5b700, {{396.0, 795.0}, {3.0, 7.0}}
+                                Other, 0x107f5b980, {{369.0, 157.3}, {30.0, 647.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                  Other, 0x107f5be80, {{396.0, 795.0}, {3.0, 7.0}}
+                  Other, 0x107f5bac0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x107f5bc00, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x107f5bd40, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x107ef4280, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114ffee40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114fff700, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'PopoverDismissRegion', label: 'dismiss popup'
+        Popover, 0x114ffc280, {{10.0, 373.0}, {320.0, 456.6}}
+          Other, 0x114ffd400, {{10.0, 373.0}, {320.0, 456.6}}
+            Other, 0x114ffea80, {{10.0, 373.0}, {320.0, 456.6}}
+              Other, 0x114ffebc0, {{10.0, 373.0}, {320.0, 456.6}}
+                Other, 0x114fffe80, {{10.0, 373.0}, {320.0, 456.3}}
+                  CollectionView, 0x114ffd040, {{10.0, 373.0}, {320.0, 456.3}}
+                    Cell, 0x114ffe080, {{10.0, 346.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.PassbookUIService.PeerPaymentMessagesExtension', label: 'Apple Cash'
+                      Other, 0x114ffc640, {{10.0, 346.3}, {320.0, 66.0}}
+                        Other, 0x114ffd680, {{10.0, 346.3}, {320.0, 66.0}}
+                          Image, 0x114ffe440, {{37.0, 352.3}, {54.0, 54.0}}, identifier: 'send-menu-pay-glass'
+                        Other, 0x114ffe940, {{10.0, 346.3}, {320.0, 66.0}}
+                          StaticText, 0x114ffdb80, {{109.0, 365.0}, {119.7, 28.7}}, label: 'Apple Cash'
+                    Cell, 0x114ffc000, {{10.0, 412.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.siri.AudioMessagesApp.AudioMessagesExtension', label: 'Audio'
+                      Other, 0x114ffcf00, {{10.0, 412.3}, {320.0, 66.0}}
+                        Other, 0x107ef97c0, {{10.0, 412.3}, {320.0, 66.0}}
+                          Image, 0x107ef9540, {{37.0, 418.3}, {54.0, 54.0}}, identifier: 'send-menu-audio-glass'
+                        Other, 0x107efa440, {{10.0, 412.3}, {320.0, 66.0}}
+                          StaticText, 0x107efa300, {{109.0, 431.0}, {60.0, 28.7}}, label: 'Audio'
+                    Cell, 0x107ef9900, {{10.0, 478.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.siri.parsec.HashtagImagesApp.HashtagImagesExtension', label: '#images'
+                      Other, 0x107ef9a40, {{10.0, 478.3}, {320.0, 66.0}}
+                        Other, 0x107ef8a00, {{10.0, 478.3}, {320.0, 66.0}}
+                          Image, 0x107efaa80, {{37.0, 484.3}, {54.0, 54.0}}, identifier: 'send-menu-hashtag-images-glass'
+                        Other, 0x107ef8780, {{10.0, 478.3}, {320.0, 66.0}}
+                          StaticText, 0x107ef8b40, {{109.0, 497.0}, {89.7, 28.7}}, label: '#images'
+                    Cell, 0x107ef8500, {{10.0, 544.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.SafetyMonitorApp.SafetyMonitorMessages', label: 'Check In'
+                      Other, 0x107efabc0, {{10.0, 544.3}, {320.0, 66.0}}
+                        Other, 0x107ef9400, {{10.0, 544.3}, {320.0, 66.0}}
+                          Image, 0x107ef88c0, {{37.0, 550.3}, {54.0, 54.0}}, identifier: 'send-menu-check-in-glass'
+                        Other, 0x107ef9b80, {{10.0, 544.3}, {320.0, 66.0}}
+                          StaticText, 0x107ef9f40, {{109.0, 563.0}, {91.0, 28.7}}, label: 'Check In'
+                    Cell, 0x107ef9e00, {{10.0, 610.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.DigitalTouchBalloonProvider', label: 'Digital Touch'
+                      Other, 0x107efa080, {{10.0, 610.3}, {320.0, 66.0}}
+                        Other, 0x107ef9680, {{10.0, 610.3}, {320.0, 66.0}}
+                          Image, 0x107efa580, {{37.0, 616.3}, {54.0, 54.0}}, identifier: 'send-menu-digital-touch-glass'
+                        Other, 0x107ef9cc0, {{10.0, 610.3}, {320.0, 66.0}}
+                          StaticText, 0x107efa6c0, {{109.0, 629.0}, {133.7, 28.7}}, label: 'Digital Touch'
+                    Cell, 0x107ef8c80, {{10.0, 676.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:0000000000:com.apple.Jellyfish.Animoji', label: 'Memoji'
+                      Other, 0x107ef8f00, {{10.0, 676.3}, {320.0, 66.0}}
+                        Other, 0x107ef9040, {{10.0, 676.3}, {320.0, 66.0}}
+                          Image, 0x107ef9180, {{37.0, 682.3}, {54.0, 54.0}}, identifier: 'send-menu-memoji-glass'
+                        Other, 0x107efa940, {{10.0, 676.3}, {320.0, 66.0}}
+                          StaticText, 0x107efa800, {{109.0, 695.0}, {76.0, 28.7}}, label: 'Memoji'
+                    Cell, 0x107ef8280, {{10.0, 742.3}, {320.0, 66.0}}, identifier: 'com.apple.messages.MSMessageExtensionBalloonPlugin:FAKETEAMID:io.github.averyhsu.wrapped.MessagesExtension', label: 'Threadback'
+                      Other, 0x107ef8640, {{10.0, 742.3}, {320.0, 66.0}}
+                        Other, 0x115cd4a00, {{10.0, 742.3}, {320.0, 66.0}}
+                          Image, 0x115cd6300, {{46.0, 755.3}, {36.0, 40.0}}
+                        Other, 0x115cd70c0, {{10.0, 742.3}, {320.0, 66.0}}
+                          StaticText, 0x115cd7200, {{109.0, 761.0}, {123.7, 28.7}}, label: 'Threadback'
+          Other, 0x115cd7340, {{10.0, 373.0}, {320.0, 456.6}}
+            Other, 0x115cd7840, {{10.0, 373.0}, {320.0, 456.6}}
+              Other, 0x115cd7700, {{10.0, 373.0}, {320.0, 456.6}}
+                Other, 0x115cd6a80, {{10.0, 373.0}, {320.0, 456.3}}
+                  Other, 0x115cd4140, {{10.0, 373.0}, {320.0, 456.3}}
+                    Other, 0x115cd4280, {{10.0, 373.0}, {320.0, 456.3}}
+                Other, 0x115cd43c0, {{10.0, 373.0}, {320.0, 456.3}}
+                  Other, 0x115cd4500, {{10.0, 373.0}, {320.0, 456.3}}
+    Window, 0x115cd48c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x115cd4780, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x115cd4640, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114ff9a40, pid: 29227, label: 'Messages'
+Query chain:
+ →Find: Application 'com.apple.MobileSMS'
+  Output: {
+    Application, 0x115cd6e40, pid: 29227, label: 'Messages'
+  }
