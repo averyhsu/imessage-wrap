@@ -102,11 +102,15 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
 - **Tapback rows** have `associated_message_type` in 2000..2007 (added) or 3000..3007
   (removed). Kinds: 2000 love, 2001 like, 2002 dislike, 2003 laugh, 2004 emphasize,
   2005 question, 2006 emoji, 2007 sticker (reported as `emoji`). Removal = kind + 1000.
-  The target is `associated_message_guid` with everything up to and including the last `/`
-  or, if there is no `/`, the first `:` stripped (`p:0/GUID`, `bp:GUID` → `GUID`).
-  Process tapback rows in chronological order (ties by ROWID): an *add* sets
-  `state[(target, reactor)] = kind`, a *remove* deletes it. What is left at the end of the
-  period is "standing". Tapback rows are never counted as messages.
+  The message a tapback belongs to is `associated_message_guid` with everything up to and
+  including the last `/` or, if there is no `/`, the first `:` stripped (`p:0/GUID`,
+  `bp:GUID` → `GUID`). The state, however, is kept **per message part**: its key is the
+  whole unstripped value, so a tapback on the photo (`p:0/GUID`) and one on the caption
+  (`p:1/GUID`) of the same message are two tapbacks. Process tapback rows in chronological
+  order (ties by ROWID): an *add* sets `state[(part, reactor)] = kind`, a *remove* deletes
+  it. What is left at the end of the period is "standing"; a message's count is the sum
+  over its parts. Only tapbacks on countable messages inside the period count. Tapback rows
+  are never counted as messages.
 - **Countable message**: `item_type = 0` (or NULL), `associated_message_type` NULL or
   < 1000, and it has text or an attachment (`cache_has_attachments = 1`). Rows with no text
   and no attachment (unsent/empty) are skipped.
@@ -119,16 +123,40 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   case-insensitively), else the **masked** handle (below). Senders that resolve to the same
   display name are merged. `chat.members` = number of distinct senders seen plus members in
   `chat_handle_join` that never spoke (owner included).
+- **Clean names**: every name that reaches the stats (chat name, contact name, handle,
+  imported sender) is cleaned first: `\t`, `\n`, `\r` become a space; the characters
+  U+0000–001F, U+007F–009F, U+202A–202E, U+2066–2069, U+FFFC and U+FFFD are removed; runs of
+  spaces collapse to one; the result is trimmed. (Zero-width joiners stay: emoji need them.)
+  A name that is empty afterwards is `Unknown` (`Unnamed group` for a chat).
 - **Masking**: a recap is made to be shared, so a raw phone number or e-mail address never
-  goes into the stats, the link, the card or a chat's fallback name. For a trimmed handle
-  with no contact name:
-  - a phone number (only digits, spaces and `+ - ( ) . /`, with at least 7 digits) is shown
-    as `…` plus its last four digits (`+1 (555) 010-0001` → `…0001`);
-  - an e-mail address (no whitespace, something before the `@`, a dot after it) is shown as
-    the part before the `@`, cut to 16 characters plus `…` when longer;
-  - anything else (a name from an imported export, a short code) is kept as it is.
-  Two unnamed people whose numbers end in the same four digits are merged; the maker page
-  lets the user rename people, which avoids that.
+  goes into the stats, the link, the card, a log or a chat's name. The rule applies to every
+  sender label that did not come from the contact table, and to a chat's own display name:
+  1. **E-mail**: if the label contains an address, meaning a run of characters around an
+     `@` with at least one character on each side, where a run ends at whitespace or any of
+     `< > ( ) [ ] " ' , ; :`, the label becomes the part of that run before the `@`, cut to
+     16 characters plus `…` when longer (`Jane Doe <jane.doe@example.com>` → `jane.doe`,
+     `mailto:jane@localhost` → `jane`). `Maya @ work` has no such run and is kept.
+  2. **Phone**: otherwise, if the label contains 7 or more decimal digits in total (any
+     Unicode decimal digit, so full-width digits count), whatever stands between or around
+     them, the label becomes `…` plus its last four digits as written
+     (`tel:+1 555-010-0123 (mobile)` → `…0123`, `Maya +15550100123` → `…0123`).
+  3. Anything else (a name from an imported export, a short code) is kept.
+  A chat display name gets the same treatment, so a group somebody named after a phone
+  number does not publish it. Two unnamed people whose numbers end in the same four digits
+  are merged; the maker page lets the user rename people, which avoids that.
+- **Short names**: contact names are the owner's private labels ("Dave plumber"), so what
+  users see by default is the short form. `shortNames(stats)` / `short_names(stats)` returns
+  a copy of a finished stats object in which every person's name (in `senders`,
+  `late_night.top`, `most_reacted[].sender`, `reactions.top_giver`, `reactions.top_receiver`
+  and `awards[].winner`) is replaced consistently:
+  - the owner's own name and masked labels (starting with `…`) are unchanged;
+  - otherwise the short form is the first whitespace-separated word;
+  - if two different people in the recap would get the same short form, each of them gets
+    the first word, a space, the first character of their last word and a `.` (`Sam R.`);
+    if that still collides, those people keep their full names.
+  The command-line tool (`stats`, `link`), the Mac helper and the maker page apply it unless
+  asked not to (`--full-names`; an editable list on the maker page). `computeStats` itself
+  returns full names, so merging by display name and the conformance suite are unaffected.
 - `senders` keeps the top 12; the rest are dropped from the list (totals still include them).
 - Rounding: shares are rounded to 4 decimals, half up: `Math.round(x * 10000) / 10000` in
   JS and `math.floor(x * 10000 + 0.5) / 10000` in Python, so both engines agree.
@@ -208,8 +236,10 @@ payload = base64url( raw-DEFLATE( UTF-8( JSON.stringify(stats) ) ) )   // no pad
   command-line tool and the Mac helper, a switch on the maker page (off by default, shown
   next to the exact text it would add). Without it every `most_reacted[].text` is replaced
   with `""` before encoding, and the story shows who wrote the message and its tapbacks
-  without the bubble text. The low-level builders (`build_link`, `fitLink`) take a `quotes`
-  argument; every user-facing entry point passes `false` unless asked.
+  without the bubble text. Every link builder in every engine (`build_link`, `fit_link`,
+  `fitLink`, `buildLink`) takes a `quotes` argument that **defaults to off**; nothing puts
+  message text into a link by default. A page that previews a recap must not be able to
+  emit a link with more in it than the link it offers to share.
 
 ## 6. Embed bridge (web story inside the iOS app / iMessage extension)
 
