@@ -79,7 +79,18 @@
     return h('p', 'kicker', [glyph ? G.icon(glyph) : null, h('span', '', text)]);
   }
 
-  function avatar(name) { return h('span', 'avatar', F.initial(name)); }
+  var AVATAR_COLORS = ['#ff2d55', '#ff9f0a', '#30d158', '#00c7be', '#5e5ce6', '#bf5af2'];
+
+  /** A contact-style circle with the initial; `tint` picks a stable colour from the name. */
+  function avatar(name, tint) {
+    var node = h('span', 'avatar', F.initial(name));
+    if (tint) {
+      var sum = 0;
+      Array.from(String(name)).forEach(function (ch) { sum += ch.codePointAt(0); });
+      css(node, { '--av': AVATAR_COLORS[sum % AVATAR_COLORS.length] });
+    }
+    return node;
+  }
 
   function decos(slide, classes) {
     var bg = slide.el.querySelector('.slide__bg');
@@ -441,6 +452,15 @@
           h('span', '', [b(l.top.name), ' kept the lights on', l.top.messages > 0 ? h('em', '', F.int(l.top.messages) + ' late-night ' + F.plural(l.top.messages, 'message')) : null])
         ], 'late__top'), 'pop-r', 2700));
       }
+      // The rest of the night shift, from the per-sender counts.
+      var topName = l.top ? l.top.name : '';
+      var also = s.senders.filter(function (p) { return p.late_night > 0 && p.name !== topName; })
+        .sort(function (a, z) { return z.late_night - a.late_night; }).slice(0, 2);
+      if (also.length) {
+        kids.push(A(h('div', 'late__also', [h('span', '', 'Also up')].concat(also.map(function (p) {
+          return h('b', '', [p.name, h('i', '', F.int(p.late_night))]);
+        }))), 'up', 3200));
+      }
     } else {
       kids.push(A(h('p', 'late__cap', 'messages after midnight. A suspiciously well-rested chat.'), 'up', 500));
     }
@@ -610,7 +630,7 @@
     var m = s.most_reacted[0];
     if (!m || !(m.reactions > 0 || m.text)) return null;
     var slide = make('moty', { ink: 'dark', world: '#e9e9eb', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : '') });
-    decos(slide, ['moty__d1']);
+    decos(slide, ['moty__d1', 'moty__d2']);
 
     var len = Array.from(m.text).length;
     var fs = len <= 22 ? 35 : len <= 56 ? 27 : len <= 105 ? 23 : len <= 150 ? 20 : 18;
@@ -634,7 +654,7 @@
     }
     var doneAt = landAt + (m.text ? badges.length : 0) * 290;
 
-    var from = h('p', 'moty__from', [avatar(m.sender), b(m.sender), m.date ? h('span', '', '·  ' + F.date(m.date)) : null]);
+    var from = h('p', 'moty__from', [avatar(m.sender, true), b(m.sender), m.date ? h('span', '', '·  ' + F.date(m.date)) : null]);
     var receipt = m.reactions > 0
       ? h('p', 'moty__receipt', [b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the quote stayed in the chat'])
       : null;

@@ -260,7 +260,7 @@
     // Top senders + peak hour, side by side.
     var top3 = s.senders.filter(function (p) { return p.messages > 0; }).slice(0, 3);
     var hasHours = F.sum(s.by_hour) > 0;
-    var peak = s.personality ? s.personality.peak_hour : F.argmax(s.by_hour);
+    var peak = hasHours ? F.argmax(s.by_hour) : -1;
     if (top3.length || hasHours) {
       var rowH = 58;
       var sendersH = top3.length ? 104 + top3.length * rowH + 30 : 0;

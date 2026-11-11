@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Link-preview art (source for web/assets/og.png and og-video.mp4)</title>
+<!--
+  Not deployed. tests/e2e/make-assets.mjs opens this file, calls window.renderFrame(t) for
+  every frame of a 5-second loop and encodes the result. Everything is driven by one
+  function of time, so the output is deterministic and the last frame meets the first.
+  All numbers and names are invented.
+-->
+<link rel="stylesheet" href="../../../web/css/base.css">
+<style>
+  html, body { margin: 0; width: 1200px; height: 630px; overflow: hidden; background: #0a7aff; }
+  .frame { position: relative; width: 1200px; height: 630px; overflow: hidden; font-family: var(--font-display); color: #fff; }
+  .layer { position: absolute; inset: 0; overflow: hidden; }
+  .home { background: linear-gradient(160deg, #2a9bff 0%, #0a7aff 42%, #0045de 100%); }
+
+  /* Speech bubble with the project's own tail. */
+  .bub { position: absolute; isolation: isolate; border-radius: var(--r); background: var(--c); }
+  .bub::after {
+    content: ""; position: absolute; z-index: -1; bottom: 0; width: calc(var(--r) * 1.16667); height: calc(var(--r) * 1.22222);
+    background: var(--c); -webkit-mask: var(--tail) no-repeat 0 0 / 100% 100%; mask: var(--tail) no-repeat 0 0 / 100% 100%;
+    right: calc(var(--r) * -0.5);
+  }
+  .bub.l::after { right: auto; left: calc(var(--r) * -0.5); transform: scaleX(-1); }
+
+  .deco1 { --r: 150px; --c: #46a6ff; width: 720px; height: 470px; right: -260px; top: -250px; rotate: 12deg; }
+  .deco2 { --r: 150px; --c: #0036c2; width: 700px; height: 460px; left: -330px; bottom: -300px; rotate: -9deg; }
+
+  .typing { --r: 84px; --c: #fff; left: 448px; top: 222px; width: 304px; height: 168px; display: flex; align-items: center; justify-content: center; gap: 26px; box-shadow: 0 30px 70px rgba(0, 30, 120, 0.35); }
+  .typing i { width: 44px; height: 44px; border-radius: 50%; background: #8e8e93; }
+
+  .chart { --r: 52px; --c: #30d158; left: 96px; top: 84px; width: 236px; height: 156px; rotate: -7deg; }
+  .chart b { position: absolute; bottom: 34px; width: 24px; border-radius: 12px; background: #fff; }
+  .lines { --r: 46px; --c: #e9e9eb; right: 110px; bottom: 82px; width: 280px; height: 132px; rotate: 6deg; }
+  .lines b { position: absolute; left: 40px; height: 18px; border-radius: 9px; background: #b9b9c2; }
+  .mini { --r: 34px; --c: #5e5ce6; left: 190px; bottom: 96px; width: 150px; height: 84px; rotate: 8deg; }
+
+  .tb { position: absolute; display: grid; place-items: center; border-radius: 50%; background: #fff; box-shadow: 0 14px 34px rgba(0, 20, 90, 0.3); }
+  .tb .glyph { width: 58%; height: 58%; }
+  .tb svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+  .headline { position: absolute; left: 96px; top: 168px; white-space: nowrap; font-weight: 900; font-stretch: 110%; font-size: 112px; line-height: 0.98; letter-spacing: -0.035em; }
+  .headline span { display: inline-block; }
+  .headline .pill { --r: 76px; --c: #fff; position: relative; display: inline-block; color: #0a6cff; padding: 10px 52px 20px; margin: 22px 0 0 4px; rotate: -3deg; }
+
+  .flash { display: flex; flex-direction: column; justify-content: center; padding: 0 96px; }
+  .flash .k { font-weight: 800; font-stretch: 112%; font-size: 30px; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.72; }
+  .f1 { background: linear-gradient(170deg, #3ee06a, #1fbf49); color: #0b0b0f; }
+  .f1 .n { font-weight: 900; font-stretch: 78%; font-size: 330px; line-height: 0.8; letter-spacing: -0.035em; margin: 22px 0 0 -8px; font-variant-numeric: tabular-nums; }
+  .f1 .u { font-weight: 900; font-stretch: 122%; font-size: 84px; letter-spacing: -0.03em; line-height: 1; margin-top: 12px; }
+  .f2 { background: linear-gradient(160deg, #a445ff, #5a16c9); }
+  .f2 .e { position: absolute; right: 110px; top: 150px; font-size: 300px; line-height: 1; font-family: "Apple Color Emoji", "Noto Color Emoji", sans-serif; }
+  .f2 .t { font-weight: 900; font-stretch: 118%; font-size: 150px; line-height: 0.86; letter-spacing: -0.03em; text-transform: uppercase; margin-top: 18px; }
+  .f3 { background: linear-gradient(165deg, #ff4f72, #e8103f); }
+  .f3 .card { --r: 84px; --c: #fff; position: relative; align-self: flex-start; margin-top: 34px; padding: 26px 70px 34px 60px; color: #0b0b0f; }
+  .f3 .name { font-weight: 900; font-stretch: 108%; font-size: 164px; line-height: 0.9; letter-spacing: -0.03em; }
+  .f3 .crown { position: absolute; right: -64px; top: -84px; width: 190px; color: #ffd60a; rotate: 14deg; filter: drop-shadow(0 8px 0 rgba(120, 0, 30, 0.3)); }
+  .f3 .crown svg { width: 100%; display: block; }
+  .f3 .pct { position: absolute; right: 92px; top: 292px; font-weight: 900; font-stretch: 76%; font-size: 142px; line-height: 1; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+
+  .play { --r: 80px; --c: #fff; left: 270px; top: 230px; width: 660px; height: 160px; display: flex; align-items: center; justify-content: center; gap: 30px; color: #0a6cff; font-weight: 900; font-stretch: 110%; font-size: 74px; letter-spacing: -0.025em; box-shadow: 0 30px 70px rgba(0, 30, 120, 0.35); white-space: nowrap; }
+  .play .tri { width: 0; height: 0; border-style: solid; border-width: 29px 0 29px 48px; border-color: transparent transparent transparent currentColor; }
+</style>
+</head>
+<body>
+<div class="frame" id="frame">
+  <div class="layer home" id="home">
+    <i class="bub deco1" id="deco1"></i>
+    <i class="bub l deco2" id="deco2"></i>
+    <div class="bub l chart" id="chart"></div>
+    <div class="bub lines" id="lines"></div>
+    <i class="bub l mini" id="mini"></i>
+    <span class="tb" id="tb1" data-kind="love" data-size="112" data-x="930" data-y="86" data-color="#ff2d55"></span>
+    <span class="tb" id="tb2" data-kind="laugh" data-size="128" data-x="790" data-y="408" data-color="#ff9f0a"></span>
+    <span class="tb" id="tb3" data-kind="emphasize" data-size="96" data-x="356" data-y="442" data-color="#ff453a"></span>
+    <span class="tb" id="tb4" data-kind="like" data-size="88" data-x="1056" data-y="290" data-color="#0a84ff"></span>
+    <div class="headline" id="headline"><span>Your</span> <span>group</span> <span>chat,</span><br><span class="bub l pill">in review</span></div>
+    <div class="bub l typing" id="typing"><i></i><i></i><i></i></div>
+    <div class="bub l play" id="play"><span class="tri"></span><span>Tap to play</span></div>
+  </div>
+  <div class="layer flash f1" id="f1"><div class="k">This year you sent</div><div class="n" id="f1n">48,213</div><div class="u">messages</div></div>
+  <div class="layer flash f2" id="f2"><div class="k">Your chat's personality</div><div class="t">The<br>Night<br>Owls</div><div class="e">🦉</div></div>
+  <div class="layer flash f3" id="f3"><div class="k">Who carried the chat</div><div class="bub l card"><span class="crown" id="crown"></span><div class="name">Maya</div></div><div class="pct" id="f3p">24.6%</div></div>
+  <div class="layer home" id="cover2"><i class="bub deco1"></i><i class="bub l deco2"></i></div>
+</div>
+
+<script src="../../../web/js/glyphs.js"></script>
+<script>
+(function () {
+  'use strict';
+  var LOOP = 5; // seconds
+  var $ = function (id) { return document.getElementById(id); };
+  var clamp = function (x) { return Math.max(0, Math.min(1, x)); };
+  var seg = function (t, a, b) { return clamp((t - a) / (b - a)); };
+  var out = function (p) { return 1 - Math.pow(1 - p, 3); };
+  var inOut = function (p) { return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; };
+  var back = function (p) { var c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2); };
+  var mix = function (a, b, p) { return a + (b - a) * p; };
+  var int = function (n) { return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+
+  function put(el, o) {
+    el.style.transform = 'translate(' + (o.x || 0).toFixed(2) + 'px,' + (o.y || 0).toFixed(2) + 'px) scale(' + (o.s == null ? 1 : o.s).toFixed(4) + ') rotate(' + (o.r || 0).toFixed(2) + 'deg)';
+    el.style.opacity = (o.o == null ? 1 : clamp(o.o)).toFixed(3);
+  }
+
+  // Static furniture.
+  [34, 62, 46, 84, 58].forEach(function (h, i) {
+    var b = document.createElement('b');
+    b.style.left = (44 + i * 32) + 'px';
+    b.style.height = h + 'px';
+    $('chart').appendChild(b);
+  });
+  [[36, 190], [64, 150], [92, 100]].forEach(function (l) {
+    var b = document.createElement('b');
+    b.style.top = l[0] + 'px';
+    b.style.width = l[1] + 'px';
+    $('lines').appendChild(b);
+  });
+  var tbs = ['tb1', 'tb2', 'tb3', 'tb4'].map(function (id) {
+    var el = $(id);
+    var size = +el.dataset.size;
+    el.style.width = el.style.height = size + 'px';
+    el.style.left = el.dataset.x + 'px';
+    el.style.top = el.dataset.y + 'px';
+    el.style.color = el.dataset.color;
+    el.appendChild(WrappedGlyphs.icon(el.dataset.kind));
+    return el;
+  });
+  $('crown').innerHTML = WrappedGlyphs.ICONS.crown;
+
+  var dots = $('typing').children;
+  var words = $('headline').querySelectorAll('span');
+  var sats = [[$('chart'), -1, -1], [$('lines'), 1, 1], [$('mini'), -1, 1]];
+
+  /** Draw the loop at time t (seconds). renderFrame(0) and renderFrame(5) are identical. */
+  window.renderFrame = function (t) {
+    t = ((t % LOOP) + LOOP) % LOOP;
+    var drift = Math.sin((t / LOOP) * Math.PI * 2);
+    var drift2 = Math.cos((t / LOOP) * Math.PI * 2);
+
+    // How much of the "home" arrangement (typing bubble + satellites) is present.
+    var leave = out(seg(t, 0.85, 1.15));
+    var back_ = out(seg(t, 4.5, 4.85));
+    var homeness = t < 2 ? 1 - leave : back_;
+
+    put($('deco1'), { x: drift * 10, y: drift2 * 8 });
+    put($('deco2'), { x: -drift * 8, y: drift * 10 });
+
+    // Typing bubble: dots bounce on a one-second cycle.
+    var pop = t < 2 ? 1 - inOut(seg(t, 0.85, 1.05)) : back(seg(t, 4.55, 4.85));
+    put($('typing'), { s: Math.max(0, pop), o: t < 2 ? 1 - seg(t, 0.92, 1.05) : seg(t, 4.55, 4.7) });
+    for (var i = 0; i < 3; i++) {
+      var phase = (((t - i * 0.14) % 1) + 1) % 1;
+      var up = phase < 0.5 ? Math.sin(phase * 2 * Math.PI) : 0;
+      dots[i].style.transform = 'translateY(' + (-14 * Math.max(0, up)).toFixed(2) + 'px)';
+      dots[i].style.opacity = (0.45 + 0.55 * Math.max(0, up)).toFixed(3);
+    }
+
+    // Satellites push out to the edges while the headline is up.
+    sats.forEach(function (s, k) {
+      put(s[0], { x: s[1] * (1 - homeness) * 260 + drift * (6 + k * 2), y: s[2] * (1 - homeness) * 200 + drift2 * (5 + k * 2), o: 0.25 + homeness * 0.75 });
+    });
+
+    // Tapbacks: present at home, gone for the headline, land one by one for "Tap to play".
+    tbs.forEach(function (el, k) {
+      var landing = back(seg(t, 4.02 + k * 0.1, 4.3 + k * 0.1));
+      var home = t < 2 ? 1 - leave : 1;
+      var scale = t < 2 ? home : (t < 3.9 ? 0 : landing);
+      put(el, { s: Math.max(0, scale), y: drift * (5 + k * 2) * (k % 2 ? 1 : -1), r: (k % 2 ? 8 : -8) + drift2 * 3, o: scale > 0.02 ? 1 : 0 });
+    });
+
+    // Headline: words slam in, then the whole thing is covered by the first flash.
+    for (var w = 0; w < words.length; w++) {
+      var at = 1.05 + w * 0.11 + (w === 3 ? 0.1 : 0);
+      var p = seg(t, at, at + 0.32);
+      var e = w === 3 ? back(p) : out(p);
+      var gone = seg(t, 4.3, 4.31);
+      words[w].style.transform = 'translateY(' + ((1 - e) * 60).toFixed(2) + 'px) scale(' + (w === 3 ? Math.max(0.01, e) : 1).toFixed(4) + ')';
+      words[w].style.opacity = (clamp(p * 3) * (t < 2.4 ? 1 : 0) * (1 - gone)).toFixed(3);
+    }
+
+    // Three stat flashes wipe up from the bottom.
+    var flashes = [[$('f1'), 2.1], [$('f2'), 2.65], [$('f3'), 3.2], [$('cover2'), 3.75]];
+    flashes.forEach(function (f, k) {
+      var start = f[1];
+      var next = k < flashes.length - 1 ? flashes[k + 1][1] + 0.25 : 3.98;
+      var inP = inOut(seg(t, start, start + 0.22));
+      f[0].style.transform = 'translateY(' + ((1 - inP) * 100).toFixed(3) + '%)';
+      f[0].style.visibility = t >= start && t < next ? 'visible' : 'hidden';
+      var punch = out(seg(t, start + 0.08, start + 0.4));
+      Array.prototype.forEach.call(f[0].children, function (child, c) {
+        if (child.tagName === 'I') return;
+        child.style.transform = 'translateY(' + ((1 - punch) * (40 + c * 26)).toFixed(2) + 'px)';
+      });
+    });
+    $('f1n').textContent = int(48213 * out(seg(t, 2.12, 2.5)));
+    $('f3p').textContent = (24.6 * out(seg(t, 3.24, 3.55))).toFixed(1) + '%';
+    var crownP = back(seg(t, 3.34, 3.6));
+    $('crown').style.transform = 'translateY(' + ((1 - crownP) * -60).toFixed(2) + 'px) scale(' + Math.max(0.01, crownP).toFixed(4) + ')';
+
+    // "Tap to play", then back to the typing bubble for the loop.
+    var playIn = back(seg(t, 3.9, 4.2));
+    var playOut = inOut(seg(t, 4.45, 4.65));
+    put($('play'), { s: Math.max(0, playIn * (1 - playOut)), o: t < 3.88 ? 0 : 1 - playOut });
+  };
+
+  /** The still used for og.png: the home arrangement at rest. */
+  window.renderStill = function () { window.renderFrame(0.28); };
+
+  window.renderFrame(0);
+})();
+</script>
+</body>
+</html>

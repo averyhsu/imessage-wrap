@@ -216,6 +216,7 @@
     S.holds[reason] = !!on;
     var p = paused();
     S.stage.classList.toggle('is-paused', p);
+    S.stage.classList.toggle('is-user-paused', !!S.holds.user);
     if (!p) S.last = now();
   }
 
