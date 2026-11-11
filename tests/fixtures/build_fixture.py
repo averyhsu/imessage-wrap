@@ -938,6 +938,7 @@ def checkpointed_copy(con, dest_db):
     con.backup(out)
     out.execute("PRAGMA journal_mode = WAL")
     out.commit()
+    out.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()   # nothing may be left in a log
     out.close()
     for suffix in ("-wal", "-shm"):
         if os.path.exists(dest_db + suffix):
