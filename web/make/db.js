@@ -27,7 +27,16 @@
  * checks the salts and the running checksums, and copies every page of every
  * committed transaction over the database image. When a database says it is in
  * WAL mode and no -wal was supplied, openDatabase() reports the warning
- * "wal_missing" instead of silently undercounting.
+ * "wal_missing" instead of silently undercounting. A merged image is checked
+ * (PRAGMA quick_check) before it is trusted; a -wal that does not fit the
+ * database is left out with the warning "wal_invalid".
+ *
+ * Errors. Everything this file rejects or throws is an Error with a `code`
+ * and a sentence for the user: "empty", "not_sqlite", "too_large", "corrupt"
+ * (SQLite could not read the file, at open or at any later query), "schema"
+ * (a table or a column of the Messages layout is missing), "contacts_schema",
+ * "no_chat", "ambiguous_chat" and "no_sqlite". Cells of an unexpected type
+ * never fail: every column is CAST in SQL to the type it should have.
  */
 (function (root, factory) {
   'use strict';
@@ -72,10 +81,11 @@
     wal_missing: 'This database was copied while Messages still had changes in its ' +
       'write-ahead log, so recent messages may be missing. Also select the file next to it ' +
       'whose name ends in "-wal" (chat.db-wal).',
-    wal_invalid: 'The -wal file does not belong to this database (or is damaged), so it was ' +
-      'ignored. Recent messages may be missing.',
+    wal_invalid: 'The -wal file does not belong to this copy of the database (or is damaged), so it ' +
+      'was ignored. Recent messages may be missing: copy chat.db and chat.db-wal again, together.',
     corrupt: 'SQLite could not read this database: ',
     schema: 'This is a SQLite database but not a Messages database (no "{table}" table).',
+    layout: 'This is not a Messages database this page can read: part of the usual layout is missing ({detail}).',
     contacts_schema: 'This file is not an address book this program knows how to read.',
     no_chat: 'No group chat matches "{query}".',
     ambiguous_chat: '{count} group chats match "{query}". Pick one from the list instead.'
@@ -170,7 +180,7 @@
    * Apply a write-ahead log to a database image, the way SQLite recovers one.
    *
    * dbBytes / walBytes are Uint8Arrays holding the two files. Returns
-   * {bytes, merged, frames, commits, pages, reason}: `bytes` is the database
+   * {bytes, merged, frames, commits, pages, reason, undo}: `bytes` is the database
    * with every committed transaction applied and its header switched to
    * rollback-journal mode (it may be dbBytes itself, modified in place, or a
    * new larger array); `merged` is false when the log held nothing usable, in
@@ -178,7 +188,10 @@
    * "page-size", "no-commit").
    */
   function mergeWal(dbBytes, walBytes) {
-    var result = { bytes: dbBytes, merged: false, frames: 0, commits: 0, pages: 0, reason: '' };
+    var result = {
+      bytes: dbBytes, merged: false, frames: 0, commits: 0, pages: 0, reason: '',
+      undo: function () { /* nothing was changed */ }
+    };
     if (!walBytes || walBytes.length < 32) { result.reason = 'empty'; return result; }
     var magic = u32(walBytes, 0);
     if (magic !== 0x377f0682 && magic !== 0x377f0683) { result.reason = 'bad-magic'; return result; }
@@ -230,12 +243,23 @@
     } else if (dbBytes.length > length) {
       out = dbBytes.subarray(0, length);
     }
+    // When the image is patched in place, keep what is overwritten so that a
+    // log that turns out not to fit this database can be taken out again.
+    var inPlace = out.buffer === dbBytes.buffer;
+    var saved = [];
+    if (inPlace) saved.push([0, dbBytes.slice(0, Math.min(100, dbBytes.length))]);
     committed.forEach(function (where, number) {
       if (number <= sizeInPages) {
-        out.set(walBytes.subarray(where, where + pageSize), (number - 1) * pageSize);
+        var target = (number - 1) * pageSize;
+        if (inPlace) saved.push([target, dbBytes.slice(target, target + pageSize)]);
+        out.set(walBytes.subarray(where, where + pageSize), target);
         result.pages += 1;
       }
     });
+    result.undo = function () {
+      for (var i = saved.length - 1; i >= 0; i--) dbBytes.set(saved[i][1], saved[i][0]);
+      saved = [];
+    };
     // The image is now a plain rollback-journal database of sizeInPages pages.
     out[18] = 1;
     out[19] = 1;
@@ -290,27 +314,46 @@
     this._tables = null;
   }
 
+  /** What SQLite (or anything else) said, on one line. */
+  function said(error) {
+    return String(error && error.message ? error.message : error).replace(/\s+/g, ' ').trim();
+  }
+
+  /** Whatever SQLite or this file threw, as an Error with a `code`. */
+  function classify(error) {
+    if (error && typeof error.code === 'string') return error;
+    var detail = said(error);
+    if (/no such (column|table)/.test(detail)) return fail('schema', fill(MESSAGES.layout, { detail: detail }));
+    return fail('corrupt', MESSAGES.corrupt + detail.replace(/[.\s]+$/, '') + '.');
+  }
+
   /** Run a query. Returns an array of {column: value} objects. */
   Handle.prototype.query = function (sql, params) {
-    var statement = this._db.prepare(sql);
     var rows = [];
+    var statement = null;
     try {
+      statement = this._db.prepare(sql);
       if (params && params.length) statement.bind(params);
       while (statement.step()) rows.push(statement.getAsObject());
+    } catch (error) {
+      throw classify(error);
     } finally {
-      statement.free();
+      if (statement) statement.free();
     }
     return rows;
   };
 
   /** Run a query, calling visit(valuesArray) per row without building objects. */
   Handle.prototype.each = function (sql, params, visit) {
-    var statement = this._db.prepare(sql);
+    var statement = null;
     try {
+      statement = this._db.prepare(sql);
       if (params && params.length) statement.bind(params);
       while (statement.step()) visit(statement.get());
+    } catch (error) {
+      throw classify(error);
     } finally {
-      statement.free();
+      if (statement) statement.free();
     }
   };
 
@@ -334,6 +377,38 @@
   };
 
   /**
+   * Open an image with sql.js. Returns {database} or {error: message}. With
+   * `verify` the b-trees are walked first (PRAGMA quick_check: about a tenth
+   * of a second per 100 MB), so an image whose pages do not belong together
+   * is refused here rather than half-way through a query.
+   */
+  function tryOpen(SQL, bytes, verify) {
+    // Hand SQLite a rollback-journal header: there is no -wal for it to look
+    // for. The two bytes are put back afterwards.
+    var b18 = bytes[18];
+    var b19 = bytes[19];
+    bytes[18] = 1;
+    bytes[19] = 1;
+    var database = null;
+    try {
+      database = new SQL.Database(bytes);
+      database.exec('SELECT count(*) FROM sqlite_master');
+      if (verify) {
+        var check = database.exec('PRAGMA quick_check(1)');
+        var verdict = check.length && check[0].values.length ? String(check[0].values[0][0]) : 'ok';
+        if (verdict !== 'ok') throw new Error(verdict);
+      }
+      return { database: database };
+    } catch (error) {
+      if (database) { try { database.close(); } catch (ignored) { /* already unusable */ } }
+      return { error: said(error) };
+    } finally {
+      bytes[18] = b18;
+      bytes[19] = b19;
+    }
+  }
+
+  /**
    * Open a database held in memory.
    *
    * source: {db: Uint8Array, wal?: Uint8Array}. `db` is the main file
@@ -342,61 +417,94 @@
    * modified, so pass copies if you need the originals.
    *
    * Resolves to a handle {query(sql, params), each(...), close(), info,
-   * warnings}. `warnings` is a list of {code, message} the page should show
-   * ("wal_missing", "wal_invalid"). Rejects with an Error whose `code` is
-   * "not_sqlite" (probably an encrypted backup), "too_large", "empty" or
-   * "corrupt" and whose message is written for the user.
+   * warnings}. `warnings` is a list of {code, message} the page should show:
+   * "wal_missing" (the database is in WAL mode and no -wal was given) and
+   * "wal_invalid" (the -wal does not fit this copy of the database: it was
+   * left out, and info.walMerged is false). A merged image is checked with
+   * PRAGMA quick_check before it is trusted: info.walMerged is only true when
+   * the image with the log applied is as sound as the file on its own (when
+   * the check fails, info.walProblem holds what SQLite said).
+   *
+   * Rejects with an Error whose `code` is "not_sqlite" (probably an encrypted
+   * backup), "too_large", "empty" or "corrupt" and whose message is written
+   * for the user. Later queries on the handle throw Errors coded "corrupt"
+   * or "schema"; nothing in this file throws an error without a code.
    */
   function openDatabase(source, options) {
-    var bytes = source && source.db;
-    if (bytes && !(bytes instanceof Uint8Array)) bytes = Engine._internals.toBytes(bytes);
+    var toBytes = Engine._internals.toBytes;
+    var bytes = source && source.db ? toBytes(source.db) : null;
     if (!bytes) return Promise.reject(fail('empty', MESSAGES.empty));
     var problem = precheck(bytes.length, bytes);
     if (problem) return Promise.reject(fail(problem.code, problem.message, { size: bytes.length }));
-    var wal = source.wal ? Engine._internals.toBytes(source.wal) : null;
+    var wal = source.wal ? toBytes(source.wal) : null;
     var head = sniff(bytes);
     var info = {
       bytes: bytes.length, pageSize: head.pageSize, walMode: head.walMode, walSupplied: !!(wal && wal.length),
       walMerged: false, walFrames: 0, walPages: 0
     };
     var warnings = [];
-    if (wal && wal.length) {
-      var merged = mergeWal(bytes, wal);
-      if (merged.merged) {
-        bytes = merged.bytes;
-        info.walMerged = true;
-        info.walFrames = merged.frames;
-        info.walPages = merged.pages;
-      } else if (merged.reason !== 'empty' && merged.reason !== 'no-commit') {
-        warnings.push({ code: 'wal_invalid', message: MESSAGES.wal_invalid });
-      }
-    } else if (head.walMode) {
-      warnings.push({ code: 'wal_missing', message: MESSAGES.wal_missing });
-    }
     return init(options).then(function (SQL) {
-      // Hand SQLite a rollback-journal header: there is no -wal for it to
-      // look for. The two bytes are put back afterwards.
-      var b18 = bytes[18];
-      var b19 = bytes[19];
-      bytes[18] = 1;
-      bytes[19] = 1;
-      var database;
-      try {
-        database = new SQL.Database(bytes);
-        database.exec('SELECT count(*) FROM sqlite_master');
-      } catch (error) {
-        if (database) { try { database.close(); } catch (ignored) { /* already unusable */ } }
-        throw fail('corrupt', MESSAGES.corrupt + (error && error.message ? error.message : error));
-      } finally {
-        if (!info.walMerged) { bytes[18] = b18; bytes[19] = b19; }
+      if (wal && wal.length) {
+        var merged = mergeWal(bytes, wal);
+        if (merged.merged) {
+          var withLog = tryOpen(SQL, merged.bytes, true);
+          if (!withLog.database) {
+            // Not sound with the log applied. Is the file sound without it?
+            info.walProblem = withLog.error;
+            merged.undo();
+            var alone = tryOpen(SQL, bytes, true);
+            if (alone.database) {                 // yes: the log is from another copy
+              warnings.push({ code: 'wal_invalid', message: MESSAGES.wal_invalid });
+              return new Handle(alone.database, info, warnings);
+            }
+            if (alone.error === withLog.error) {  // the very same complaint: not the log's doing
+              merged = mergeWal(bytes, wal);
+              withLog = tryOpen(SQL, merged.bytes, false);
+              if (!withLog.database) merged.undo();
+            } else {
+              warnings.push({ code: 'wal_invalid', message: MESSAGES.wal_invalid });
+            }
+          }
+          if (withLog.database) {
+            info.walMerged = true;
+            info.walFrames = merged.frames;
+            info.walPages = merged.pages;
+            return new Handle(withLog.database, info, warnings);
+          }
+        } else if (merged.reason !== 'empty' && merged.reason !== 'no-commit') {
+          warnings.push({ code: 'wal_invalid', message: MESSAGES.wal_invalid });
+        }
+      } else if (head.walMode) {
+        warnings.push({ code: 'wal_missing', message: MESSAGES.wal_missing });
       }
-      return new Handle(database, info, warnings);
+      var plain = tryOpen(SQL, bytes, false);
+      if (!plain.database) throw fail('corrupt', MESSAGES.corrupt + plain.error.replace(/[.\s]+$/, '') + '.');
+      return new Handle(plain.database, info, warnings);
     });
   }
 
   // ------------------------------------------------------------------ //
   // Messages queries
   // ------------------------------------------------------------------ //
+
+  // Text is read as CAST(CAST(x AS TEXT) AS BLOB) and decoded here, so a cell
+  // of an unexpected type, an embedded NUL or invalid UTF-8 gives exactly the
+  // string the Python engine gets. Numbers are CAST to INTEGER; a REAL date
+  // is truncated.
+  function asText(column) { return 'CAST(CAST(' + column + ' AS TEXT) AS BLOB)'; }
+  function asDate(prefix) { return 'CAST(' + prefix + 'date AS INTEGER)'; }
+  // ... and NULL instead when it cannot be a date (zero, negative, after 2100),
+  // so one damaged row does not become "the first message" or "the last"
+  function realDate(prefix) {
+    var date = asDate(prefix);
+    return 'CASE WHEN ' + date + ' > 0 AND ' + date + ' <= 3124137600000000000 THEN ' + date + ' END';
+  }
+
+  function text(value) {
+    if (value == null) return null;
+    if (value instanceof Uint8Array) return Engine._internals.utf8(value, 0, value.length);
+    return String(value);
+  }
 
   /** What a database is: "messages", "contacts", "manifest" or "unknown". */
   function kind(handle) {
@@ -418,9 +526,9 @@
 
   function countableSql(columns) {
     var parts = [];
-    if (columns.has('item_type')) parts.push('(m.item_type IS NULL OR m.item_type = 0)');
+    if (columns.has('item_type')) parts.push('(m.item_type IS NULL OR CAST(m.item_type AS INTEGER) = 0)');
     if (columns.has('associated_message_type')) {
-      parts.push('(m.associated_message_type IS NULL OR m.associated_message_type < 1000)');
+      parts.push('(m.associated_message_type IS NULL OR CAST(m.associated_message_type AS INTEGER) < 1000)');
     }
     return parts.join(' AND ') || '1';
   }
@@ -432,11 +540,13 @@
   function groupRows(handle) {
     var merged = new Map();
     var order = [];
-    handle.each('SELECT ROWID, guid, chat_identifier, display_name, service_name FROM chat ' +
-      'WHERE style = ? ORDER BY ROWID', [GROUP_STYLE], function (r) {
-      var key = r[2] ? 'i:' + r[2] : 'r:' + r[0];
+    handle.each('SELECT ROWID, ' + asText('guid') + ', ' + asText('chat_identifier') + ', ' +
+      asText('display_name') + ', ' + asText('service_name') + ' FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID',
+    [GROUP_STYLE], function (r) {
+      var row = [r[0], text(r[1]), text(r[2]), text(r[3]), text(r[4])];
+      var key = row[2] ? 'i:' + row[2] : 'r:' + row[0];
       if (!merged.has(key)) { merged.set(key, []); order.push(key); }
-      merged.get(key).push(r);
+      merged.get(key).push(row);
     });
     return order.map(function (key) { return merged.get(key); });
   }
@@ -450,9 +560,10 @@
    */
   function diagnostics(handle) {
     requireMessages(handle);
-    var row = null;
-    handle.each('SELECT COUNT(*), CAST(MIN(CASE WHEN date > 0 THEN date END) AS TEXT), ' +
-      'CAST(MAX(date) AS TEXT) FROM message', null, function (r) { row = r; });
+    var date = realDate('');
+    var row = [0, null, null];
+    handle.each('SELECT COUNT(*), CAST(MIN(' + date + ') AS TEXT), CAST(MAX(' + date + ') AS TEXT) FROM message',
+      null, function (r) { row = r; });
     var chats = 0;
     handle.each('SELECT COUNT(*) FROM chat', null, function (r) { chats = r[0]; });
     var first = Engine.dateToUnix(row[1]);
@@ -475,37 +586,42 @@
    * Every group chat (chat.style = 43), busiest first, plus diagnostics.
    * options: {contacts, me}. Returns {chats, diagnostics, warnings}; each chat
    * is {id, chat_ids, chat_identifier, guid, display_name, name,
-   * participants, members, messages, first_unix, last_unix}. `messages` is a
+   * participants, members, messages, first_unix, last_unix}. `display_name`
+   * is the chat's own name, cleaned and masked; `name` is what to show;
+   * `participants` are raw handle ids (never show those); `messages` is a
    * quick all-time count of message rows that does not look inside the text.
    */
   function listGroupChats(handle, options) {
     requireMessages(handle);
     var o = options || {};
-    var me = o.me || 'Me';
     var I = Engine._internals;
+    var me = I.ownerName(o.me);
     var names = new I.Names(me, Engine.buildContactLookup(o.contacts));
     var columns = handle.columns('message');
+    var date = realDate('m.');
     var counts = new Map();
-    handle.each('SELECT j.chat_id, COUNT(*), CAST(MIN(CASE WHEN m.date > 0 THEN m.date END) AS TEXT), ' +
-      'CAST(MAX(m.date) AS TEXT) FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id ' +
-      'WHERE j.chat_id IN (SELECT ROWID FROM chat WHERE style = ?) AND ' + countableSql(columns) +
+    handle.each('SELECT j.chat_id, COUNT(*), CAST(MIN(' + date + ') AS TEXT), ' +
+      'CAST(MAX(' + date + ') AS TEXT) FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id ' +
+      'WHERE j.chat_id IN (SELECT ROWID FROM chat WHERE CAST(style AS INTEGER) = ?) AND ' + countableSql(columns) +
       ' GROUP BY j.chat_id', [GROUP_STYLE], function (r) {
       counts.set(r[0], [r[1], Engine.dateToUnix(r[2]), Engine.dateToUnix(r[3])]);
     });
     var handles = new Map();
-    handle.each('SELECT j.chat_id, h.id FROM chat_handle_join j JOIN handle h ON h.ROWID = j.handle_id ' +
-      'ORDER BY j.chat_id, j.handle_id', null, function (r) {
-      if (!handles.has(r[0])) handles.set(r[0], []);
-      handles.get(r[0]).push(r[1]);
-    });
+    if (handle.tables().has('chat_handle_join')) {     // optional: without it, members are unknown
+      handle.each('SELECT j.chat_id, ' + asText('h.id') + ' FROM chat_handle_join j JOIN handle h ' +
+        'ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id', null, function (r) {
+        var id = text(r[1]);
+        if (!id) return;
+        if (!handles.has(r[0])) handles.set(r[0], []);
+        handles.get(r[0]).push(id);
+      });
+    }
     var chats = groupRows(handle).map(function (group) {
       var ids = group.map(function (r) { return r[0]; });
       var display = '';
-      for (var i = 0; i < group.length && !display; i++) {
-        if (typeof group[i][3] === 'string') display = I.trim(group[i][3]);
-      }
+      for (var i = 0; i < group.length && !display; i++) display = I.chatLabel(group[i][3]);
       var raw = [];
-      ids.forEach(function (id) { (handles.get(id) || []).forEach(function (h) { if (h) raw.push(h); }); });
+      ids.forEach(function (id) { (handles.get(id) || []).forEach(function (h) { raw.push(h); }); });
       var participants = I.distinct(raw);
       var resolved = I.resolveAll(names, participants);
       var total = 0;
@@ -524,7 +640,7 @@
         id: ids[0],
         chat_ids: ids,
         chat_identifier: group[0][2] || '',
-        guid: group[0][1],
+        guid: group[0][1] || '',
         display_name: display,
         name: display || I.fallbackName(resolved, me),
         participants: participants,
@@ -545,23 +661,23 @@
    */
   function findChat(chats, query) {
     if (query && typeof query === 'object') return query;
-    var text = String(query).trim();
+    var wanted = String(query).trim();
     var i;
-    if (/^[0-9]+$/.test(text)) {
+    if (/^[0-9]+$/.test(wanted)) {
       for (i = 0; i < chats.length; i++) {
-        if (chats[i].chat_ids.indexOf(Number(text)) !== -1) return chats[i];
+        if (chats[i].chat_ids.indexOf(Number(wanted)) !== -1) return chats[i];
       }
     }
     for (i = 0; i < chats.length; i++) {
-      if (text && (text === chats[i].guid || text === chats[i].chat_identifier)) return chats[i];
+      if (wanted && (wanted === chats[i].guid || wanted === chats[i].chat_identifier)) return chats[i];
     }
-    var folded = text.toLowerCase();
+    var folded = wanted.toLowerCase();
     var exact = chats.filter(function (c) { return c.name.toLowerCase() === folded; });
     var partial = chats.filter(function (c) { return folded && c.name.toLowerCase().indexOf(folded) !== -1; });
     var matches = exact.length ? exact : partial;
     if (matches.length === 1) return matches[0];
-    if (!matches.length) throw fail('no_chat', fill(MESSAGES.no_chat, { query: text }));
-    throw fail('ambiguous_chat', fill(MESSAGES.ambiguous_chat, { count: matches.length, query: text }),
+    if (!matches.length) throw fail('no_chat', fill(MESSAGES.no_chat, { query: wanted }));
+    throw fail('ambiguous_chat', fill(MESSAGES.ambiguous_chat, { count: matches.length, query: wanted }),
       { matches: matches });
   }
 
@@ -576,29 +692,29 @@
    * kept (`attributedBody` is null), which keeps memory use down on very
    * large chats. Columns an older database lacks come back as null: the
    * schema is probed with PRAGMA table_info, never guessed from an OS version.
+   * Every column is CAST to the type it should have, so a cell of another
+   * type reads the same here and in the Python engine.
    */
   function loadRows(handle, chatIds) {
     var columns = handle.columns('message');
-    function column(name) { return columns.has(name) ? 'm.' + name : 'NULL'; }
+    function integer(name) { return columns.has(name) ? 'CAST(m.' + name + ' AS INTEGER)' : 'NULL'; }
     var body = columns.has('attributedBody')
-      ? "CASE WHEN m.text IS NULL OR m.text = '' THEN m.attributedBody END" : 'NULL';
-    var sql = 'SELECT m.ROWID, m.guid, CAST(m.date AS TEXT), m.is_from_me, h.id, CAST(m.text AS BLOB), ' +
-      body + ', ' + column('cache_has_attachments') + ', ' + column('item_type') + ', ' +
-      column('associated_message_type') + ', ' + column('associated_message_guid') +
+      ? "CASE WHEN m.text IS NULL OR CAST(m.text AS TEXT) = '' THEN CAST(m.attributedBody AS BLOB) END" : 'NULL';
+    var sql = 'SELECT m.ROWID, ' + asText('m.guid') + ', CAST(' + asDate('m.') + ' AS TEXT), ' +
+      'CAST(m.is_from_me AS INTEGER), ' + asText('h.id') + ', ' + asText('m.text') + ', ' + body + ', ' +
+      integer('cache_has_attachments') + ', ' + integer('item_type') + ', ' + integer('associated_message_type') +
+      ', ' + (columns.has('associated_message_guid') ? asText('m.associated_message_guid') : 'NULL') +
       ' FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id WHERE m.ROWID IN ' +
       '(SELECT message_id FROM chat_message_join WHERE chat_id IN (' +
       chatIds.map(function () { return '?'; }).join(',') + ')) ORDER BY m.ROWID';
-    var utf8 = Engine._internals.utf8;
     var rows = [];
     handle.each(sql, chatIds.map(Number), function (r) {
-      var text = r[5];
-      if (text && text.length) text = utf8(text, 0, text.length);
-      else if (r[6] && r[6].length) text = Engine.decodeAttributedBody(r[6]);
-      else text = text ? '' : null;
+      var message = text(r[5]);
+      if (!message) message = r[6] && r[6].length ? Engine.decodeAttributedBody(r[6]) : (message === '' ? '' : null);
       rows.push({
-        rowid: r[0], guid: r[1], date: r[2], is_from_me: r[3], handle: r[4], text: text,
+        rowid: r[0], guid: text(r[1]), date: r[2], is_from_me: r[3], handle: text(r[4]), text: message,
         attributedBody: null, cache_has_attachments: r[7], item_type: r[8],
-        associated_message_type: r[9], associated_message_guid: r[10]
+        associated_message_type: r[9], associated_message_guid: text(r[10])
       });
     });
     return rows;
@@ -636,15 +752,10 @@
   // ------------------------------------------------------------------ //
 
   function displayName(first, last, nickname, organization) {
-    var I = Engine._internals;
-    var parts = [];
-    [first, last].forEach(function (p) {
-      if (typeof p === 'string' && I.trim(p)) parts.push(I.trim(p));
-    });
+    var clean = Engine.cleanName;
+    var parts = [clean(first), clean(last)].filter(function (part) { return part; });
     if (parts.length) return parts.join(' ');
-    if (typeof nickname === 'string' && I.trim(nickname)) return I.trim(nickname);
-    if (typeof organization === 'string' && I.trim(organization)) return I.trim(organization);
-    return '';
+    return clean(nickname) || clean(organization);
   }
 
   /**
@@ -652,7 +763,7 @@
    * AddressBook-v22.abcddb or an iPhone AddressBook.sqlitedb (detected from
    * its tables). Identifiers are phone numbers and e-mail addresses as
    * stored; the engine normalises them. The name is "First Last", else the
-   * nickname, else the organisation.
+   * nickname, else the organisation, cleaned of control characters.
    */
   function loadContacts(handle) {
     var tables = handle.tables();
@@ -662,24 +773,24 @@
     if (tables.has('ZABCDRECORD')) {
       columns = handle.columns('ZABCDRECORD');
       nameSql = ['ZFIRSTNAME', 'ZLASTNAME', 'ZNICKNAME', 'ZORGANIZATION'].map(function (c) {
-        return columns.has(c) ? 'r.' + c : 'NULL';
+        return columns.has(c) ? asText('r.' + c) : 'NULL';
       }).join(', ');
       if (tables.has('ZABCDPHONENUMBER')) {
-        queries.push('SELECT ' + nameSql + ', p.ZFULLNUMBER FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r ' +
-          'ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK');
+        queries.push('SELECT ' + nameSql + ', ' + asText('p.ZFULLNUMBER') + ' FROM ZABCDPHONENUMBER p ' +
+          'JOIN ZABCDRECORD r ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK');
       }
       if (tables.has('ZABCDEMAILADDRESS')) {
         var address = handle.columns('ZABCDEMAILADDRESS').has('ZADDRESS')
           ? 'COALESCE(e.ZADDRESS, e.ZADDRESSNORMALIZED)' : 'e.ZADDRESSNORMALIZED';
-        queries.push('SELECT ' + nameSql + ', ' + address + ' FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r ' +
-          'ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK');
+        queries.push('SELECT ' + nameSql + ', ' + asText(address) + ' FROM ZABCDEMAILADDRESS e ' +
+          'JOIN ZABCDRECORD r ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK');
       }
     } else if (tables.has('ABPerson') && tables.has('ABMultiValue')) {
       columns = handle.columns('ABPerson');
       nameSql = ['First', 'Last', 'Nickname', 'Organization'].map(function (c) {
-        return columns.has(c) ? 'p.' + c : 'NULL';
+        return columns.has(c) ? asText('p.' + c) : 'NULL';
       }).join(', ');
-      queries.push('SELECT ' + nameSql + ', v.value FROM ABMultiValue v JOIN ABPerson p ' +
+      queries.push('SELECT ' + nameSql + ', ' + asText('v.value') + ' FROM ABMultiValue v JOIN ABPerson p ' +
         'ON p.ROWID = v.record_id WHERE v.property IN (3, 4) ORDER BY p.ROWID, v.UID');
     } else {
       throw fail('contacts_schema', MESSAGES.contacts_schema);
@@ -687,8 +798,9 @@
     var pairs = [];
     queries.forEach(function (sql) {
       handle.each(sql, null, function (r) {
-        var name = displayName(r[0], r[1], r[2], r[3]);
-        if (name && typeof r[4] === 'string' && Engine._internals.trim(r[4])) pairs.push([r[4], name]);
+        var name = displayName(text(r[0]), text(r[1]), text(r[2]), text(r[3]));
+        var value = text(r[4]);
+        if (name && value && Engine._internals.trim(value)) pairs.push([value, name]);
       });
     });
     return pairs;

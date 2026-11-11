@@ -17,6 +17,7 @@ Nothing in this module ever writes to a user's database:
 
 from __future__ import annotations
 
+import functools
 import glob
 import hashlib
 import os
@@ -28,8 +29,8 @@ import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .product import PRODUCT_NAME
-from .stats import (APPLE_EPOCH, WHITESPACE, _NS_THRESHOLD, _Names, _distinct, _fallback_name,
-                    build_contact_lookup)
+from .stats import (WHITESPACE, _Names, _chat_label, _distinct, _fallback_name, _owner_name,
+                    _split_date, build_contact_lookup, clean_name)
 
 __all__ = [
     "DatabaseError", "open_database", "open_backup", "find_backup", "locate_in_backup",
@@ -137,7 +138,45 @@ def _protected(path: str) -> bool:
     return any(part in lowered for part in ("/library/messages", "/mobilesync/", "/addressbook"))
 
 
+# What reading a damaged file can raise: SQLite's own errors, and the ones
+# Python raises while turning what SQLite hands back (a value, or even its
+# error message) into a str or an int.
+_READ_ERRORS = (sqlite3.Error, sqlite3.Warning, UnicodeError, OverflowError, MemoryError)
+
+
+def _damaged(exc: BaseException) -> DatabaseError:
+    """One sentence for an error raised while reading a database."""
+    if isinstance(exc, sqlite3.Error):
+        detail = " ".join(str(exc).split()) or exc.__class__.__name__
+    else:
+        detail = "unreadable data, %s" % exc.__class__.__name__
+    if "no such column" in detail or "no such table" in detail:
+        return DatabaseError(
+            "This is not a Messages database this program can read: part of the usual layout "
+            "is missing (%s)." % detail, "schema")
+    return DatabaseError(
+        "This database cannot be read: it is damaged, or it was copied while Messages was still "
+        "writing to it (SQLite says: %s). Copy chat.db again together with chat.db-wal, or point "
+        "--db at the original file." % detail, "corrupt")
+
+
+def _reading(function: Any) -> Any:
+    """Turn anything a damaged database makes ``function`` raise into a
+    :class:`DatabaseError`."""
+    @functools.wraps(function)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return function(*args, **kwargs)
+        except _READ_ERRORS as exc:
+            raise _damaged(exc) from None
+    return wrapper
+
+
 def _access_error(path: str, exc: BaseException) -> DatabaseError:
+    detail = str(exc).lower()
+    if not isinstance(exc, (sqlite3.Error, OSError)) or (isinstance(exc, sqlite3.Error) and any(
+            word in detail for word in ("malformed", "not a database", "corrupt", "no such"))):
+        return _damaged(exc)
     if isinstance(exc, PermissionError) or _protected(path):
         return DatabaseError(
             FULL_DISK_ACCESS_HELP.format(path=path, product=PRODUCT_NAME), "permission")
@@ -174,7 +213,7 @@ def _connect(path: str, flags: str) -> _Connection:
     con = sqlite3.connect(uri, uri=True, factory=_Connection)
     try:
         con.execute("SELECT count(*) FROM sqlite_master").fetchone()
-    except sqlite3.Error:
+    except _READ_ERRORS:
         con.close()
         raise
     return con
@@ -223,12 +262,12 @@ def open_database(path: str, wal: Optional[str] = None) -> sqlite3.Connection:
                 con = _connect(path, "mode=ro")
                 con.wal_merged = os.path.getsize(sidecar) > 0
                 return con
-            except sqlite3.Error:
+            except _READ_ERRORS:
                 return _snapshot(path, sidecar)
         con = _connect(path, "immutable=1")
         con.opened_immutable = True
         return con
-    except (sqlite3.Error, OSError) as exc:
+    except _READ_ERRORS + (OSError,) as exc:
         raise _access_error(path, exc)
 
 
@@ -302,7 +341,7 @@ def locate_in_backup(backup_dir: str, domain: str, relative_path: str) -> Option
                         file_ids.append(file_id)
             finally:
                 con.close()
-        except (sqlite3.Error, OSError):
+        except _READ_ERRORS + (OSError,):
             pass
     hashed = hashlib.sha1(("%s-%s" % (domain, relative_path)).encode("utf-8")).hexdigest()
     if hashed not in file_ids:
@@ -385,21 +424,33 @@ def _require_messages_schema(con: sqlite3.Connection) -> None:
 
 
 def _unix(raw: Optional[int]) -> Optional[int]:
-    if not isinstance(raw, int) or raw <= 0:
-        return None
-    return (raw // 1000000000 if raw > _NS_THRESHOLD else raw) + APPLE_EPOCH
+    stamp = _split_date(raw)
+    return stamp[0] if stamp else None
 
 
 def _countable_sql(cols: set) -> str:
     """Rows that can be messages: no group events, tapbacks, stickers or votes."""
     parts = []
     if "item_type" in cols:
-        parts.append("(m.item_type IS NULL OR m.item_type = 0)")
+        parts.append("(m.item_type IS NULL OR CAST(m.item_type AS INTEGER) = 0)")
     if "associated_message_type" in cols:
-        parts.append("(m.associated_message_type IS NULL OR m.associated_message_type < 1000)")
+        parts.append("(m.associated_message_type IS NULL "
+                     "OR CAST(m.associated_message_type AS INTEGER) < 1000)")
     return " AND ".join(parts) or "1"
 
 
+# message.date as an integer whatever type the cell has (a REAL is truncated)
+_DATE = "CAST(%sdate AS INTEGER)"
+# ... and NULL instead when it cannot be a date (zero, negative, after 2100),
+# so one damaged row does not become "the first message" or "the last"
+_REAL_DATE = "CASE WHEN {0} > 0 AND {0} <= 3124137600000000000 THEN {0} END"
+
+
+def _tables(con: sqlite3.Connection) -> set:
+    return {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+
+
+@_reading
 def diagnostics(con: sqlite3.Connection) -> Dict[str, Any]:
     """Size and date range of the whole database.
 
@@ -409,8 +460,9 @@ def diagnostics(con: sqlite3.Connection) -> Dict[str, Any]:
     "wal_merged", "immutable"}``.
     """
     _require_messages_schema(con)
+    date = _REAL_DATE.format(_DATE % "")
     total, first, last = con.execute(
-        "SELECT COUNT(*), MIN(CASE WHEN date > 0 THEN date END), MAX(date) FROM message").fetchone()
+        "SELECT COUNT(*), MIN(%s), MAX(%s) FROM message" % (date, date)).fetchone()
     chats = con.execute("SELECT COUNT(*) FROM chat").fetchone()[0]
     groups = len(_group_rows(con))
     return {
@@ -425,9 +477,11 @@ def diagnostics(con: sqlite3.Connection) -> Dict[str, Any]:
 
 
 def _group_rows(con: sqlite3.Connection) -> List[List[tuple]]:
-    """Group-chat rows, merged when they share a non-empty chat_identifier."""
-    rows = _fetch(con, "SELECT ROWID, guid, chat_identifier, display_name, service_name "
-                       "FROM chat WHERE style = ? ORDER BY ROWID", (GROUP_STYLE,))
+    """Group-chat rows, merged when they share a non-empty chat_identifier.
+    Text columns are CAST so a cell of another type cannot surprise anyone."""
+    rows = _fetch(con, "SELECT ROWID, CAST(guid AS TEXT), CAST(chat_identifier AS TEXT), "
+                       "CAST(display_name AS TEXT), CAST(service_name AS TEXT) "
+                       "FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID", (GROUP_STYLE,))
     merged: Dict[Any, List[tuple]] = {}
     for row in rows:
         key = row[2] if row[2] else ("rowid", row[0])
@@ -435,40 +489,45 @@ def _group_rows(con: sqlite3.Connection) -> List[List[tuple]]:
     return list(merged.values())
 
 
+@_reading
 def list_group_chats(con: sqlite3.Connection, contacts: Any = None,
                      me: str = "Me") -> List[Dict[str, Any]]:
     """Every group chat (``chat.style = 43``), busiest first.
 
     Each entry: ``id`` (lowest chat ROWID of the group), ``chat_ids`` (all
-    merged rows), ``chat_identifier``, ``guid``, ``display_name`` (as stored,
-    may be empty), ``name`` (what to show), ``participants`` (handle ids of
-    the other members), ``members`` (people including the owner),
-    ``messages`` (all-time count of message rows; a quick SQL count that does
-    not look inside the text), ``first_unix`` / ``last_unix``.
+    merged rows), ``chat_identifier``, ``guid``, ``display_name`` (the chat's
+    own name, cleaned and masked; may be empty), ``name`` (what to show),
+    ``participants`` (raw handle ids of the other members: never print
+    these), ``members`` (people including the owner), ``messages`` (all-time
+    count of message rows; a quick SQL count that does not look inside the
+    text), ``first_unix`` / ``last_unix``.
     """
     _require_messages_schema(con)
     lookup = build_contact_lookup(contacts)
+    me = _owner_name(me)
     names = _Names(me, lookup)
     cols = _columns(con, "message")
+    date = _REAL_DATE.format(_DATE % "m.")
     counts: Dict[int, tuple] = {}
     for chat_id, n, first, last in con.execute(
-            "SELECT j.chat_id, COUNT(*), MIN(CASE WHEN m.date > 0 THEN m.date END), MAX(m.date) "
+            "SELECT j.chat_id, COUNT(*), MIN(%s), MAX(%s) "
             "FROM chat_message_join j JOIN message m ON m.ROWID = j.message_id "
-            "WHERE j.chat_id IN (SELECT ROWID FROM chat WHERE style = ?) AND %s "
-            "GROUP BY j.chat_id" % _countable_sql(cols), (GROUP_STYLE,)):
+            "WHERE j.chat_id IN (SELECT ROWID FROM chat WHERE CAST(style AS INTEGER) = ?) AND %s "
+            "GROUP BY j.chat_id" % (date, date, _countable_sql(cols)), (GROUP_STYLE,)):
         counts[chat_id] = (n, first, last)
     handles: Dict[int, List[str]] = {}
-    for chat_id, handle in _fetch(
-            con, "SELECT j.chat_id, h.id FROM chat_handle_join j JOIN handle h "
-                 "ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id"):
-        handles.setdefault(chat_id, []).append(handle)
+    if "chat_handle_join" in _tables(con):      # optional: without it, members are unknown
+        for chat_id, handle in _fetch(
+                con, "SELECT j.chat_id, CAST(h.id AS TEXT) FROM chat_handle_join j JOIN handle h "
+                     "ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id"):
+            if handle:
+                handles.setdefault(chat_id, []).append(handle)
 
     chats = []
     for group in _group_rows(con):
         ids = [row[0] for row in group]
-        display = next((row[3].strip(WHITESPACE) for row in group
-                        if row[3] and row[3].strip(WHITESPACE)), "")
-        participants = _distinct(h for chat_id in ids for h in handles.get(chat_id, []) if h)
+        display = next((label for label in (_chat_label(row[3]) for row in group) if label), "")
+        participants = _distinct(h for chat_id in ids for h in handles.get(chat_id, []))
         resolved = _distinct(names.handle(h) for h in participants)
         total = sum(counts.get(i, (0, None, None))[0] for i in ids)
         firsts = [counts[i][1] for i in ids if i in counts and counts[i][1]]
@@ -477,7 +536,7 @@ def list_group_chats(con: sqlite3.Connection, contacts: Any = None,
             "id": ids[0],
             "chat_ids": ids,
             "chat_identifier": group[0][2] or "",
-            "guid": group[0][1],
+            "guid": group[0][1] or "",
             "display_name": display,
             "name": display or _fallback_name(resolved, me),
             "participants": participants,
@@ -529,29 +588,35 @@ _ROW_KEYS = ("rowid", "guid", "date", "is_from_me", "handle", "text", "attribute
              "associated_message_guid")
 
 
+@_reading
 def load_rows(con: sqlite3.Connection, chat_ids: Iterable[int]) -> List[Dict[str, Any]]:
     """All message rows of the given chat ROWIDs in the shape
     :func:`wrapped.stats.compute_stats` takes, each message once, by ROWID.
 
     Columns that an older database lacks (``attributedBody``, ``item_type``,
     ``associated_message_*``) come back as ``None``; the schema is probed with
-    ``PRAGMA table_info`` rather than guessed from an OS version.
+    ``PRAGMA table_info`` rather than guessed from an OS version. Every column
+    is CAST to the type it should have, so a cell of an unexpected type (a
+    number where text belongs, a REAL date, which is truncated) reads the same
+    here and in the JavaScript engine.
     """
     ids = [int(i) for i in chat_ids]
     cols = _columns(con, "message")
 
-    def col(name: str) -> str:
-        return "m." + name if name in cols else "NULL"
+    def col(name: str, kind: str) -> str:
+        return "CAST(m.%s AS %s)" % (name, kind) if name in cols else "NULL"
 
-    body = ("CASE WHEN m.text IS NULL OR m.text = '' THEN m.attributedBody END"
-            if "attributedBody" in cols else "NULL")
+    body = ("CASE WHEN m.text IS NULL OR CAST(m.text AS TEXT) = '' "
+            "THEN CAST(m.attributedBody AS BLOB) END" if "attributedBody" in cols else "NULL")
     sql = (
-        "SELECT m.ROWID, m.guid, m.date, m.is_from_me, h.id, m.text, %s, %s, %s, %s, %s "
+        "SELECT m.ROWID, CAST(m.guid AS TEXT), %s, CAST(m.is_from_me AS INTEGER), "
+        "CAST(h.id AS TEXT), CAST(m.text AS TEXT), %s, %s, %s, %s, %s "
         "FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id "
         "WHERE m.ROWID IN (SELECT message_id FROM chat_message_join WHERE chat_id IN (%s)) "
         "ORDER BY m.ROWID"
-        % (body, col("cache_has_attachments"), col("item_type"), col("associated_message_type"),
-           col("associated_message_guid"), ",".join("?" for _ in ids)))
+        % (_DATE % "m.", body, col("cache_has_attachments", "INTEGER"), col("item_type", "INTEGER"),
+           col("associated_message_type", "INTEGER"), col("associated_message_guid", "TEXT"),
+           ",".join("?" for _ in ids)))
     return [dict(zip(_ROW_KEYS, row)) for row in _fetch(con, sql, ids)]
 
 
@@ -565,17 +630,21 @@ def load_chat(con: sqlite3.Connection, chat: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@_reading
 def chat_for_message(con: sqlite3.Connection, message_rowid: int) -> Optional[Dict[str, Any]]:
     """The chat a message belongs to: ``{"rowid", "guid", "display_name",
     "style", "chat_identifier", "is_group"}`` or ``None`` when the message is
-    not (yet) joined to a chat."""
+    not (yet) joined to a chat. ``display_name`` is cleaned and masked."""
     row = con.execute(
-        "SELECT c.ROWID, c.guid, c.display_name, c.style, c.chat_identifier "
+        "SELECT c.ROWID, CAST(c.guid AS TEXT), CAST(c.display_name AS TEXT), "
+        "CAST(c.style AS INTEGER), "
+        "CAST(c.chat_identifier AS TEXT) "
         "FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id "
         "WHERE j.message_id = ? ORDER BY c.ROWID LIMIT 1", (int(message_rowid),)).fetchone()
     if row is None:
         return None
-    return {"rowid": row[0], "guid": row[1], "display_name": row[2] or "", "style": row[3],
+    return {"rowid": row[0], "guid": row[1] or "", "display_name": _chat_label(row[2]),
+            "style": row[3],
             "chat_identifier": row[4] or "", "is_group": row[3] == GROUP_STYLE}
 
 
@@ -584,14 +653,10 @@ def chat_for_message(con: sqlite3.Connection, message_rowid: int) -> Optional[Di
 # --------------------------------------------------------------------------- #
 
 def _display_name(first: Any, last: Any, nickname: Any, organization: Any) -> str:
-    parts = [p.strip(WHITESPACE) for p in (first, last) if isinstance(p, str)]
-    name = " ".join(p for p in parts if p)
+    name = " ".join(p for p in (clean_name(first), clean_name(last)) if p)
     if name:
         return name
-    for fallback in (nickname, organization):
-        if isinstance(fallback, str) and fallback.strip(WHITESPACE):
-            return fallback.strip(WHITESPACE)
-    return ""
+    return clean_name(nickname) or clean_name(organization)
 
 
 def _contacts_from(con: sqlite3.Connection) -> List[Tuple[str, str]]:
@@ -599,23 +664,23 @@ def _contacts_from(con: sqlite3.Connection) -> List[Tuple[str, str]]:
     pairs: List[Tuple[str, str]] = []
     if "ZABCDRECORD" in tables:                       # macOS AddressBook-v22.abcddb
         cols = _columns(con, "ZABCDRECORD")
-        name_sql = ", ".join("r." + c if c in cols else "NULL" for c in
+        name_sql = ", ".join("CAST(r.%s AS TEXT)" % c if c in cols else "NULL" for c in
                              ("ZFIRSTNAME", "ZLASTNAME", "ZNICKNAME", "ZORGANIZATION"))
         queries = []
         if "ZABCDPHONENUMBER" in tables:
-            queries.append("SELECT %s, p.ZFULLNUMBER FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r "
+            queries.append("SELECT %s, CAST(p.ZFULLNUMBER AS TEXT) FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r "
                            "ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK" % name_sql)
         if "ZABCDEMAILADDRESS" in tables:
             email_cols = _columns(con, "ZABCDEMAILADDRESS")
             address = "COALESCE(e.ZADDRESS, e.ZADDRESSNORMALIZED)" if "ZADDRESS" in email_cols \
                 else "e.ZADDRESSNORMALIZED"
-            queries.append("SELECT %s, %s FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r "
+            queries.append("SELECT %s, CAST(%s AS TEXT) FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r "
                            "ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK" % (name_sql, address))
     elif "ABPerson" in tables and "ABMultiValue" in tables:   # iPhone AddressBook.sqlitedb
         cols = _columns(con, "ABPerson")
-        name_sql = ", ".join("p." + c if c in cols else "NULL" for c in
+        name_sql = ", ".join("CAST(p.%s AS TEXT)" % c if c in cols else "NULL" for c in
                              ("First", "Last", "Nickname", "Organization"))
-        queries = ["SELECT %s, v.value FROM ABMultiValue v JOIN ABPerson p "
+        queries = ["SELECT %s, CAST(v.value AS TEXT) FROM ABMultiValue v JOIN ABPerson p "
                    "ON p.ROWID = v.record_id WHERE v.property IN (3, 4) "
                    "ORDER BY p.ROWID, v.UID" % name_sql]
     else:
@@ -638,8 +703,8 @@ def load_contacts(path: str) -> List[Tuple[str, str]]:
     con = open_database(path)
     try:
         return _contacts_from(con)
-    except sqlite3.Error as exc:
-        raise DatabaseError("Could not read contacts from %s: %s" % (path, exc), "open")
+    except _READ_ERRORS as exc:
+        raise _damaged(exc) from None
     finally:
         con.close()
 
