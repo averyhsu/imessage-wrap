@@ -180,8 +180,9 @@ def stats_from_url(url: str) -> Any:
 
 
 def strip_quotes(stats: Dict[str, Any]) -> Dict[str, Any]:
-    """"No quotes" mode: blank every ``most_reacted[].text`` (in place)."""
-    for entry in stats.get("most_reacted") or []:
+    """Blank every ``most_reacted[].text`` (in place): no message text."""
+    entries = stats.get("most_reacted") if isinstance(stats, dict) else None
+    for entry in entries if isinstance(entries, list) else []:
         if isinstance(entry, dict):
             entry["text"] = ""
     return stats
@@ -196,13 +197,19 @@ def apply_trim_step(stats: Dict[str, Any], step: int) -> Dict[str, Any]:
     4. keep only the first ``most_reacted`` entry
     5. delete ``awards``
     6. keep only the first 5 ``senders``
+
+    Sections that are missing or not of the expected type are left alone.
     """
+    def listed(key: str) -> list:
+        value = stats.get(key)
+        return value if isinstance(value, list) else []
+
     if step == 1:
-        for award in stats.get("awards") or []:
+        for award in listed("awards"):
             if isinstance(award, dict):
                 award.pop("detail", None)
     elif step == 2:
-        for entry in stats.get("most_reacted") or []:
+        for entry in listed("most_reacted"):
             text = entry.get("text") if isinstance(entry, dict) else None
             if isinstance(text, str) and len(text) > SHORT_QUOTE:
                 entry["text"] = text[:SHORT_QUOTE] + "\u2026"
@@ -222,15 +229,27 @@ def apply_trim_step(stats: Dict[str, Any], step: int) -> Dict[str, Any]:
     return stats
 
 
-def fit_link(stats: Dict[str, Any], quotes: bool = True, base_url: str = BASE_URL,
-             max_length: int = MAX_URL_LENGTH) -> Dict[str, Any]:
+def fit_link(stats: Dict[str, Any], quotes: bool = False, base_url: Optional[str] = None,
+             max_length: Optional[int] = None) -> Dict[str, Any]:
     """Build the share link, trimming the stats only as far as needed.
+
+    Message text is opt-in: unless ``quotes`` is true every
+    ``most_reacted[].text`` is blanked before encoding, so nothing puts
+    message content into a link by default.
 
     Returns ``{"url", "length", "steps", "stats"}`` where ``steps`` is how many
     ladder steps were applied (0 = nothing trimmed) and ``stats`` is the copy
     that was actually encoded. The input is never modified. Raises
-    :class:`LinkTooLongError` when even step 6 is not enough.
+    :class:`LinkTooLongError` when even step 6 is not enough, and
+    ``ValueError`` when ``stats`` is not a JSON object. ``base_url`` and
+    ``max_length`` default to :data:`BASE_URL` and :data:`MAX_URL_LENGTH`.
     """
+    if not isinstance(stats, dict):
+        raise ValueError("a recap must be a JSON object, not %s" % type(stats).__name__)
+    if base_url is None:
+        base_url = BASE_URL
+    if max_length is None:
+        max_length = MAX_URL_LENGTH
     trimmed = copy.deepcopy(stats)
     if not quotes:
         strip_quotes(trimmed)
@@ -242,17 +261,16 @@ def fit_link(stats: Dict[str, Any], quotes: bool = True, base_url: str = BASE_UR
         if step == TRIM_STEPS:
             raise LinkTooLongError(
                 "This recap does not fit in a link: %d characters after every trimming step, "
-                "and the limit is %d. Try a shorter chat name or the no-quotes option."
-                % (len(url), max_length))
+                "and the limit is %d. Try a shorter chat name." % (len(url), max_length))
         step += 1
         apply_trim_step(trimmed, step)
 
 
-def build_link(stats: Dict[str, Any], quotes: bool = True, base_url: str = BASE_URL,
-               max_length: int = MAX_URL_LENGTH) -> str:
+def build_link(stats: Dict[str, Any], quotes: bool = False, base_url: Optional[str] = None,
+               max_length: Optional[int] = None) -> str:
     """The share URL for ``stats`` (see :func:`fit_link` for the details).
 
-    ``quotes=False`` blanks the text of the most-reacted messages first, for
-    people who do not want message text inside the link.
+    ``quotes=True`` keeps the text of the most-reacted messages in the link;
+    by default it is left out.
     """
     return fit_link(stats, quotes=quotes, base_url=base_url, max_length=max_length)["url"]

@@ -11,8 +11,11 @@
  *   decodeAttributedBody(bytes) -> string | null  message.attributedBody
  *   chatDisplayName(displayName, participants, contacts, me) -> string
  *   encodePayload(stats) / decodePayload(text)    link payload codec
+ *   shortNames(stats, me) -> stats                first names ("Sam", "Sam R.") for sharing
+ *   cleanName(text) / maskHandle(label)           what every name goes through
  *   fitLink(stats, options) -> {url, length, steps, stats}
- *   buildLink(stats, options) -> url              4,800-character budget
+ *   buildLink(stats, options) -> url              4,800-character budget; message text
+ *                                                 only with options.quotes === true
  *   statsFromUrl(url) -> stats
  *
  * Row shape for computeStats (every key but `date` is optional; the keys are
@@ -33,6 +36,15 @@
  *   associated_message_guid  "p:0/<guid>", "bp:<guid>" or "<guid>"
  *   keep_empty               1 to count a row with neither text nor attachment
  *
+ * Values of the wrong type never throw, and both engines read them the same
+ * way: a number is used as an integer (truncated towards zero), and anything
+ * that is not a number or `true` counts as 0; `text` is a string or UTF-8
+ * bytes and `attributedBody` is bytes, `guid`, `handle` and
+ * `associated_message_guid` are strings (anything else is "not there"); a
+ * `date` is a number (a fraction is dropped), a decimal string or a BigInt;
+ * rows that are not objects are skipped. db.js casts every column in SQL, so
+ * cells of an unexpected type already arrive in this shape.
+ *
  * Options for computeStats (all optional, same names as the Python engine):
  *
  *   tz            IANA zone for every local date and hour (default: the
@@ -46,6 +58,14 @@
  *   chat_name     chat.display_name ("" = build one from the members)
  *   participants  handle ids from chat_handle_join
  *   source        recorded in meta.source (default "chat.db")
+ *
+ * Every name is cleaned (no control characters or direction overrides) and,
+ * unless it comes from the contact table, masked: see cleanName, maskHandle.
+ *
+ * Errors: an impossible year, date, zone or "now" throws a RangeError with
+ * code "range"; the link functions throw Errors with code "bad_stats" (not a
+ * plain JSON object), "bad_payload", "link_too_long" or "no_codec". Nothing
+ * here throws an error without a `code` for input of the wrong shape.
  *
  * Payload functions need a raw-DEFLATE codec: the page loads the site's
  * ../js/vendor/fflate.min.js (global `fflate`) before this file; Node uses zlib.
@@ -410,47 +430,126 @@
 
   /** Normalise a phone number or e-mail address for matching, or null. */
   function contactKey(identifier) {
-    if (!identifier || typeof identifier !== 'string') return null;
-    var value = trim(identifier);
+    var value = cleanName(identifier);
+    if (!value) return null;
     if (value.indexOf('@') !== -1) return 'e:' + asciiLower(value);
     var digits = value.replace(/[^0-9]/g, '');
     if (digits) return 'p:' + digits.slice(-10);
     return null;
   }
 
+  // First code point of every block of ten Unicode decimal digits (general
+  // category Nd, Unicode 17). Spelled out so that both engines agree whatever
+  // Unicode version their runtime ships.
+  var DIGIT_BLOCKS = [
+    0x30, 0x660, 0x6F0, 0x7C0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66,
+    0xDE6, 0xE50, 0xED0, 0xF20, 0x1040, 0x1090, 0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90,
+    0x1B50, 0x1BB0, 0x1C40, 0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, 0xA9F0, 0xAA50, 0xABF0,
+    0xFF10, 0x104A0, 0x10D30, 0x10D40, 0x11066, 0x110F0, 0x11136, 0x111D0, 0x112F0, 0x11450,
+    0x114D0, 0x11650, 0x116C0, 0x116D0, 0x116DA, 0x11730, 0x118E0, 0x11950, 0x11BF0, 0x11C50,
+    0x11D50, 0x11DA0, 0x11DE0, 0x11F50, 0x16130, 0x16A60, 0x16AC0, 0x16B50, 0x16D70, 0x1CCF0,
+    0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6, 0x1E140, 0x1E2F0, 0x1E4F0, 0x1E5F1, 0x1E950,
+    0x1FBF0
+  ];
+  var DIGITS = (function () {
+    var set = new Set();
+    DIGIT_BLOCKS.forEach(function (start) { for (var i = 0; i < 10; i++) set.add(start + i); });
+    return set;
+  })();
+  var RUN_ENDS = '<>()[]"\',;:';
+
   /**
-   * The label for a sender who has no contact name. A recap is made to be
-   * shared, so a raw phone number or e-mail address never goes into it
-   * (docs/SCHEMA.md 2):
-   *  - a phone number (only digits and + - ( ) . / and spaces, with at least
-   *    7 digits) becomes an ellipsis and its last four digits;
-   *  - an e-mail address (no whitespace, something before the "@" and a dot
-   *    after it) becomes the part before the "@", cut to 16 characters;
-   *  - anything else (a name from an imported export, a short code) is left
-   *    as it is.
+   * Make a name safe to print, log and share (docs/SCHEMA.md 2, "Clean
+   * names"): line breaks and tabs become a space; control characters,
+   * bidirectional overrides and isolates, U+FFFC and U+FFFD are removed; runs
+   * of spaces collapse; the result is trimmed. Anything that is not a string
+   * gives "".
    */
-  function maskHandle(handle) {
-    var value = trim(String(handle));
-    var at = value.indexOf('@');
-    if (at !== -1) {
-      var local = value.slice(0, at);
-      var domain = value.slice(at + 1);
-      if (local && domain.indexOf('.') !== -1 && !hasSpace(value)) {
-        var points = Array.from(local);
-        return points.length <= 16 ? local : points.slice(0, 16).join('') + '\u2026';
-      }
-      return handle;
-    }
-    if (/^[0-9+\-(). \/]+$/.test(value)) {
-      var digits = value.replace(/[^0-9]/g, '');
-      if (digits.length >= 7) return '\u2026' + digits.slice(-4);
-    }
-    return handle;
+  function cleanName(name) {
+    if (typeof name !== 'string' || !name) return '';
+    var out = name.replace(/[\t\n\r\u2028\u2029]/g, ' ')
+      .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFFFC\uFFFD]/g, '');
+    if (out.indexOf('  ') !== -1) out = out.replace(/ {2,}/g, ' ');
+    return trim(out);
   }
 
-  function hasSpace(text) {
-    for (var i = 0; i < text.length; i++) if (isSpace(text.charCodeAt(i))) return true;
-    return false;
+  function endsRun(text, index) {
+    return isSpace(text.charCodeAt(index)) || RUN_ENDS.indexOf(text.charAt(index)) !== -1;
+  }
+
+  function maskDigits(label) {
+    var digits = [];
+    for (var i = 0; i < label.length; i++) {
+      var c = label.codePointAt(i);
+      if (c > 0xFFFF) i++;
+      if (c >= 48 && (c <= 57 || (c > 127 && DIGITS.has(c)))) digits.push(String.fromCodePoint(c));
+    }
+    return digits.length >= 7 ? '\u2026' + digits.slice(-4).join('') : label;
+  }
+
+  /**
+   * Hide a phone number or e-mail address inside a label. A recap is made to
+   * be shared, so a raw number or address never goes into it (docs/SCHEMA.md
+   * 2, "Masking"). Applied to every sender label that did not come from the
+   * contact table, and to chat names:
+   *  1. if the label contains an e-mail address (characters around an "@",
+   *     at least one on each side, up to whitespace or one of
+   *     < > ( ) [ ] " ' , ; :) it becomes the part before the "@", cut to 16
+   *     characters plus an ellipsis when longer;
+   *  2. if the label (or that local part) holds seven or more decimal digits
+   *     in total, in any script and whatever separates them, it becomes an
+   *     ellipsis plus its last four digits as written;
+   *  3. anything else is returned unchanged.
+   */
+  function maskHandle(label) {
+    label = String(label);
+    var at = label.indexOf('@');
+    while (at !== -1) {
+      var start = at;
+      while (start > 0 && !endsRun(label, start - 1)) start--;
+      var end = at + 1;
+      while (end < label.length && !endsRun(label, end)) end++;
+      if (start < at && end > at + 1) return maskDigits(truncate(label.slice(start, at), 16));
+      at = label.indexOf('@', at + 1);
+    }
+    return maskDigits(label);
+  }
+
+  /** A database integer, whatever type it arrived as (non-numbers count as 0). */
+  function toInt(value) {
+    if (typeof value === 'number') return value === value ? Math.trunc(value) : 0;
+    return value === true ? 1 : 0;
+  }
+
+  function flag(value) {
+    return toInt(value) !== 0;
+  }
+
+  /** Typed arrays and ArrayBuffers only: what a database hands over as a BLOB. */
+  function blob(value) {
+    if (value instanceof Uint8Array) return value;
+    if (typeof ArrayBuffer !== 'undefined') {
+      if (value instanceof ArrayBuffer) return new Uint8Array(value);
+      if (ArrayBuffer.isView(value)) return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    }
+    return null;
+  }
+
+  function rangeError(message) {
+    var error = new RangeError(message);
+    error.code = 'range';
+    return error;
+  }
+
+  /** A caller's value for an error message: cleaned, short, and never a second error. */
+  function show(value) {
+    if (typeof value === 'string') return JSON.stringify(truncate(cleanName(value), 60));
+    try {
+      var text = JSON.stringify(value);
+      return typeof text === 'string' ? truncate(text, 60) : typeof value;
+    } catch (error) {
+      return typeof value;                // a BigInt, or something that refers to itself
+    }
   }
 
   function ContactLookup() { this.table = new Map(); }
@@ -467,14 +566,15 @@
     var pairs;
     if (Array.isArray(contacts)) pairs = contacts;
     else if (typeof Map !== 'undefined' && contacts instanceof Map) pairs = Array.from(contacts.entries());
-    else pairs = Object.keys(contacts).map(function (k) { return [k, contacts[k]]; });
+    else if (typeof contacts === 'object') pairs = Object.keys(contacts).map(function (k) { return [k, contacts[k]]; });
+    else return lookup;                 // not a table of any kind
     for (var i = 0; i < pairs.length; i++) {
       var pair = pairs[i];
-      if (!pair) continue;
+      if (!Array.isArray(pair) || pair.length < 2) continue;
       var identifier = pair[0];
       var name = pair[1];
       if (typeof identifier !== 'string' || typeof name !== 'string') continue;
-      name = trim(name);
+      name = cleanName(name);
       var key = contactKey(identifier);
       if (!name || key === null) continue;
       var previous = lookup.table.get(key);
@@ -489,21 +589,28 @@
     this.cache = new Map();
   }
   Names.prototype.handle = function (handle) {
+    if (typeof handle !== 'string') return 'Unknown';
     var name = this.cache.get(handle);
     if (name === undefined) {
-      if (!handle) {
-        name = 'Unknown';
-      } else {
-        var key = contactKey(handle);
-        name = (key !== null && this.table.get(key)) || maskHandle(handle);
-      }
+      var key = contactKey(handle);
+      // labels that do not come from the contact table are cleaned and masked
+      name = (key !== null && this.table.get(key)) || maskHandle(cleanName(handle)) || 'Unknown';
       this.cache.set(handle, name);
     }
     return name;
   };
   Names.prototype.sender = function (row) {
-    return row.is_from_me ? this.me : this.handle(row.handle);
+    return flag(row.is_from_me) ? this.me : this.handle(row.handle);
   };
+
+  /** A chat's own name, cleaned and masked ("" when it has none). */
+  function chatLabel(displayName) {
+    return maskHandle(cleanName(displayName));
+  }
+
+  function ownerName(me) {
+    return cleanName(me) || 'Me';
+  }
 
   function distinct(names) {
     var seen = new Set();
@@ -528,23 +635,25 @@
 
   function resolveAll(names, handles) {
     var out = [];
+    if (!Array.isArray(handles)) return out;
     for (var i = 0; i < handles.length; i++) {
-      if (handles[i]) out.push(names.handle(handles[i]));
+      if (typeof handles[i] === 'string' && handles[i]) out.push(names.handle(handles[i]));
     }
     return distinct(out);
   }
 
   /**
-   * The chat's name: displayName when it has one, otherwise the first names
-   * of up to three members (in the order given, the owner left out) joined
-   * with ", " plus " & N more".
+   * The chat's name: displayName (cleaned, and masked if somebody named the
+   * chat after a phone number or an address) when it has one, otherwise the
+   * first names of up to three members (in the order given, the owner left
+   * out) joined with ", " plus " & N more".
    */
   function chatDisplayName(displayName, participants, contacts, me) {
-    var name = trim(displayName || '');
+    var name = chatLabel(displayName);
     if (name) return name;
-    me = me || 'Me';
+    me = ownerName(me);
     var names = new Names(me, buildContactLookup(contacts));
-    return fallbackName(resolveAll(names, participants || []), me);
+    return fallbackName(resolveAll(names, participants), me);
   }
 
   // ------------------------------------------------------------------ //
@@ -636,12 +745,12 @@
 
   function parseIso(value, what) {
     var match = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
-    if (!match) throw new RangeError(what + ' must be a YYYY-MM-DD date, got ' + JSON.stringify(value));
+    if (!match) throw rangeError(what + ' must be a YYYY-MM-DD date, got ' + show(value));
     var y = Number(match[1]), m = Number(match[2]), d = Number(match[3]);
     var day = daysFromCivil(y, m, d);
     var back = civilFromDays(day);
     if (back[0] !== y || back[1] !== m || back[2] !== d) {
-      throw new RangeError(what + ' is not a real calendar date: ' + JSON.stringify(value));
+      throw rangeError(what + ' is not a real calendar date: ' + show(value));
     }
     return day;
   }
@@ -658,7 +767,7 @@
         hour: 'numeric', minute: 'numeric', second: 'numeric'
       });
     } catch (error) {
-      throw new RangeError('unknown time zone ' + JSON.stringify(tz));
+      throw rangeError('unknown time zone ' + show(tz));
     }
     return function (t) {
       var parts = format.formatToParts(new Date(t * 1000));
@@ -715,14 +824,15 @@
       var startDay = start != null ? parseIso(start, 'start') : null;
       var endDay = end != null ? parseIso(end, 'end') : today;
       if (startDay !== null && startDay > endDay) {
-        throw new RangeError('the period starts after it ends: ' + start + ' > ' + iso(endDay));
+        throw rangeError('the period starts after it ends: ' + show(start) + ' > ' + iso(endDay));
       }
       return [startDay, endDay, label || null];
     }
     var now = civilFromDays(today);
     if (year == null) year = now[1] === 1 ? now[0] - 1 : now[0];
-    year = Math.trunc(Number(year));
-    if (!isFinite(year)) throw new RangeError('year must be a number');
+    if (typeof year !== 'number' || year !== Math.trunc(year) || year < 1 || year > 9999) {
+      throw rangeError('the year must be a whole number between 1 and 9999, got ' + show(year));
+    }
     var last = daysFromCivil(year, 12, 31);
     return [daysFromCivil(year, 1, 1), year === now[0] ? today : last, label || String(year)];
   }
@@ -872,9 +982,13 @@
    */
   function computeStats(rows, options) {
     var opts = options || {};
-    var me = opts.me || 'Me';
+    var me = ownerName(opts.me);
     var names = new Names(me, buildContactLookup(opts.contacts));
-    var now = Math.floor(opts.now == null ? Date.now() / 1000 : Number(opts.now));
+    var now = opts.now == null ? Date.now() / 1000 : opts.now;
+    if (typeof now !== 'number' || !(now >= 0 && now <= MAX_UNIX)) {
+      throw rangeError('now must be Unix seconds, got ' + show(now));
+    }
+    now = Math.floor(now);
     if (!Array.isArray(rows)) rows = Array.from(rows || []);
     var count = rows.length;
     var i, row, sec;
@@ -884,7 +998,8 @@
     var fracs = new Float64Array(count);
     var lo = now, hi = now;
     for (i = 0; i < count; i++) {
-      if (splitDate(rows[i].date)) {
+      row = rows[i];
+      if (row && typeof row === 'object' && splitDate(row.date)) {
         sec = dateSec;
         secs[i] = sec;
         fracs[i] = dateFrac;
@@ -898,7 +1013,8 @@
     var offsets = table.offsets;
 
     var today = Math.floor((now + table.at(now)) / DAY);
-    var period = resolvePeriod(today, opts.year, !!opts.all_time, opts.start, opts.end, opts.label);
+    var period = resolvePeriod(today, opts.year, !!opts.all_time, opts.start, opts.end,
+      cleanName(opts.label) || null);
     var startDay = period[0];
     var endDay = period[1];
     var label = period[2];
@@ -907,16 +1023,16 @@
     var taps = [];
     var kind;
     for (i = 0; i < count; i++) {
-      kind = rows[i].associated_message_type;
-      if (!kind || kind < 2000 || kind > 3007 || (kind > 2007 && kind < 3000)) continue;
       sec = secs[i];
       if (sec < 0) continue;
+      kind = toInt(rows[i].associated_message_type);
+      if (kind < 2000 || kind > 3007 || (kind > 2007 && kind < 3000)) continue;
       if (Math.floor((sec + table.at(sec)) / DAY) > endDay) continue;   // after the period ended
       taps.push(i);
     }
     taps.sort(function (a, b) {
       return (secs[a] - secs[b]) || (fracs[a] - fracs[b]) ||
-        ((rows[a].rowid || 0) - (rows[b].rowid || 0)) || (a - b);
+        (toInt(rows[a].rowid) - toInt(rows[b].rowid)) || (a - b);
     });
     // one tapback per person per message part: the key keeps the "p:N/" or
     // "bp:" prefix, the message is whatever follows it
@@ -924,9 +1040,9 @@
     for (i = 0; i < taps.length; i++) {
       row = rows[taps[i]];
       var target = row.associated_message_guid;
-      if (!target) continue;
+      if (typeof target !== 'string' || !target) continue;
       var reactor = names.sender(row);
-      kind = row.associated_message_type;
+      kind = toInt(row.associated_message_type);
       var perTarget = state.get(target);
       if (kind >= 3000) {
         if (perTarget) perTarget.delete(reactor);
@@ -965,9 +1081,9 @@
       sec = secs[i];
       if (sec < 0) continue;
       row = rows[i];
-      kind = row.associated_message_type;
-      if (kind && kind >= 1000) continue;           // tapbacks, stickers, poll votes
-      if (row.item_type) continue;                  // group events
+      kind = toInt(row.associated_message_type);
+      if (kind >= 1000) continue;                   // tapbacks, stickers, poll votes
+      if (flag(row.item_type)) continue;            // group events
       if (!(sec >= segLo && sec < segHi)) {
         var s = table.index(sec);
         segOff = offsets[s];
@@ -978,18 +1094,20 @@
       var day = Math.floor(local / DAY);
       if (day > endDay || (startDay !== null && day < startDay)) continue;
       var text = row.text;
-      if (text == null || text.length === 0) {
-        var body = row.attributedBody;
+      if (typeof text !== 'string') {
+        // raw UTF-8 bytes are fine; any other type is not text at all
+        var raw = blob(text);
+        text = raw && raw.length ? utf8(raw, 0, raw.length) : null;
+      }
+      if (!text) {
+        var body = blob(row.attributedBody);
         text = body ? decodeAttributedBody(body) : null;
-      } else if (typeof text !== 'string') {
-        var raw = toBytes(text);
-        text = raw ? utf8(raw, 0, raw.length) : String(text);
       }
       text = cleanText(text);
-      var hasAttachment = row.cache_has_attachments ? 1 : 0;
-      if (!text && !hasAttachment && !row.keep_empty) continue;   // unsent or empty
+      var hasAttachment = flag(row.cache_has_attachments) ? 1 : 0;
+      if (!text && !hasAttachment && !flag(row.keep_empty)) continue;   // unsent or empty
 
-      var sender = row.is_from_me ? me : names.handle(row.handle);
+      var sender = flag(row.is_from_me) ? me : names.handle(row.handle);
       var counters = people.get(sender);
       if (!counters) { counters = [0, 0, 0, 0, 0, 0, 0]; people.set(sender, counters); }
       var nWords = countWords(text);
@@ -1003,11 +1121,11 @@
       byHour[hour]++;
       dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
       if (firstDay === null || day < firstDay) firstDay = day;
-      if (haveStanding && row.guid) {
+      if (haveStanding && typeof row.guid === 'string') {
         var marks = standing.get(row.guid);
         if (marks) {
           reacted.push({
-            sec: sec, frac: fracs[i], rowid: row.rowid || 0, index: i, sender: sender, day: day,
+            sec: sec, frac: fracs[i], rowid: toInt(row.rowid), index: i, sender: sender, day: day,
             text: text, attachment: hasAttachment, marks: marks, kinds: null
           });
         }
@@ -1112,9 +1230,9 @@
 
     var members = new Set(people.keys());
     members.add(me);
-    var resolved = resolveAll(names, opts.participants || []);
+    var resolved = resolveAll(names, opts.participants);
     resolved.forEach(function (name) { members.add(name); });
-    var chatName = trim(opts.chat_name || '');
+    var chatName = chatLabel(opts.chat_name);
     if (!chatName) chatName = fallbackName(resolved, me);
 
     var byKindObject = {};
@@ -1152,10 +1270,91 @@
       awards: awards(people),
       meta: {
         generator: opts.generator || GENERATOR,
-        source: opts.source || 'chat.db',
+        source: cleanName(opts.source) || 'chat.db',
         generated: iso(today)
       }
     };
+  }
+
+  // ------------------------------------------------------------------ //
+  // short names
+  // ------------------------------------------------------------------ //
+
+  function isRecord(value) {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
+  }
+
+  /** Every place a finished stats object names a person: [container, key]. */
+  function nameSlots(stats) {
+    var slots = [];
+    function add(container, key) {
+      if (isRecord(container) && typeof container[key] === 'string') slots.push([container, key]);
+    }
+    function each(items, key) {
+      if (Array.isArray(items)) items.forEach(function (item) { add(item, key); });
+    }
+    if (!isRecord(stats)) return slots;
+    each(stats.senders, 'name');
+    add(isRecord(stats.late_night) ? stats.late_night.top : null, 'name');
+    each(stats.most_reacted, 'sender');
+    if (isRecord(stats.reactions)) {
+      add(stats.reactions.top_giver, 'name');
+      add(stats.reactions.top_receiver, 'name');
+    }
+    each(stats.awards, 'winner');
+    return slots;
+  }
+
+  /** Map(full name -> short name) for the people of one recap (see shortNames). */
+  function shortForms(names, me) {
+    if (me == null) me = 'Me';
+    var people = distinct(names);
+    var fixed = new Set(people.filter(function (name) { return name === me || name.charAt(0) === '\u2026'; }));
+    var result = new Map();
+    var groups = new Map();
+    people.forEach(function (name) {
+      var words = splitWords(name);
+      var label = fixed.has(name) || !words.length ? name : words[0];
+      result.set(name, label);
+      if (!groups.has(label)) groups.set(label, []);
+      groups.get(label).push(name);
+    });
+    groups.forEach(function (members) {
+      if (members.length < 2) return;
+      members.forEach(function (name) {       // same first word: "Sam R.", "Sam C."
+        var words = splitWords(name);
+        if (!fixed.has(name) && words.length) {
+          result.set(name, words[0] + ' ' + String.fromCodePoint(words[words.length - 1].codePointAt(0)) + '.');
+        }
+      });
+    });
+    var taken = new Map();
+    result.forEach(function (label) { taken.set(label, (taken.get(label) || 0) + 1); });
+    people.forEach(function (name) {          // still not unique: the full name
+      if (!fixed.has(name) && taken.get(result.get(name)) > 1) result.set(name, name);
+    });
+    return result;
+  }
+
+  /**
+   * A copy of a finished stats object with every person's name shortened
+   * (docs/SCHEMA.md 2, "Short names"). Contact names are the owner's private
+   * labels ("Dave plumber"), so what people see by default is the first word.
+   * `me` is the owner's name as it appears in the stats (default "Me"); it
+   * and masked labels (starting with an ellipsis) are left alone. Two
+   * different people with the same first word become "Sam R." and "Sam C.";
+   * if that still collides they keep their full names. Names are replaced
+   * consistently in senders, late_night.top, most_reacted[].sender,
+   * reactions.top_giver, reactions.top_receiver and awards[].winner. The
+   * input is not modified; computeStats itself always returns full names.
+   */
+  function shortNames(stats, me) {
+    if (stats === undefined) return stats;
+    var out = jsonCopy(stats);
+    var slots = nameSlots(out);
+    var mapping = shortForms(slots.map(function (slot) { return slot[0][slot[1]]; }), me);
+    slots.forEach(function (slot) { slot[0][slot[1]] = mapping.get(slot[0][slot[1]]); });
+    return out;
   }
 
   // ------------------------------------------------------------------ //
@@ -1244,7 +1443,7 @@
         return codec;
       } catch (error) { /* not Node */ }
     }
-    throw new Error('No DEFLATE implementation found: load js/vendor/fflate.min.js before engine.js');
+    throw coded('no_codec', 'No DEFLATE implementation found: load js/vendor/fflate.min.js before engine.js');
   }
 
   /** Compact JSON; identical to the Python engine's canonical_json(). */
@@ -1252,28 +1451,54 @@
     return JSON.stringify(stats);
   }
 
+  /** JSON text of plain data. Throws an Error with code "bad_stats" for anything else. */
+  function jsonText(stats) {
+    var text;
+    try { text = JSON.stringify(stats); } catch (error) { text = undefined; }   // a BigInt, a cycle
+    if (typeof text !== 'string') {
+      throw coded('bad_stats', 'a recap must be plain JSON data (objects, lists, text and numbers)');
+    }
+    return text;
+  }
+
+  function jsonCopy(stats) {
+    return JSON.parse(jsonText(stats));
+  }
+
   /** Stats object -> base64url(raw DEFLATE(UTF-8 JSON)) without padding. */
   function encodePayload(stats) {
-    var raw = new TextEncoder().encode(canonicalJson(stats));
+    var raw = new TextEncoder().encode(jsonText(stats));
     return base64urlEncode(getCodec().deflateRaw(raw));
   }
 
-  /** Inverse of encodePayload. Throws Error on anything that is not a payload. */
+  function coded(code, message) {
+    var error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  /** Inverse of encodePayload. Throws an Error with code "bad_payload" on anything else. */
   function decodePayload(payload) {
-    if (typeof payload !== 'string' || !payload) throw new Error('empty payload');
-    var packed = base64urlDecode(trim(payload));
-    if (!packed.length) throw new Error('payload is not base64url');
+    if (typeof payload !== 'string' || !payload) throw coded('bad_payload', 'empty payload');
+    var packed;
+    try {
+      packed = base64urlDecode(trim(payload));
+    } catch (error) {
+      throw coded('bad_payload', 'payload is not base64url');
+    }
+    if (!packed.length) throw coded('bad_payload', 'payload is not base64url');
     var raw;
     try {
       raw = getCodec().inflateRaw(packed);
     } catch (error) {
-      throw new Error('payload is not raw DEFLATE data');
+      if (error && error.code === 'no_codec') throw error;
+      throw coded('bad_payload', 'payload is not raw DEFLATE data');
     }
-    if (raw.length > MAX_DECODED_BYTES) throw new Error('payload expands to too much data');
+    if (raw.length > MAX_DECODED_BYTES) throw coded('bad_payload', 'payload expands to too much data');
     try {
       return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
     } catch (error) {
-      throw new Error('payload does not contain JSON');
+      throw coded('bad_payload', 'payload does not contain JSON');
     }
   }
 
@@ -1298,15 +1523,15 @@
   /** Decode the stats carried by a share URL. */
   function statsFromUrl(url) {
     var payload = payloadFromUrl(url);
-    if (payload === null) throw new Error('no w1= payload in this URL');
+    if (payload === null) throw coded('bad_payload', 'no w1= payload in this URL');
     return decodePayload(payload);
   }
 
-  /** "No quotes" mode: blank every most_reacted[].text (in place). */
+  /** Blank every most_reacted[].text (in place): no message text. */
   function stripQuotes(stats) {
-    var list = stats.most_reacted || [];
+    var list = isRecord(stats) && Array.isArray(stats.most_reacted) ? stats.most_reacted : [];
     for (var i = 0; i < list.length; i++) {
-      if (list[i] && typeof list[i] === 'object') list[i].text = '';
+      if (isRecord(list[i])) list[i].text = '';
     }
     return stats;
   }
@@ -1316,18 +1541,19 @@
    * 1 delete awards[].detail; 2 truncate most_reacted[].text to 60 characters
    * plus an ellipsis; 3 keep the first 8 senders; 4 keep the first
    * most_reacted entry; 5 delete awards; 6 keep the first 5 senders.
+   * Sections that are missing or not of the expected type are left alone.
    */
   function applyTrimStep(stats, step) {
     var i, list;
     if (step === 1) {
-      list = stats.awards || [];
+      list = Array.isArray(stats.awards) ? stats.awards : [];
       for (i = 0; i < list.length; i++) {
-        if (list[i] && typeof list[i] === 'object') delete list[i].detail;
+        if (isRecord(list[i])) delete list[i].detail;
       }
     } else if (step === 2) {
-      list = stats.most_reacted || [];
+      list = Array.isArray(stats.most_reacted) ? stats.most_reacted : [];
       for (i = 0; i < list.length; i++) {
-        if (list[i] && typeof list[i].text === 'string') {
+        if (isRecord(list[i]) && typeof list[i].text === 'string') {
           list[i].text = truncate(list[i].text, SHORT_QUOTE);
         }
       }
@@ -1340,7 +1566,7 @@
     } else if (step === 6) {
       if (Array.isArray(stats.senders)) stats.senders = stats.senders.slice(0, 5);
     } else {
-      throw new RangeError('there is no trim step ' + step);
+      throw rangeError('there is no trim step ' + step);
     }
     return stats;
   }
@@ -1348,7 +1574,7 @@
   function linkOptions(options) {
     var o = options || {};
     return {
-      quotes: o.quotes !== false && o.no_quotes !== true && o.noQuotes !== true,
+      quotes: !!o.quotes && o.no_quotes !== true && o.noQuotes !== true,
       baseUrl: o.base_url || o.baseUrl || BASE_URL,
       maxLength: o.max_length || o.maxLength || MAX_URL_LENGTH
     };
@@ -1356,15 +1582,19 @@
 
   /**
    * Build the share link, trimming the stats only as far as needed.
-   * options: {quotes: false} leaves message text out of the link ("no
-   * quotes"), base_url, max_length (default 4800). Returns
-   * {url, length, steps, stats}: `steps` ladder steps were applied (0 = none)
-   * and `stats` is the copy that was encoded; the input is never modified.
-   * Throws an Error with code "link_too_long" when even step 6 is not enough.
+   *
+   * Message text is opt-in: unless options.quotes is true every
+   * most_reacted[].text is blanked before encoding, so nothing puts message
+   * content into a link by default. Other options: base_url, max_length
+   * (default 4800). Returns {url, length, steps, stats}: `steps` ladder steps
+   * were applied (0 = none) and `stats` is the copy that was encoded; the
+   * input is never modified. Throws an Error with code "link_too_long" when
+   * even step 6 is not enough, "bad_stats" when `stats` is not an object.
    */
   function fitLink(stats, options) {
+    if (!isRecord(stats)) throw coded('bad_stats', 'a recap must be an object');
     var o = linkOptions(options);
-    var trimmed = JSON.parse(JSON.stringify(stats));
+    var trimmed = jsonCopy(stats);
     if (!o.quotes) stripQuotes(trimmed);
     var step = 0;
     for (;;) {
@@ -1373,18 +1603,16 @@
         return { url: url, length: url.length, steps: step, stats: trimmed };
       }
       if (step === TRIM_STEPS) {
-        var error = new Error('This recap does not fit in a link: ' + url.length +
+        throw coded('link_too_long', 'This recap does not fit in a link: ' + url.length +
           ' characters after every trimming step, and the limit is ' + o.maxLength +
-          '. Try a shorter chat name or the no-quotes option.');
-        error.code = 'link_too_long';
-        throw error;
+          '. Try a shorter chat name.');
       }
       step += 1;
       applyTrimStep(trimmed, step);
     }
   }
 
-  /** The share URL for `stats`; see fitLink for the options. */
+  /** The share URL for `stats`; see fitLink for the options (no message text by default). */
   function buildLink(stats, options) {
     return fitLink(stats, options).url;
   }
@@ -1401,6 +1629,8 @@
     chatDisplayName: chatDisplayName,
     contactKey: contactKey,
     maskHandle: maskHandle,
+    cleanName: cleanName,
+    shortNames: shortNames,
     buildContactLookup: buildContactLookup,
     cleanText: cleanText,
     countWords: countWords,
@@ -1424,6 +1654,7 @@
       offsetFunction: offsetFunction, Offsets: Offsets, resolvePeriod: resolvePeriod,
       round4: round4, hour12: hour12, personality: personality, awards: awards,
       fallbackName: fallbackName, Names: Names, distinct: distinct, resolveAll: resolveAll,
+      chatLabel: chatLabel, ownerName: ownerName, shortForms: shortForms, toInt: toInt, coded: coded,
       PERSONALITIES: PERSONALITIES, base64urlEncode: base64urlEncode,
       base64urlDecode: base64urlDecode
     }

@@ -5,7 +5,7 @@ Everything here is re-exported from the ``wrapped`` package::
     import wrapped
 
     stats = wrapped.compute_stats("~/Library/Messages/chat.db", "Dinner Club", year=2026)
-    url = wrapped.build_link(stats, quotes=False)
+    url = wrapped.build_link(wrapped.short_names(stats))     # no message text by default
 
     with wrapped.open_source(backup="/path/to/MobileSync/Backup") as source:
         for chat in source.chats():
@@ -28,7 +28,9 @@ from . import stats as _stats
 from .typedstream import decode_attributed_body
 
 __all__ = ["Source", "open_source", "list_chats", "compute_stats", "decode_text",
-           "chat_for_message", "build_link"]
+           "chat_for_message", "build_link", "short_names"]
+
+short_names = _stats.short_names
 
 Contacts = Union[None, bool, str, Iterable[Any], Mapping[str, str]]
 
@@ -179,13 +181,17 @@ def decode_text(text: Optional[str], attributed_body: Optional[bytes] = None,
     placeholders (U+FFFC) and replacement characters are removed and the
     result is trimmed, exactly as the statistics see it. Returns ``""`` when
     the row has no text.
+
+    Cells of an unexpected type are safe to pass straight from a query: raw
+    UTF-8 bytes are decoded, and anything that is neither text nor bytes (a
+    number in a damaged or crafted database) counts as "no text", exactly as
+    in :func:`wrapped.stats.compute_stats`. Never raises.
     """
-    if not text and attributed_body:
-        text = decode_attributed_body(attributed_body)
+    if text.__class__ is not str:
+        text = (bytes(text).decode("utf-8", "replace")
+                if isinstance(text, (bytes, bytearray, memoryview)) else "")
     if not text:
-        return ""
-    if not isinstance(text, str):
-        text = bytes(text).decode("utf-8", "replace")
+        text = decode_attributed_body(attributed_body) or ""
     return _stats.clean_text(text) if clean else text
 
 
@@ -209,14 +215,15 @@ def chat_for_message(db: Union[str, sqlite3.Connection, Source, None],
         conn.close()
 
 
-def build_link(stats: Dict[str, Any], quotes: bool = True, base_url: Optional[str] = None,
+def build_link(stats: Dict[str, Any], quotes: bool = False, base_url: Optional[str] = None,
                max_length: Optional[int] = None) -> str:
     """The share URL for a stats object (docs/SCHEMA.md section 5).
 
-    The stats travel in the URL fragment. If the URL would exceed 4,800
-    characters a trimmed copy is encoded instead (the six-step ladder of the
-    contract); ``quotes=False`` first blanks the text of the most-reacted
-    messages. Raises :class:`wrapped.LinkTooLongError` if nothing fits.
+    The stats travel in the URL fragment. Message text is opt-in: the text of
+    the most-reacted messages is only kept with ``quotes=True``. If the URL
+    would exceed 4,800 characters a trimmed copy is encoded instead (the
+    six-step ladder of the contract). Raises :class:`wrapped.LinkTooLongError`
+    if nothing fits.
     """
     return _payload.build_link(
         stats, quotes=quotes,

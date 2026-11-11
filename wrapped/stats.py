@@ -23,11 +23,26 @@ Messages column names, so a row is literally a ``SELECT`` result::
     associated_message_guid  "p:0/<guid>", "bp:<guid>" or "<guid>"
     keep_empty               1 to count a row that has neither text nor an
                              attachment (imported rows are always messages)
+
+Values of the wrong type never raise, and both engines read them the same way:
+a number is used as an integer (truncated towards zero) and anything that is
+not a number or ``True`` counts as 0; ``text`` is a ``str`` or UTF-8 bytes and
+``attributedBody`` is bytes; ``guid``, ``handle`` and
+``associated_message_guid`` are strings (anything else is "not there"); a
+``date`` is an int, a float (the fraction is dropped) or a decimal string; rows
+that are not mappings are skipped. :mod:`wrapped.db` casts every column in
+SQL, so cells of an unexpected type already arrive in this shape.
+
+Every name that reaches the stats is cleaned (:func:`clean_name`) and, unless
+it comes from the contact table, masked (:func:`mask_handle`).
+:func:`short_names` turns a finished stats object into the first-name form
+that is meant to be shared.
 """
 
 from __future__ import annotations
 
 import bisect
+import copy
 import datetime as _dt
 import math
 import re
@@ -39,6 +54,7 @@ from .typedstream import decode_attributed_body
 
 __all__ = [
     "compute_stats", "chat_display_name", "contact_key", "build_contact_lookup", "ContactLookup",
+    "clean_name", "mask_handle", "short_names",
     "clean_text", "count_words", "resolve_period", "GENERATOR", "KINDS",
 ]
 
@@ -62,7 +78,7 @@ _WS_RUN = re.compile("[" + re.escape(WHITESPACE) + "]+")
 # characters on which str.split() and the ECMAScript set disagree
 _SPLIT_DIFFERS = re.compile("[\x1c-\x1f\x85\ufeff]")
 _NOT_DIGIT = re.compile("[^0-9]")
-_PHONE_LIKE = re.compile(r"[0-9+\-(). /]+")
+_DATE_DIGITS = re.compile(r"\+?[0-9]+\Z")
 _ASCII_LOWER = {c: c + 32 for c in range(65, 91)}
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
@@ -145,9 +161,9 @@ def contact_key(identifier: Optional[str]) -> Optional[str]:
     E-mail (anything with ``@``): ASCII-lowercased. Phone: its last 10 ASCII
     digits. Returns ``None`` for anything else.
     """
-    if not identifier:
+    value = clean_name(identifier)
+    if not value:
         return None
-    value = identifier.strip(WHITESPACE)
     if "@" in value:
         return "e:" + value.translate(_ASCII_LOWER)
     digits = _NOT_DIGIT.sub("", value)
@@ -156,31 +172,81 @@ def contact_key(identifier: Optional[str]) -> Optional[str]:
     return None
 
 
-def mask_handle(handle: str) -> str:
-    """The label for a sender who has no contact name.
+# First code point of every block of ten Unicode decimal digits (general
+# category Nd, Unicode 17). Spelled out so that both engines agree whatever
+# Unicode version their runtime ships.
+_DIGIT_BLOCKS = (
+    0x30, 0x660, 0x6F0, 0x7C0, 0x966, 0x9E6, 0xA66, 0xAE6, 0xB66, 0xBE6, 0xC66, 0xCE6, 0xD66,
+    0xDE6, 0xE50, 0xED0, 0xF20, 0x1040, 0x1090, 0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90,
+    0x1B50, 0x1BB0, 0x1C40, 0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, 0xA9F0, 0xAA50, 0xABF0,
+    0xFF10, 0x104A0, 0x10D30, 0x10D40, 0x11066, 0x110F0, 0x11136, 0x111D0, 0x112F0, 0x11450,
+    0x114D0, 0x11650, 0x116C0, 0x116D0, 0x116DA, 0x11730, 0x118E0, 0x11950, 0x11BF0, 0x11C50,
+    0x11D50, 0x11DA0, 0x11DE0, 0x11F50, 0x16130, 0x16A60, 0x16AC0, 0x16B50, 0x16D70, 0x1CCF0,
+    0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, 0x1D7F6, 0x1E140, 0x1E2F0, 0x1E4F0, 0x1E5F1, 0x1E950,
+    0x1FBF0,
+)
+_DIGITS = frozenset(chr(start + i) for start in _DIGIT_BLOCKS for i in range(10))
+_RUN_ENDS = frozenset(WHITESPACE + "<>()[]\"',;:")
 
-    A recap is made to be shared, so a raw phone number or e-mail address
-    never goes into it (docs/SCHEMA.md 2):
+# clean_name(): tab, line breaks and the Unicode line/paragraph separators
+# become a space; other control characters, bidirectional overrides and
+# isolates, and the object/replacement characters are dropped.
+_NAME_TABLE = {c: None for c in list(range(0x00, 0x20)) + list(range(0x7F, 0xA0))
+               + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A)) + [0xFFFC, 0xFFFD]}
+_NAME_TABLE.update({c: " " for c in (0x09, 0x0A, 0x0D, 0x2028, 0x2029)})
+_SPACES = re.compile(" {2,}")
 
-    - a phone number (only digits and ``+ - ( ) . /`` and spaces, with at
-      least 7 digits) becomes an ellipsis and its last four digits;
-    - an e-mail address (no whitespace, something before the ``@`` and a dot
-      after it) becomes the part before the ``@``, cut to 16 characters;
-    - anything else (a name from an imported export, a short code) is left
-      as it is.
+
+def clean_name(name: Any) -> str:
+    """Make a name safe to print, log and share (docs/SCHEMA.md 2, "Clean
+    names"): line breaks and tabs become a space, control characters,
+    bidirectional overrides, U+FFFC and U+FFFD are removed, runs of spaces
+    collapse and the result is trimmed. Anything that is not a string gives
+    ``""``."""
+    if name.__class__ is not str or not name:
+        return ""
+    name = name.translate(_NAME_TABLE)
+    if "  " in name:
+        name = _SPACES.sub(" ", name)
+    return name.strip(WHITESPACE)
+
+
+def _mask_digits(label: str) -> str:
+    digits = [ch for ch in label if ch in _DIGITS]
+    if len(digits) >= 7:
+        return "\u2026" + "".join(digits[-4:])
+    return label
+
+
+def mask_handle(label: str) -> str:
+    """Hide a phone number or e-mail address inside a label.
+
+    A recap is made to be shared, so a raw number or address never goes into
+    it (docs/SCHEMA.md 2, "Masking"). The rule is applied to every sender
+    label that did not come from the contact table and to chat names:
+
+    1. if the label contains an e-mail address (characters around an ``@``,
+       at least one on each side, up to whitespace or one of
+       ``< > ( ) [ ] " ' , ; :``) it becomes the part before the ``@``, cut
+       to 16 characters plus an ellipsis when longer;
+    2. if the label (or that local part) holds seven or more decimal digits
+       in total, in any script and whatever separates them, it becomes an
+       ellipsis plus its last four digits as written;
+    3. anything else is returned unchanged.
     """
-    value = handle.strip(WHITESPACE)
-    at = value.find("@")
-    if at != -1:
-        local, domain = value[:at], value[at + 1:]
-        if local and "." in domain and not _WS_RUN.search(value):
-            return local if len(local) <= 16 else local[:16] + "\u2026"
-        return handle
-    if _PHONE_LIKE.fullmatch(value):
-        digits = _NOT_DIGIT.sub("", value)
-        if len(digits) >= 7:
-            return "\u2026" + digits[-4:]
-    return handle
+    at = label.find("@")
+    while at != -1:
+        start = at
+        while start > 0 and label[start - 1] not in _RUN_ENDS:
+            start -= 1
+        end = at + 1
+        while end < len(label) and label[end] not in _RUN_ENDS:
+            end += 1
+        if start < at and end > at + 1:
+            local = label[start:at]
+            return _mask_digits(local if len(local) <= 16 else local[:16] + "\u2026")
+        at = label.find("@", at + 1)
+    return _mask_digits(label)
 
 
 class ContactLookup(dict):
@@ -195,14 +261,19 @@ def build_contact_lookup(contacts: Any) -> "ContactLookup":
     if isinstance(contacts, ContactLookup):
         return contacts
     lookup = ContactLookup()
-    if not contacts:
+    if not contacts or isinstance(contacts, (str, bytes)):
         return lookup
-    pairs = contacts.items() if isinstance(contacts, Mapping) else contacts
+    try:
+        pairs = list(contacts.items() if isinstance(contacts, Mapping) else contacts)
+    except TypeError:                   # not a table of any kind
+        return lookup
     for pair in pairs:
-        identifier, name = pair[0], pair[1]
-        if not isinstance(identifier, str) or not isinstance(name, str):
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
             continue
-        name = name.strip(WHITESPACE)
+        identifier, name = pair[0], pair[1]
+        if identifier.__class__ is not str or name.__class__ is not str:
+            continue
+        name = clean_name(name)
         key = contact_key(identifier)
         if not name or key is None:
             continue
@@ -213,45 +284,75 @@ def build_contact_lookup(contacts: Any) -> "ContactLookup":
 
 
 class _Names:
-    """handle -> display name, with the owner and the contact table applied."""
+    """handle -> display name, with the owner and the contact table applied.
+    Labels that do not come from the contact table are cleaned and masked."""
 
     def __init__(self, me: str, lookup: Dict[str, str]):
         self.me = me
         self.lookup = lookup
         self.cache: Dict[Any, str] = {}
 
-    def handle(self, handle: Optional[str]) -> str:
+    def handle(self, handle: Any) -> str:
+        if handle.__class__ is not str:
+            return "Unknown"
         name = self.cache.get(handle)
         if name is None:
-            if not handle:
-                name = "Unknown"
-            else:
-                key = contact_key(handle)
-                name = (self.lookup.get(key) if key else None) or mask_handle(handle)
+            key = contact_key(handle)
+            name = self.lookup.get(key) if key else None
+            if not name:
+                name = mask_handle(clean_name(handle)) or "Unknown"
             self.cache[handle] = name
         return name
 
     def sender(self, row: Mapping[str, Any]) -> str:
-        if row.get("is_from_me"):
+        if _flag(row.get("is_from_me")):
             return self.me
         return self.handle(row.get("handle"))
 
 
+def _chat_label(display_name: Any) -> str:
+    """A chat's own name, cleaned and masked ("" when it has none)."""
+    return mask_handle(clean_name(display_name))
+
+
+def _owner_name(me: Any) -> str:
+    return clean_name(me) or "Me"
+
+
 def chat_display_name(display_name: Optional[str], participants: Optional[Sequence[str]],
                       contacts: Any = None, me: str = "Me") -> str:
-    """The chat's name: ``display_name`` when it has one, otherwise the first
-    names of up to three members (in the order given, the owner left out)
-    joined with ", " plus " & N more".
+    """The chat's name: ``display_name`` (cleaned, and masked if somebody
+    named the chat after a phone number or an address) when it has one,
+    otherwise the first names of up to three members (in the order given, the
+    owner left out) joined with ", " plus " & N more".
 
     ``contacts`` is anything :func:`build_contact_lookup` accepts, or the
     table it returned (pass that when naming many chats)."""
-    name = (display_name or "").strip(WHITESPACE)
+    name = _chat_label(display_name)
     if name:
         return name
     if not isinstance(contacts, ContactLookup):
         contacts = build_contact_lookup(contacts)
+    me = _owner_name(me)
     names = _Names(me, contacts)
-    return _fallback_name(_distinct(names.handle(h) for h in (participants or []) if h), me)
+    members = participants if isinstance(participants, (list, tuple)) else []
+    return _fallback_name(_distinct(names.handle(h) for h in members if h.__class__ is str and h), me)
+
+
+def _int(value: Any) -> int:
+    """A database integer, whatever type it arrived as (anything that is not
+    a number counts as 0, so both engines read odd input the same way)."""
+    if value is True:
+        return 1
+    if value.__class__ is int:
+        return value
+    if value.__class__ is float and value == value:
+        return int(value) if abs(value) < 1e18 else value      # +-inf compares like JavaScript's
+    return 0
+
+
+def _flag(value: Any) -> bool:
+    return (value if value.__class__ is int else _int(value)) != 0
 
 
 def _distinct(names: Iterable[str]) -> List[str]:
@@ -283,14 +384,22 @@ def _fallback_name(members: List[str], me: str) -> str:
 # --------------------------------------------------------------------------- #
 
 def _split_date(value: Any) -> Optional[Tuple[int, int]]:
-    """message.date -> (Unix seconds, nanoseconds within the second)."""
-    if value is None:
-        return None
-    if not isinstance(value, int):
-        try:
-            value = int(value)
-        except (TypeError, ValueError):
+    """message.date -> (Unix seconds, nanoseconds within the second).
+
+    Accepts an int, a float (truncated) or a string of ASCII digits; anything
+    else, zero and negative values are "no date"."""
+    kind = value.__class__
+    if kind is str:
+        text = value.strip(WHITESPACE)
+        if not _DATE_DIGITS.match(text):
             return None
+        value = int(text)
+    elif kind is float:
+        if value != value or value < 1 or value > 1e30:
+            return None
+        value = int(value)
+    elif kind is not int:
+        return None
     if value <= 0:
         return None
     if value > _NS_THRESHOLD:
@@ -413,7 +522,10 @@ def resolve_period(today: int, year: Optional[int] = None, all_time: bool = Fals
     this_year, month, _day = _civil_from_days(today)
     if year is None:
         year = this_year - 1 if month == 1 else this_year
-    year = int(year)
+    if year.__class__ is float and year == year and abs(year) < 1e6 and year == int(year):
+        year = int(year)
+    if year.__class__ is not int or not 1 <= year <= 9999:
+        raise ValueError("the year must be a whole number between 1 and 9999, got %r" % (year,))
     start_day = _days_from_civil(year, 1, 1)
     end_day = _days_from_civil(year, 12, 31)
     if year == this_year:
@@ -566,21 +678,30 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
     Returns a new ``dict`` with exactly the keys of docs/SCHEMA.md section 1.
     Raises ``ValueError`` for an unknown time zone or impossible dates.
     """
+    if options is not None and not isinstance(options, Mapping):
+        raise ValueError("options must be a mapping, got %s" % type(options).__name__)
     opts: Dict[str, Any] = dict(options or {})
     opts.update(kwargs)
-    me = opts.get("me") or "Me"
+    me = _owner_name(opts.get("me"))
     lookup = build_contact_lookup(opts.get("contacts"))
     names = _Names(me, lookup)
     now = opts.get("now")
-    now = int(time.time() if now is None else now)
+    if now is None:
+        now = time.time()
+    if now.__class__ not in (int, float) or now != now or not 0 <= now <= _MAX_UNIX:
+        raise ValueError("now must be Unix seconds, got %r" % (now,))
+    now = int(now)
     if not isinstance(rows, (list, tuple)):
-        rows = list(rows)
+        try:
+            rows = list(rows) if rows is not None else []
+        except TypeError:
+            raise ValueError("rows must be a list of message rows, got %s" % type(rows).__name__)
 
     # ---- pass 0: timestamps, and the range the time-zone table must cover --
     stamps: List[Optional[Tuple[int, int]]] = []
     lo = hi = now
     for row in rows:
-        stamp = _split_date(row.get("date"))
+        stamp = _split_date(row.get("date")) if isinstance(row, Mapping) else None
         stamps.append(stamp)
         if stamp is not None:
             sec = stamp[0]
@@ -594,32 +715,33 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
     today = (now + offset_at(now)) // _DAY
     start_day, end_day, label = resolve_period(
         today, opts.get("year"), bool(opts.get("all_time")), opts.get("start"), opts.get("end"),
-        opts.get("label"))
+        clean_name(opts.get("label")) or None)
 
     # ---- pass 1: tapbacks, in chronological order ---------------------------
     taps = []
     for index, row in enumerate(rows):
-        kind = row.get("associated_message_type")
-        if not kind or kind < 2000 or kind > 3007 or 2007 < kind < 3000:
-            continue
         stamp = stamps[index]
         if stamp is None:
+            continue
+        kind = row.get("associated_message_type")
+        if kind.__class__ is not int:
+            kind = _int(kind)
+        if kind < 2000 or kind > 3007 or 2007 < kind < 3000:
             continue
         sec, frac = stamp
         if (sec + offset_at(sec)) // _DAY > end_day:
             continue                    # added after the period ended
-        taps.append((sec, frac, row.get("rowid") or 0, index))
+        taps.append((sec, frac, _int(row.get("rowid")), index, kind))
     taps.sort()
     state: Dict[Tuple[str, str], int] = {}
-    for sec, frac, _rowid, index in taps:
+    for sec, frac, _rowid, index, kind in taps:
         row = rows[index]
         target = row.get("associated_message_guid")
-        if not target:
+        if target.__class__ is not str or not target:
             continue
         # one tapback per person per message part: the key keeps the "p:N/" or
         # "bp:" prefix, the message is whatever follows it
         key = (target, names.sender(row))
-        kind = row["associated_message_type"]
         if kind >= 3000:
             state.pop(key, None)
         else:
@@ -652,9 +774,11 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
             continue
         get = row.get
         kind = get("associated_message_type")
-        if kind and kind >= 1000:
+        if kind.__class__ is not int:
+            kind = _int(kind)
+        if kind >= 1000:
             continue                    # tapbacks, stickers, poll votes
-        if get("item_type"):
+        if _flag(get("item_type")):
             continue                    # group events
         sec = stamp[0]
         if not seg_lo <= sec < seg_hi:
@@ -667,17 +791,20 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
         if day > end_day or (start_day is not None and day < start_day):
             continue
         text = get("text")
+        if text.__class__ is not str:
+            # raw UTF-8 bytes are fine; any other type is not text at all
+            text = (bytes(text).decode("utf-8", "replace")
+                    if isinstance(text, (bytes, bytearray, memoryview)) else None)
         if not text:
             body = get("attributedBody")
-            text = decode_attributed_body(body) if body else None
-        elif not isinstance(text, str):
-            text = bytes(text).decode("utf-8", "replace")
+            text = (decode_attributed_body(body)
+                    if isinstance(body, (bytes, bytearray, memoryview)) else None)
         text = clean_text(text)
-        has_attachment = 1 if get("cache_has_attachments") else 0
-        if not text and not has_attachment and not get("keep_empty"):
+        has_attachment = 1 if _flag(get("cache_has_attachments")) else 0
+        if not text and not has_attachment and not _flag(get("keep_empty")):
             continue                    # unsent or empty
 
-        sender = me if get("is_from_me") else names.handle(get("handle"))
+        sender = me if _flag(get("is_from_me")) else names.handle(get("handle"))
         counters = people.get(sender)
         if counters is None:
             counters = people[sender] = [0, 0, 0, 0, 0, 0, 0]
@@ -698,9 +825,9 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
             first_day = day
         if get_standing is not None:
             guid = get("guid")
-            marks = get_standing(guid) if guid else None
+            marks = get_standing(guid) if guid.__class__ is str else None
             if marks:
-                reacted.append((sec, stamp[1], get("rowid") or 0, sender, day, text,
+                reacted.append((sec, stamp[1], _int(get("rowid")), sender, day, text,
                                 has_attachment, marks))
 
     # ---- standing tapbacks on those messages ---------------------------------
@@ -789,10 +916,12 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
 
     members = set(people)
     members.add(me)
-    participants = [h for h in (opts.get("participants") or []) if h]
+    participants = opts.get("participants")
+    participants = ([h for h in participants if h.__class__ is str and h]
+                    if isinstance(participants, (list, tuple)) else [])
     resolved = _distinct(names.handle(h) for h in participants)
     members.update(resolved)
-    chat_name = (opts.get("chat_name") or "").strip(WHITESPACE)
+    chat_name = _chat_label(opts.get("chat_name"))
     if not chat_name:
         chat_name = _fallback_name(resolved, me)
 
@@ -829,7 +958,92 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
         "awards": _awards(people),
         "meta": {
             "generator": opts.get("generator") or GENERATOR,
-            "source": opts.get("source") or "chat.db",
+            "source": clean_name(opts.get("source")) or "chat.db",
             "generated": _iso(today),
         },
     }
+
+
+# --------------------------------------------------------------------------- #
+# short names
+# --------------------------------------------------------------------------- #
+
+def _name_slots(stats: Any) -> List[Tuple[Dict[str, Any], str]]:
+    """Every place a finished stats object names a person: (container, key)."""
+    slots: List[Tuple[Dict[str, Any], str]] = []
+
+    def add(container: Any, key: str) -> None:
+        if isinstance(container, dict) and container.get(key).__class__ is str:
+            slots.append((container, key))
+
+    def each(items: Any, key: str) -> None:
+        if isinstance(items, list):
+            for item in items:
+                add(item, key)
+
+    if not isinstance(stats, dict):
+        return slots
+    each(stats.get("senders"), "name")
+    late = stats.get("late_night")
+    add(late.get("top") if isinstance(late, dict) else None, "name")
+    each(stats.get("most_reacted"), "sender")
+    reactions = stats.get("reactions")
+    if isinstance(reactions, dict):
+        add(reactions.get("top_giver"), "name")
+        add(reactions.get("top_receiver"), "name")
+    each(stats.get("awards"), "winner")
+    return slots
+
+
+def _words(name: str) -> List[str]:
+    return [word for word in _WS_RUN.split(name) if word]
+
+
+def short_forms(names: Iterable[str], me: str = "Me") -> Dict[str, str]:
+    """``{full name: short name}`` for the people of one recap (see
+    :func:`short_names` for the rule)."""
+    people = _distinct(names)
+    fixed = {name for name in people if name == me or name.startswith("\u2026")}
+    result: Dict[str, str] = {}
+    groups: Dict[str, List[str]] = {}
+    for name in people:
+        words = _words(name)
+        result[name] = name if name in fixed or not words else words[0]
+        groups.setdefault(result[name], []).append(name)
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        for name in members:            # same first word: "Sam R.", "Sam C."
+            words = _words(name)
+            if name not in fixed and words:
+                result[name] = "%s %s." % (words[0], words[-1][0])
+    taken: Dict[str, int] = {}
+    for label in result.values():
+        taken[label] = taken.get(label, 0) + 1
+    for name in people:                 # still not unique: the full name
+        if name not in fixed and taken[result[name]] > 1:
+            result[name] = name
+    return result
+
+
+def short_names(stats: Dict[str, Any], me: str = "Me") -> Dict[str, Any]:
+    """A copy of a finished stats object with every person's name shortened
+    (docs/SCHEMA.md 2, "Short names").
+
+    Contact names are the owner's private labels ("Dave plumber"), so what
+    people see by default is the first word. ``me`` is the owner's name as
+    it appears in the stats; it and masked labels (starting with an
+    ellipsis) are left alone. Two different people with the same first word
+    become "Sam R." and "Sam C."; if that still collides they keep their
+    full names. Names are replaced consistently in ``senders``,
+    ``late_night.top``, ``most_reacted[].sender``, ``reactions.top_giver``,
+    ``reactions.top_receiver`` and ``awards[].winner``. The input is not
+    modified; :func:`compute_stats` itself always returns full names.
+    """
+    out = copy.deepcopy(stats)
+    slots = _name_slots(out)
+    mapping = short_forms([container[key] for container, key in slots], me)
+    for container, key in slots:
+        container[key] = mapping[container[key]]
+    return out
+
