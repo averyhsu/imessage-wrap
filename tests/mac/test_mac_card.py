@@ -231,6 +231,35 @@ class FontsAndText(unittest.TestCase):
         if self.book.shaping:
             self.assertEqual(cl[1][1], family)
 
+    def test_bundled_faces_always_use_the_basic_layout_engine(self):
+        # so Latin text is set identically with or without the optional shaping library
+        from PIL import ImageFont
+
+        for role in card.FONT_FILES:
+            self.assertEqual(self.book.face(role, 40).layout_engine, ImageFont.Layout.BASIC, role)
+
+    def test_without_a_shaping_engine_sequences_are_simplified_not_garbled(self):
+        book = FontBook()
+        if not book.emoji_path:
+            self.skipTest("no colour emoji font on this machine")
+        book.shaping = False
+        thumbs = chr(0x1F44D) + chr(0x1F3FD)  # thumbs up + skin tone
+        family = chr(0x1F468) + chr(0x200D) + chr(0x1F469) + chr(0x200D) + chr(0x1F467)
+        heart = chr(0x2764) + chr(0xFE0F)
+        self.assertEqual(clusters(thumbs, book), [("emoji", chr(0x1F44D), None)])
+        self.assertEqual(clusters(family, book), [("emoji", chr(0x1F468) + chr(0x1F469) + chr(0x1F467), None)])
+        self.assertEqual(clusters(heart, book), [("emoji", chr(0x2764), None)])
+
+    def test_right_to_left_runs_are_put_in_visual_order_without_a_shaping_engine(self):
+        book = FontBook(emoji=False)
+        book.shaping = False
+        alef, bet, gimel = chr(0x5D0), chr(0x5D1), chr(0x5D2)
+        if book.fallback_for(0x5D0) is None:
+            self.skipTest("no font with Hebrew on this machine")
+        text = "".join(c[1] for c in clusters("ab " + alef + bet + " " + gimel + " cd", book))
+        self.assertEqual(text, "ab " + gimel + " " + bet + alef + " cd")
+        self.assertEqual("".join(c[1] for c in clusters("plain", book)), "plain")
+
     def test_control_characters_and_lone_joiners_are_dropped(self):
         cl = clusters("a\x00b" + chr(0x200D) + chr(0xFE0F) + "c", self.plain)
         self.assertEqual("".join(c[1] for c in cl), "abc")

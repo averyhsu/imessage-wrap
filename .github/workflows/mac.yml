@@ -60,13 +60,15 @@ jobs:
 
       - name: Tests (pytest)
         run: |
-          "$WORK/venv/bin/python" -m pytest tests/mac -v -rs
+          set -o pipefail
+          "$WORK/venv/bin/python" -m pytest tests/mac -v -rs 2>&1 | tee "$WORK/pytest.txt"
 
       - name: Tests again with plain unittest
         env:
           THREADBACK_TEST_OFFLINE: "1"   # the installer end-to-end already ran above
         run: |
-          "$WORK/venv/bin/python" -m unittest discover -s tests/mac
+          set -o pipefail
+          "$WORK/venv/bin/python" -m unittest discover -s tests/mac 2>&1 | tee "$WORK/unittest.txt"
 
       - name: Compile the AppleScript against the real Messages dictionary (compile only)
         run: |
@@ -140,6 +142,21 @@ jobs:
           test ! -e "$HOME/.threadback"
           test ! -e "$HOME/.local/bin/wrapped"
           test ! -e "$HOME/.local/bin/threadback"
+
+      - name: Evidence (what this run actually showed)
+        if: always()
+        run: |
+          {
+            echo "macOS $(sw_vers -productVersion), system $(/usr/bin/python3 --version 2>&1)"
+            "$WORK/venv/bin/python" -c "import PIL; from PIL import features; print('Pillow', PIL.__version__, '| raqm shaping:', features.check('raqm'))" || true
+            echo "pytest: $(tail -1 "$WORK/pytest.txt" 2>/dev/null)"
+            grep -E "^SKIPPED" "$WORK/pytest.txt" 2>/dev/null || true
+            echo "unittest: $(grep -E "^Ran [0-9]+ tests" "$WORK/unittest.txt" 2>/dev/null) $(tail -1 "$WORK/unittest.txt" 2>/dev/null)"
+            echo "osacompile: $(ls "$WORK/applescript" 2>/dev/null | tr '\n' ' ')"
+            echo "control (must not compile): $(cat "$WORK/applescript/control.err" 2>/dev/null | head -2 | tr '\n' ' ')"
+            echo "dry run: $(grep -E "card=" "$WORK/second-pass.txt" 2>/dev/null)"
+            echo "No step in this workflow asks Messages to send; the AppleScript is compiled, never run."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the cards
         if: always()

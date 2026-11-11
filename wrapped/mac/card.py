@@ -26,6 +26,7 @@ import os
 import random
 import struct
 import sys
+import unicodedata
 from functools import lru_cache
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence, Tuple
@@ -230,7 +231,11 @@ class FontBook:
         font = self._faces.get(key)
         if font is None:
             src = path or str(self.font_dir / FONT_FILES[role])
-            font = ImageFont.truetype(src, max(1, px), layout_engine=self.engine)
+            # The bundled faces always use the basic layout engine, so Latin text is
+            # set identically whether or not this machine has the optional shaping
+            # library. Emoji and fallback scripts use shaping when it is available.
+            engine = ImageFont.Layout.BASIC if path is None else self.engine
+            font = ImageFont.truetype(src, max(1, px), layout_engine=engine)
             self._faces[key] = font
         return font
 
@@ -310,7 +315,14 @@ def clusters(text: str, book: FontBook) -> List[Cluster]:
             seq = "".join(chars[i:j])
             if book.has_emoji(cp):
                 if not book.shaping:
-                    seq = "".join(c for c in seq if ord(c) not in (0x200D, 0xFE0F))
+                    # Without a shaping engine a sequence cannot be fused into one
+                    # glyph: show its parts, minus joiners, variation selectors and
+                    # skin-tone swatches (which would otherwise appear as squares).
+                    seq = "".join(
+                        c for c in seq
+                        if ord(c) not in (0x200D, 0xFE0F, 0x20E3) and not 0x1F3FB <= ord(c) <= 0x1F3FF
+                        and not 0xE0020 <= ord(c) <= 0xE007F
+                    )
                 out.append(("emoji", seq, None))
             elif book.in_primary(cp):
                 out.append(("text", ch, None))
@@ -336,7 +348,36 @@ def clusters(text: str, book: FontBook) -> List[Cluster]:
         cleaned.append(c)
     while cleaned and cleaned[-1][1] == " ":
         cleaned.pop()
+    if not book.shaping:
+        cleaned = _visual_order(cleaned)
     return cleaned
+
+
+def _is_rtl(ch: str) -> bool:
+    return unicodedata.bidirectional(ch) in ("R", "AL")
+
+
+def _visual_order(cl: List[Cluster]) -> List[Cluster]:
+    """A minimal stand-in for the bidi algorithm when no shaping engine exists:
+    runs of right-to-left letters (with the spaces inside them) are reversed so
+    they read correctly when drawn left to right. Arabic letters are still not
+    joined in that case."""
+    out: List[Cluster] = []
+    i, n = 0, len(cl)
+    while i < n:
+        if cl[i][0] == "text" and _is_rtl(cl[i][1]):
+            j = i
+            last = i
+            while j < n and cl[j][0] == "text" and (_is_rtl(cl[j][1]) or cl[j][1] == " "):
+                if cl[j][1] != " ":
+                    last = j
+                j += 1
+            out.extend(reversed(cl[i:last + 1]))
+            i = last + 1
+        else:
+            out.append(cl[i])
+            i += 1
+    return out
 
 
 def _runs(cl: Sequence[Cluster]) -> List[Cluster]:

@@ -214,6 +214,8 @@ unless you enable `--ai` (above).
   be hidden: everyone sees `/wrapped` and the three replies.
 - **Link previews** are up to Messages; a preview card appears only when the link is a message
   of its own, which is how the helper sends it.
+- **Emoji made of several parts** (flags, families, skin tones) are drawn simplified on the
+  card on a standard Mac; see Troubleshooting. The text recap and the story are not affected.
 - Only group chats. A message *edited* into `/wrapped` is not noticed. One helper per Mac.
 - Apple does not document any of this. A macOS update can break it.
 
@@ -232,6 +234,7 @@ unless you enable `--ai` (above).
 | `command not found: threadback` | Run the PATH line the installer printed, or use `~/.local/bin/threadback`. |
 | A window offers to install "command line developer tools" | That is Apple's installer for Python and friends. Click Install, wait, run the Threadback installer again. |
 | The card has no emoji | Only on computers without a colour emoji font. On a Mac the system emoji are used. |
+| A flag in the chat name shows as two letters, a family emoji as separate faces, or a skin tone as plain yellow | The card draws emoji one at a time unless an optional text-shaping library happens to be installed (it is not on a standard Mac). Simple emoji are unaffected. Arabic names are readable but their letters are not joined, for the same reason. |
 
 ## The 2-minute real-Mac checklist
 
