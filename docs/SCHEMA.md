@@ -118,19 +118,29 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   `attributedBody` (typedstream). Remove U+FFFC and U+FFFD, then trim. **Words** = number of
   whitespace-separated tokens.
 - **Sender**: `is_from_me = 1` → the owner (display name supplied by the user, default
-  `"Me"`). Otherwise `handle.id` via `message.handle_id`, mapped through the contact-name
-  table when one is available (phones compared on their last 10 digits, e-mails
-  case-insensitively), else the **masked** handle (below). Senders that resolve to the same
+  `"Me"`; the command-line tool and the Mac helper default to the first word of the Mac
+  account's full name, `id -F`, and say so). Otherwise `handle.id` via `message.handle_id`,
+  mapped through the contact-name table when one is available (phones compared on their last
+  10 digits, e-mails case-insensitively), else the handle itself. Either way the result is a
+  **sender label**: cleaned, capped and masked (below). Senders that resolve to the same
   display name are merged. `chat.members` = number of distinct senders seen plus members in
   `chat_handle_join` that never spoke (owner included).
 - **Clean names**: every name that reaches the stats (chat name, contact name, handle,
-  imported sender) is cleaned first: `\t`, `\n`, `\r` become a space; the characters
-  U+0000–001F, U+007F–009F, U+202A–202E, U+2066–2069, U+FFFC and U+FFFD are removed; runs of
-  spaces collapse to one; the result is trimmed. (Zero-width joiners stay: emoji need them.)
-  A name that is empty afterwards is `Unknown` (`Unnamed group` for a chat).
+  imported sender, the owner's name) is cleaned first: `\t`, `\n`, `\r` become a space; the
+  characters U+0000–001F, U+007F–009F, U+200E, U+200F, U+202A–202E, U+2066–2069, U+FEFF,
+  U+FFFC and U+FFFD are removed; runs of spaces collapse to one; the result is trimmed.
+  (Zero-width joiners, non-joiners and variation selectors stay: emoji and several scripts
+  need them.) A name that is empty afterwards is `Unknown` (`Unnamed group` for a chat).
+  **Length**: only the first 1,024 characters (Unicode code points) of a name are looked at.
+  After cleaning, a chat name longer than 80 characters is cut to 80 plus `…`, and a
+  person's name longer than 40 to 40 plus `…` (never inside a surrogate pair). The cut comes
+  before masking, so a masked label is never cut. A chat name built from its members and
+  `period.label` are held to 80 as well, `meta.source` to 40.
 - **Masking**: a recap is made to be shared, so a raw phone number or e-mail address never
   goes into the stats, the link, the card, a log or a chat's name. The rule applies to every
-  sender label that did not come from the contact table:
+  sender label: a handle, an imported sender, the owner's name, and a name from the contact
+  table too, because people do save contacts under a number or an address
+  (`Dr. Okafor 555-010-0403` → `…0403`, a card named `jane.doe@example.com` → `jane.doe`):
   1. **E-mail**: if the label contains an address, meaning a run of characters around an
      `@` with at least one character on each side, where a run ends at whitespace or any of
      `< > ( ) [ ] " ' , ; :`, the label becomes the part of that run before the `@`, cut to
@@ -158,6 +168,9 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   - if two different people in the recap would get the same short form, each of them gets
     the first word, a space, the first character of their last word and a `.` (`Sam R.`);
     if that still collides, those people keep their full names.
+  The rule works on sender labels: every name is cleaned, capped and masked again first
+  (which changes nothing for names `computeStats` produced), so a short form never brings
+  back a number or an address that a stats object from somewhere else still holds.
   The command-line tool (`stats`, `link`), the Mac helper and the maker page apply it unless
   asked not to (`--full-names`; an editable list on the maker page). `computeStats` itself
   returns full names, so merging by display name and the conformance suite are unaffected.

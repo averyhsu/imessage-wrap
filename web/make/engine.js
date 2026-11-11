@@ -59,8 +59,10 @@
  *   participants  handle ids from chat_handle_join
  *   source        recorded in meta.source (default "chat.db")
  *
- * Every name is cleaned (no control characters or direction overrides) and,
- * unless it comes from the contact table, masked: see cleanName, maskHandle.
+ * Every name is cleaned (no control characters or direction marks), capped (a
+ * person's name at 40 characters, a chat's at 80; no more than the first 1,024
+ * are looked at) and masked: handles, imported senders, names from the contact
+ * table and the owner's own name alike. See cleanName, maskHandle, maskChatName.
  *
  * Errors: an impossible year, date, zone or "now" throws a RangeError with
  * code "range"; the link functions throw Errors with code "bad_stats" (not a
@@ -86,6 +88,9 @@
   var BASE_URL = 'https://averyhsu.github.io/imessage-wrap/';
   var MAX_URL_LENGTH = 4800;
   var TRIM_STEPS = 6;
+  var NAME_LIMIT = 40;                // a person's name: this many code points, plus an ellipsis when cut
+  var CHAT_NAME_LIMIT = 80;           // a chat's name
+  var NAME_WINDOW = 1024;             // no name is looked at beyond this many code points
   var SHORT_QUOTE = 60;
 
   var APPLE_EPOCH = 978307200;        // 2001-01-01T00:00:00Z in Unix seconds
@@ -430,7 +435,7 @@
 
   /** Normalise a phone number or e-mail address for matching, or null. */
   function contactKey(identifier) {
-    var value = cleanName(identifier);
+    var value = cleanName(typeof identifier === 'string' ? nameWindow(identifier) : identifier);
     if (!value) return null;
     if (value.indexOf('@') !== -1) return 'e:' + asciiLower(value);
     var digits = value.replace(/[^0-9]/g, '');
@@ -461,16 +466,42 @@
   /**
    * Make a name safe to print, log and share (docs/SCHEMA.md 2, "Clean
    * names"): line breaks and tabs become a space; control characters,
-   * bidirectional overrides and isolates, U+FFFC and U+FFFD are removed; runs
-   * of spaces collapse; the result is trimmed. Anything that is not a string
-   * gives "".
+   * direction marks, overrides and isolates, U+FEFF, U+FFFC and U+FFFD are
+   * removed; runs of spaces collapse; the result is trimmed. Anything that is
+   * not a string gives "". (Zero-width joiners and variation selectors stay:
+   * emoji need them.)
+   *
+   * With `limit` (NAME_LIMIT for a person, CHAT_NAME_LIMIT for a chat) the
+   * name is also capped: only its first 1,024 code points are looked at, and
+   * a clean name longer than `limit` code points is cut to `limit` plus an
+   * ellipsis. The cost is bounded however long the input is. Cap before
+   * masking, so that a masked label is never cut.
    */
-  function cleanName(name) {
+  function cleanName(name, limit) {
     if (typeof name !== 'string' || !name) return '';
+    if (limit != null) name = nameWindow(name);
     var out = name.replace(/[\t\n\r\u2028\u2029]/g, ' ')
-      .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFFFC\uFFFD]/g, '');
+      .replace(/[\u0000-\u001F\u007F-\u009F\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF\uFFFC\uFFFD]/g, '');
     if (out.indexOf('  ') !== -1) out = out.replace(/ {2,}/g, ' ');
-    return trim(out);
+    out = trim(out);
+    return limit != null ? truncate(out, limit) : out;
+  }
+
+  /** The first NAME_WINDOW code points of a string (all of it when it is shorter). */
+  function nameWindow(text) {
+    if (text.length <= NAME_WINDOW) return text;
+    var i = 0;
+    for (var count = 0; count < NAME_WINDOW && i < text.length; count++) {
+      var c = text.charCodeAt(i);
+      i += (c >= 0xD800 && c <= 0xDBFF && i + 1 < text.length &&
+        (text.charCodeAt(i + 1) & 0xFC00) === 0xDC00) ? 2 : 1;
+    }
+    return text.slice(0, i);
+  }
+
+  /** What may be shown for a person: cleaned, capped at NAME_LIMIT and masked ("" when nothing is left). */
+  function personLabel(name) {
+    return maskHandle(cleanName(name, NAME_LIMIT));
   }
 
   function endsRun(text, index) {
@@ -627,7 +658,9 @@
       var identifier = pair[0];
       var name = pair[1];
       if (typeof identifier !== 'string' || typeof name !== 'string') continue;
-      name = cleanName(name);
+      // people do save contacts under a number or an address: a contact name
+      // is a sender label like any other (cleaned, capped and masked)
+      name = personLabel(name);
       var key = contactKey(identifier);
       if (!name || key === null) continue;
       var previous = lookup.table.get(key);
@@ -643,11 +676,12 @@
   }
   Names.prototype.handle = function (handle) {
     if (typeof handle !== 'string') return 'Unknown';
+    handle = nameWindow(handle);
     var name = this.cache.get(handle);
     if (name === undefined) {
       var key = contactKey(handle);
-      // labels that do not come from the contact table are cleaned and masked
-      name = (key !== null && this.table.get(key)) || maskHandle(cleanName(handle)) || 'Unknown';
+      // every label is cleaned, capped and masked (contact names when the table is built)
+      name = (key !== null && this.table.get(key)) || personLabel(handle) || 'Unknown';
       this.cache.set(handle, name);
     }
     return name;
@@ -658,11 +692,12 @@
 
   /** A chat's own name, cleaned and masked ("" when it has none). */
   function chatLabel(displayName) {
-    return maskChatName(cleanName(displayName));
+    return maskChatName(cleanName(displayName, CHAT_NAME_LIMIT));
   }
 
+  /** The owner's name as it goes into the stats: a sender label like any other. */
   function ownerName(me) {
-    return cleanName(me) || 'Me';
+    return personLabel(me) || 'Me';
   }
 
   function distinct(names) {
@@ -683,7 +718,7 @@
     });
     var label = firsts.join(', ');
     if (others.length > 3) label += ' & ' + (others.length - 3) + ' more';
-    return label;
+    return truncate(label, CHAT_NAME_LIMIT);
   }
 
   function resolveAll(names, handles) {
@@ -1067,7 +1102,7 @@
 
     var today = Math.floor((now + table.at(now)) / DAY);
     var period = resolvePeriod(today, opts.year, !!opts.all_time, opts.start, opts.end,
-      cleanName(opts.label) || null);
+      cleanName(opts.label, CHAT_NAME_LIMIT) || null);
     var startDay = period[0];
     var endDay = period[1];
     var label = period[2];
@@ -1323,7 +1358,7 @@
       awards: awards(people),
       meta: {
         generator: opts.generator || GENERATOR,
-        source: cleanName(opts.source) || 'chat.db',
+        source: cleanName(opts.source, NAME_LIMIT) || 'chat.db',
         generated: iso(today)
       }
     };
@@ -1358,10 +1393,25 @@
     return slots;
   }
 
-  /** Map(full name -> short name) for the people of one recap (see shortNames). */
+  /**
+   * Map(full name -> short name) for the people of one recap (see shortNames).
+   * The rule is applied to what may be shown at all: every name is first
+   * cleaned, capped and masked again (which changes nothing for names that
+   * computeStats produced), so a short form can never bring back a number or
+   * an address that a stats object from somewhere else still holds.
+   */
   function shortForms(names, me) {
-    if (me == null) me = 'Me';
-    var people = distinct(names);
+    var given = distinct(Array.prototype.filter.call(names, function (name) { return typeof name === 'string'; }));
+    var shown = new Map();
+    given.forEach(function (name) { shown.set(name, personLabel(name) || 'Unknown'); });
+    var short = shortFormsOf(distinct(given.map(function (name) { return shown.get(name); })),
+      personLabel(me == null ? 'Me' : me) || 'Me');
+    var result = new Map();
+    given.forEach(function (name) { result.set(name, short.get(shown.get(name))); });
+    return result;
+  }
+
+  function shortFormsOf(people, me) {
     var fixed = new Set(people.filter(function (name) { return name === me || name.charAt(0) === '\u2026'; }));
     var result = new Map();
     var groups = new Map();
@@ -1681,6 +1731,8 @@
     decodeAttributedBody: decodeAttributedBody,
     chatDisplayName: chatDisplayName,
     contactKey: contactKey,
+    NAME_LIMIT: NAME_LIMIT,
+    CHAT_NAME_LIMIT: CHAT_NAME_LIMIT,
     maskHandle: maskHandle,
     maskChatName: maskChatName,
     cleanName: cleanName,
@@ -1708,7 +1760,8 @@
       offsetFunction: offsetFunction, Offsets: Offsets, resolvePeriod: resolvePeriod,
       round4: round4, hour12: hour12, personality: personality, awards: awards,
       fallbackName: fallbackName, Names: Names, distinct: distinct, resolveAll: resolveAll,
-      chatLabel: chatLabel, ownerName: ownerName, shortForms: shortForms, toInt: toInt, coded: coded,
+      chatLabel: chatLabel, ownerName: ownerName, personLabel: personLabel, nameWindow: nameWindow,
+      shortForms: shortForms, toInt: toInt, coded: coded,
       PERSONALITIES: PERSONALITIES, base64urlEncode: base64urlEncode,
       base64urlDecode: base64urlDecode
     }

@@ -33,8 +33,10 @@ not a number or ``True`` counts as 0; ``text`` is a ``str`` or UTF-8 bytes and
 that are not mappings are skipped. :mod:`wrapped.db` casts every column in
 SQL, so cells of an unexpected type already arrive in this shape.
 
-Every name that reaches the stats is cleaned (:func:`clean_name`) and, unless
-it comes from the contact table, masked (:func:`mask_handle`).
+Every name that reaches the stats is cleaned and capped (:func:`clean_name`: a
+person's name at 40 characters, a chat's at 80) and masked
+(:func:`mask_handle`, :func:`mask_chat_name`): handles, imported senders,
+names from the contact table and the owner's own name alike.
 :func:`short_names` turns a finished stats object into the first-name form
 that is meant to be shared.
 """
@@ -54,7 +56,7 @@ from .typedstream import decode_attributed_body
 
 __all__ = [
     "compute_stats", "chat_display_name", "contact_key", "build_contact_lookup", "ContactLookup",
-    "clean_name", "mask_handle", "mask_chat_name", "short_names",
+    "clean_name", "mask_handle", "mask_chat_name", "short_names", "NAME_LIMIT", "CHAT_NAME_LIMIT",
     "clean_text", "count_words", "resolve_period", "GENERATOR", "KINDS",
 ]
 
@@ -155,12 +157,19 @@ def _u16(name: str) -> bytes:
 # contacts
 # --------------------------------------------------------------------------- #
 
+NAME_LIMIT = 40             # a person's name: this many code points, plus an ellipsis when cut
+CHAT_NAME_LIMIT = 80        # a chat's name
+_NAME_WINDOW = 1024         # no name is looked at beyond this many code points
+
+
 def contact_key(identifier: Optional[str]) -> Optional[str]:
     """Normalise a phone number or e-mail address for matching.
 
     E-mail (anything with ``@``): ASCII-lowercased. Phone: its last 10 ASCII
     digits. Returns ``None`` for anything else.
     """
+    if identifier.__class__ is str and len(identifier) > _NAME_WINDOW:
+        identifier = identifier[:_NAME_WINDOW]
     value = clean_name(identifier)
     if not value:
         return None
@@ -191,26 +200,39 @@ _RUN_ENDS = frozenset(WHITESPACE + "<>()[]\"',;:")
 _PHONE_JOINERS = frozenset(WHITESPACE + "+-()." + "\u2010\u2011\u2012\u2013\u2014\u2015\u2212")
 
 # clean_name(): tab, line breaks and the Unicode line/paragraph separators
-# become a space; other control characters, bidirectional overrides and
-# isolates, and the object/replacement characters are dropped.
+# become a space; other control characters, direction marks, overrides and
+# isolates, the byte-order mark and the object/replacement characters are
+# dropped. (Zero-width joiners and variation selectors stay: emoji need them.)
 _NAME_TABLE = {c: None for c in list(range(0x00, 0x20)) + list(range(0x7F, 0xA0))
-               + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A)) + [0xFFFC, 0xFFFD]}
+               + [0x200E, 0x200F] + list(range(0x202A, 0x202F)) + list(range(0x2066, 0x206A))
+               + [0xFEFF, 0xFFFC, 0xFFFD]}
 _NAME_TABLE.update({c: " " for c in (0x09, 0x0A, 0x0D, 0x2028, 0x2029)})
 _SPACES = re.compile(" {2,}")
 
 
-def clean_name(name: Any) -> str:
+def clean_name(name: Any, limit: Optional[int] = None) -> str:
     """Make a name safe to print, log and share (docs/SCHEMA.md 2, "Clean
-    names"): line breaks and tabs become a space, control characters,
-    bidirectional overrides, U+FFFC and U+FFFD are removed, runs of spaces
-    collapse and the result is trimmed. Anything that is not a string gives
-    ``""``."""
+    names"): line breaks and tabs become a space; control characters,
+    direction marks and overrides, U+FEFF, U+FFFC and U+FFFD are removed;
+    runs of spaces collapse and the result is trimmed. Anything that is not a
+    string gives ``""``.
+
+    With ``limit`` (:data:`NAME_LIMIT` for a person, :data:`CHAT_NAME_LIMIT`
+    for a chat) the name is also capped: only its first 1,024 code points are
+    looked at, and a clean name longer than ``limit`` code points is cut to
+    ``limit`` plus an ellipsis. The cost is bounded however long the input
+    is. Cap before masking, so that a masked label is never cut."""
     if name.__class__ is not str or not name:
         return ""
+    if limit is not None and len(name) > _NAME_WINDOW:
+        name = name[:_NAME_WINDOW]
     name = name.translate(_NAME_TABLE)
     if "  " in name:
         name = _SPACES.sub(" ", name)
-    return name.strip(WHITESPACE)
+    name = name.strip(WHITESPACE)
+    if limit is not None and len(name) > limit:
+        name = name[:limit] + "\u2026"
+    return name
 
 
 def _mask_digits(label: str) -> str:
@@ -276,6 +298,9 @@ def mask_handle(label: str) -> str:
     it (docs/SCHEMA.md 2, "Masking"). The rule is applied to every sender
     label that did not come from the contact table and to chat names:
 
+    The rule is applied to every sender label (handles, imported senders,
+    names from the contact table and the owner's own name):
+
     1. if the label contains an e-mail address (characters around an ``@``,
        at least one on each side, up to whitespace or one of
        ``< > ( ) [ ] " ' , ; :``) it becomes the part before the ``@``, cut
@@ -297,7 +322,11 @@ def build_contact_lookup(contacts: Any) -> "ContactLookup":
     """Turn ``{identifier: name}`` or ``[(identifier, name), ...]`` into a
     ``{contact_key: name}`` table. When two cards claim the same number or
     address under different names, the name that sorts first wins, so the
-    result does not depend on the order of the input."""
+    result does not depend on the order of the input.
+
+    People do save contacts under a number or an address, so a contact name
+    is a sender label like any other: it is cleaned, capped and masked
+    ("Dr. Okafor 555-010-0403" is shown as an ellipsis and 0403)."""
     if isinstance(contacts, ContactLookup):
         return contacts
     lookup = ContactLookup()
@@ -313,7 +342,7 @@ def build_contact_lookup(contacts: Any) -> "ContactLookup":
         identifier, name = pair[0], pair[1]
         if identifier.__class__ is not str or name.__class__ is not str:
             continue
-        name = clean_name(name)
+        name = person_label(name)
         key = contact_key(identifier)
         if not name or key is None:
             continue
@@ -323,9 +352,15 @@ def build_contact_lookup(contacts: Any) -> "ContactLookup":
     return lookup
 
 
+def person_label(name: Any) -> str:
+    """What may be shown for a person: the name cleaned, capped at
+    :data:`NAME_LIMIT` and masked ("" when nothing is left)."""
+    return mask_handle(clean_name(name, NAME_LIMIT))
+
+
 class _Names:
     """handle -> display name, with the owner and the contact table applied.
-    Labels that do not come from the contact table are cleaned and masked."""
+    Every label is cleaned, capped and masked."""
 
     def __init__(self, me: str, lookup: Dict[str, str]):
         self.me = me
@@ -335,12 +370,14 @@ class _Names:
     def handle(self, handle: Any) -> str:
         if handle.__class__ is not str:
             return "Unknown"
+        if len(handle) > _NAME_WINDOW:
+            handle = handle[:_NAME_WINDOW]
         name = self.cache.get(handle)
         if name is None:
             key = contact_key(handle)
             name = self.lookup.get(key) if key else None
             if not name:
-                name = mask_handle(clean_name(handle)) or "Unknown"
+                name = person_label(handle) or "Unknown"
             self.cache[handle] = name
         return name
 
@@ -351,12 +388,13 @@ class _Names:
 
 
 def _chat_label(display_name: Any) -> str:
-    """A chat's own name, cleaned and masked ("" when it has none)."""
-    return mask_chat_name(clean_name(display_name))
+    """A chat's own name, cleaned, capped and masked ("" when it has none)."""
+    return mask_chat_name(clean_name(display_name, CHAT_NAME_LIMIT))
 
 
 def _owner_name(me: Any) -> str:
-    return clean_name(me) or "Me"
+    """The owner's name as it goes into the stats: a sender label like any other."""
+    return person_label(me) or "Me"
 
 
 def chat_display_name(display_name: Optional[str], participants: Optional[Sequence[str]],
@@ -416,7 +454,7 @@ def _fallback_name(members: List[str], me: str) -> str:
     label = ", ".join(firsts)
     if len(others) > 3:
         label += " & %d more" % (len(others) - 3)
-    return label
+    return _truncate(label, CHAT_NAME_LIMIT)
 
 
 # --------------------------------------------------------------------------- #
@@ -755,7 +793,7 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
     today = (now + offset_at(now)) // _DAY
     start_day, end_day, label = resolve_period(
         today, opts.get("year"), bool(opts.get("all_time")), opts.get("start"), opts.get("end"),
-        clean_name(opts.get("label")) or None)
+        clean_name(opts.get("label"), CHAT_NAME_LIMIT) or None)
 
     # ---- pass 1: tapbacks, in chronological order ---------------------------
     taps = []
@@ -998,7 +1036,7 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
         "awards": _awards(people),
         "meta": {
             "generator": opts.get("generator") or GENERATOR,
-            "source": clean_name(opts.get("source")) or "chat.db",
+            "source": clean_name(opts.get("source"), NAME_LIMIT) or "chat.db",
             "generated": _iso(today),
         },
     }
@@ -1041,8 +1079,21 @@ def _words(name: str) -> List[str]:
 
 def short_forms(names: Iterable[str], me: str = "Me") -> Dict[str, str]:
     """``{full name: short name}`` for the people of one recap (see
-    :func:`short_names` for the rule)."""
-    people = _distinct(names)
+    :func:`short_names` for the rule).
+
+    The rule is applied to what may be shown at all: every name is first
+    cleaned, capped and masked again (which changes nothing for names that
+    :func:`compute_stats` produced), so a short form can never bring back a
+    number or an address that a stats object from somewhere else still
+    holds."""
+    given = _distinct(name for name in names if name.__class__ is str)
+    shown = {name: person_label(name) or "Unknown" for name in given}
+    me = person_label(me) or "Me"
+    short = _short_forms(_distinct(shown.values()), me)
+    return {name: short[shown[name]] for name in given}
+
+
+def _short_forms(people: List[str], me: str) -> Dict[str, str]:
     fixed = {name for name in people if name == me or name.startswith("\u2026")}
     result: Dict[str, str] = {}
     groups: Dict[str, List[str]] = {}
