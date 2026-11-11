@@ -80,18 +80,21 @@ final class RecapLinkTests: XCTestCase {
 
     func testAcceptsOnlyTheAppSchemeAndTheStoryPage() throws {
         let payload = DemoRecap.payload
-        let accepted = [
+        var accepted = [
             "https://averyhsu.github.io/imessage-wrap/#w1=\(payload)",
             "https://averyhsu.github.io/imessage-wrap/?w1=\(payload)",
             "https://averyhsu.github.io/imessage-wrap/index.html#w1=\(payload)",
             "https://averyhsu.github.io/imessage-wrap#w1=\(payload)",
-            "https://AveryHsu.GitHub.io/imessage-wrap/#w1=\(payload)",
             "https://averyhsu.github.io:443/imessage-wrap/#w1=\(payload)",
             "threadback://recap#w1=\(payload)",
             "threadback://recap?w1=\(payload)",
             "threadback://recap/#w1=\(payload)",
             "THREADBACK://recap#w1=\(payload)"
         ]
+        // The host is not case sensitive (built from the configured story address).
+        let storyAddress = try XCTUnwrap(URLComponents(string: WrappedConfig.baseURLString))
+        let shoutedHost = try XCTUnwrap(storyAddress.host).uppercased()
+        accepted.append("https://\(shoutedHost)\(storyAddress.path)#w1=\(payload)")
         for text in accepted {
             let url = try XCTUnwrap(URL(string: text), text)
             XCTAssertTrue(RecapLink.isRecapLink(url), "should be accepted: \(text.prefix(70))")
