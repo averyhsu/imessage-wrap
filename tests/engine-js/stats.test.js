@@ -7,6 +7,8 @@ const { Engine, LA, APPLE_EPOCH, utc, ns, msg, tap, fixture, hexToBytes } = requ
 
 const I = Engine._internals;
 const A = '+15550100001', B = '+15550100002', C = '+15550100003';
+// how a number with no contact name is shown: never in full (docs/SCHEMA.md 2)
+const NA = '\u20260001', NB = '\u20260002', NC = '\u20260003';
 const NOW = utc(2026, 11, 11, 20);        // 12:00 PST
 
 function run(rows, options) {
@@ -254,7 +256,7 @@ test('owner name, contacts and merging', () => {
     const st = run(rows, { contacts: form });
     const got = {};
     st.senders.forEach((s) => { got[s.name] = s.messages; });
-    assert.deepEqual(got, { 'Ines Calloway': 4, 'Bram Okoye': 1, '+15550100003': 1 });
+    assert.deepEqual(got, { 'Ines Calloway': 4, 'Bram Okoye': 1, [NC]: 1 });
     assert.equal(st.chat.members, 4);
   }
   const pairs = [['+1 555 010 0001', 'Zed'], ['5550100001', 'Alba'], ['', 'Nobody'], ['+15550100002', '  '],
@@ -317,9 +319,9 @@ test('chat names', () => {
   assert.equal(name(null, [A, B], contacts), 'Ines, Bram');
   assert.equal(name('', [A, B, C, '+15550100004'], contacts), 'Ines, Bram, Sam & 1 more');
   assert.equal(name(' ', [A, B, C, '+15550100004', 'x@example.com', '+15550100009'], contacts), 'Ines, Bram, Sam & 3 more');
-  assert.equal(name('', [B, '+15550100007', A]), '+15550100002, +15550100007, +15550100001');
+  assert.equal(name('', [B, '+15550100007', A]), '\u20260002, \u20260007, \u20260001');
   assert.equal(name('', []), 'Unnamed group');
-  assert.equal(name('', [A, B], { [A]: 'Avery' }, 'Avery'), '+15550100002');
+  assert.equal(name('', [A, B], { [A]: 'Avery' }, 'Avery'), NB);
   let st = run([msg(T, A)], { participants: [A, B, C, '+15550100004'], contacts, chat_name: '' });
   assert.deepEqual(st.chat, { name: 'Ines, Bram, Sam & 1 more', members: 5 });
   st = run([msg(T, A)], { chat_name: 'Named', participants: [A] });
@@ -402,13 +404,13 @@ test('reactors merge by display name; given and received', () => {
     tap(T + 8, 'me', 2000, other), tap(T + 9, A, 2001, m)]);
   const people = {};
   st.senders.forEach((s) => { people[s.name] = s; });
-  assert.equal(people[A].reactions_received, 4);
-  assert.equal(people[A].reactions_given, 1);
-  assert.equal(people[B].reactions_received, 1);
-  assert.equal(people[B].reactions_given, 1);
+  assert.equal(people[NA].reactions_received, 4);
+  assert.equal(people[NA].reactions_given, 1);
+  assert.equal(people[NB].reactions_received, 1);
+  assert.equal(people[NB].reactions_given, 1);
   assert.equal(st.totals.reactions, 5);
   assert.deepEqual(st.reactions.top_giver, { name: 'Me', count: 2 });
-  assert.deepEqual(st.reactions.top_receiver, { name: A, count: 4 });
+  assert.deepEqual(st.reactions.top_receiver, { name: NA, count: 4 });
 });
 
 test('most reacted: order, truncation, kinds, attachment flag', () => {
@@ -423,11 +425,11 @@ test('most reacted: order, truncation, kinds, attachment flag', () => {
   for (const m of [m2, m3, m5]) rows.push(tap(t + 10, A, 2004, m), tap(t + 11, B, 2001, m));
   rows.push(tap(t + 20, A, 2000, m4));
   let top = run(rows).most_reacted;
-  assert.deepEqual(top.map((q) => q.sender), [A, C, A]);
-  assert.deepEqual(top[0], { sender: A, reactions: 3, date: '2026-03-01', text: 'three', kinds: { laugh: 2, love: 1 } });
+  assert.deepEqual(top.map((q) => q.sender), [NA, NC, NA]);
+  assert.deepEqual(top[0], { sender: NA, reactions: 3, date: '2026-03-01', text: 'three', kinds: { laugh: 2, love: 1 } });
   assert.deepEqual(Object.keys(top[0].kinds), ['laugh', 'love']);
   assert.deepEqual(top[1], {
-    sender: C, reactions: 2, date: '2026-02-01', text: '', kinds: { like: 1, emphasize: 1 }, attachment: true
+    sender: NC, reactions: 2, date: '2026-02-01', text: '', kinds: { like: 1, emphasize: 1 }, attachment: true
   });
   assert.deepEqual(Object.keys(top[1].kinds), ['like', 'emphasize']);
   assert.equal(top[2].text, 'same instant, higher rowid');
@@ -458,7 +460,7 @@ test('days, streaks, busiest day, late night', () => {
   rows = [[0, A], [4, A], [4, B], [5, B], [23, B], [3, 'me']].map(([h, who]) => msg(utc(2026, 5, 5, h), who));
   rows.push(msg(utc(2026, 5, 5, 4, 59, 59), B));
   st = run(rows);
-  assert.deepEqual(st.late_night, { messages: 5, share: 0.7143, top: { name: B, messages: 2 } });
+  assert.deepEqual(st.late_night, { messages: 5, share: 0.7143, top: { name: NB, messages: 2 } });
 });
 
 test('empty chat, output shape and key order', () => {
@@ -510,4 +512,33 @@ test('half a million messages in a few seconds', () => {
   assert.ok(st.totals.reactions > 50000);
   assert.ok(elapsed < 6000, 'computeStats took ' + elapsed + ' ms');
   console.log('    500,000 rows -> stats in ' + elapsed + ' ms');
+});
+
+test('masking: no raw number or address goes into a recap', () => {
+  const cases = {
+    '+15550100001': '\u20260001', '(555) 010-0001': '\u20260001', '  +1 555 010 0001 ': '\u20260001',
+    '555.010.0001': '\u20260001', '+44 20 5550 100002': '\u20260002',
+    'ines.calloway@example.com': 'ines.calloway',
+    'a.very.long.local.part.indeed@example.com': 'a.very.long.loca\u2026',
+    '\u00e9@ex.com': '\u00e9',
+    // not a number or an address: names from an imported export, short codes
+    'Maya': 'Maya', 'Agent 47': 'Agent 47', '22000': '22000', 'Maya @ work': 'Maya @ work',
+    'x@y': 'x@y', 'urn:biz:abc': 'urn:biz:abc'
+  };
+  for (const [handle, shown] of Object.entries(cases)) assert.equal(Engine.maskHandle(handle), shown, handle);
+
+  const t = utc(2026, 5, 5, 3);
+  const handles = ['+15550100001', '+15550100002', 'ines.calloway@example.com'];
+  const rows = [];
+  handles.concat(handles, handles, handles).forEach((h, i) => rows.push(msg(t + i, h, 'hello there', { guid: 'G' + i })));
+  handles.forEach((h, i) => rows.push(tap(t + 100 + i, h, 2003, rows[0])));
+  const st = run(rows, { participants: handles.concat(['+15550100009']), chat_name: '' });
+  const text = JSON.stringify(st);
+  for (const secret of ['5550100001', '5550100002', '5550100009', '@example.com']) assert.ok(!text.includes(secret), secret);
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), ['\u20260001', '\u20260002', 'ines.calloway'].sort());
+  const named = run(rows, { contacts: { '+15550100001': 'Ines Calloway' } });
+  assert.ok(named.senders.some((s) => s.name === 'Ines Calloway'));
+  // names from an import are kept as they are
+  const imported = run([msg(t, 'Maya'), msg(t + 1, 'Dev'), msg(t + 2, 'Maya')]);
+  assert.deepEqual(imported.senders.map((s) => s.name), ['Maya', 'Dev']);
 });

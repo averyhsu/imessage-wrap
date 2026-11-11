@@ -116,9 +116,19 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
 - **Sender**: `is_from_me = 1` → the owner (display name supplied by the user, default
   `"Me"`). Otherwise `handle.id` via `message.handle_id`, mapped through the contact-name
   table when one is available (phones compared on their last 10 digits, e-mails
-  case-insensitively), else the raw handle. Senders that resolve to the same display name
-  are merged. `chat.members` = number of distinct senders seen plus members in
+  case-insensitively), else the **masked** handle (below). Senders that resolve to the same
+  display name are merged. `chat.members` = number of distinct senders seen plus members in
   `chat_handle_join` that never spoke (owner included).
+- **Masking**: a recap is made to be shared, so a raw phone number or e-mail address never
+  goes into the stats, the link, the card or a chat's fallback name. For a trimmed handle
+  with no contact name:
+  - a phone number (only digits, spaces and `+ - ( ) . /`, with at least 7 digits) is shown
+    as `…` plus its last four digits (`+1 (555) 010-0001` → `…0001`);
+  - an e-mail address (no whitespace, something before the `@`, a dot after it) is shown as
+    the part before the `@`, cut to 16 characters plus `…` when longer;
+  - anything else (a name from an imported export, a short code) is kept as it is.
+  Two unnamed people whose numbers end in the same four digits are merged; the maker page
+  lets the user rename people, which avoids that.
 - `senders` keeps the top 12; the rest are dropped from the list (totals still include them).
 - Rounding: shares are rounded to 4 decimals, half up: `Math.round(x * 10000) / 10000` in
   JS and `math.floor(x * 10000 + 0.5) / 10000` in Python, so both engines agree.

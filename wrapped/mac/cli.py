@@ -98,7 +98,7 @@ def _add_source_options(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--contacts", metavar="PATH", action="append",
                        help="address-book database or folder to take names from (default: found automatically)")
     group.add_argument("--no-contacts", action="store_true",
-                       help="show phone numbers and e-mail addresses instead of contact names")
+                       help="do not look names up in Contacts (numbers show as \u20261234)")
 
 
 def _add_ai_options(parser: argparse.ArgumentParser) -> None:

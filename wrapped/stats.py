@@ -62,6 +62,7 @@ _WS_RUN = re.compile("[" + re.escape(WHITESPACE) + "]+")
 # characters on which str.split() and the ECMAScript set disagree
 _SPLIT_DIFFERS = re.compile("[\x1c-\x1f\x85\ufeff]")
 _NOT_DIGIT = re.compile("[^0-9]")
+_PHONE_LIKE = re.compile(r"[0-9+\-(). /]+")
 _ASCII_LOWER = {c: c + 32 for c in range(65, 91)}
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
@@ -155,6 +156,33 @@ def contact_key(identifier: Optional[str]) -> Optional[str]:
     return None
 
 
+def mask_handle(handle: str) -> str:
+    """The label for a sender who has no contact name.
+
+    A recap is made to be shared, so a raw phone number or e-mail address
+    never goes into it (docs/SCHEMA.md 2):
+
+    - a phone number (only digits and ``+ - ( ) . /`` and spaces, with at
+      least 7 digits) becomes an ellipsis and its last four digits;
+    - an e-mail address (no whitespace, something before the ``@`` and a dot
+      after it) becomes the part before the ``@``, cut to 16 characters;
+    - anything else (a name from an imported export, a short code) is left
+      as it is.
+    """
+    value = handle.strip(WHITESPACE)
+    at = value.find("@")
+    if at != -1:
+        local, domain = value[:at], value[at + 1:]
+        if local and "." in domain and not _WS_RUN.search(value):
+            return local if len(local) <= 16 else local[:16] + "\u2026"
+        return handle
+    if _PHONE_LIKE.fullmatch(value):
+        digits = _NOT_DIGIT.sub("", value)
+        if len(digits) >= 7:
+            return "\u2026" + digits[-4:]
+    return handle
+
+
 class ContactLookup(dict):
     """A normalised ``{contact_key: display name}`` table."""
 
@@ -199,7 +227,7 @@ class _Names:
                 name = "Unknown"
             else:
                 key = contact_key(handle)
-                name = (self.lookup.get(key) if key else None) or handle
+                name = (self.lookup.get(key) if key else None) or mask_handle(handle)
             self.cache[handle] = name
         return name
 

@@ -57,7 +57,7 @@ class ChatList(unittest.TestCase):
     def test_names_counts_and_order(self):
         names = [c["name"] for c in self.chats]
         self.assertEqual(names[1], self.fx["chats"]["stress"]["display_name"])
-        self.assertEqual(names[2], "Bram, Sam, +15550100007 & 1 more")
+        self.assertEqual(names[2], "Bram, Sam, \u20260007 & 1 more")
         self.assertEqual(names[3], "Book Club \U0001F4DA")
         counts = [c["messages"] for c in self.chats]
         self.assertEqual(counts, sorted(counts, reverse=True))
@@ -407,7 +407,7 @@ class OldAndOddDatabases(unittest.TestCase):
         self.assertEqual(st["period"], {"label": "2016", "start": "2016-01-01", "end": "2016-12-31"})
         self.assertEqual(st["by_hour"][19], 3)
         self.assertEqual(st["by_hour"][3], 1)
-        self.assertEqual([s["name"] for s in st["senders"]], ["+15550100001", "+15550100002", "Me"])
+        self.assertEqual([s["name"] for s in st["senders"]], ["\u20260001", "Me", "\u20260002"])
 
     def test_invalid_utf8_in_a_text_column(self):
         with mac_source() as source:

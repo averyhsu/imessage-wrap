@@ -188,7 +188,7 @@ test('chat list: only groups, merged rows, names, diagnostics', async () => {
   assert.equal(lively.chat_identifier, 'chat100000000000000001');
   assert.equal(lively.members, 7);
   assert.equal(chats[1].name, info.chats.stress.display_name);
-  assert.equal(chats[2].name, 'Bram, Sam, +15550100007 & 1 more');
+  assert.equal(chats[2].name, 'Bram, Sam, \u20260007 & 1 more');
   assert.equal(chats[2].display_name, '');
   assert.equal(chats[3].name, 'Book Club \u{1F4DA}');
   assert.deepEqual(chats[3].participants, ['+15550100011', 'nora.quill@example.com', '+15550100012']);
@@ -199,7 +199,7 @@ test('chat list: only groups, merged rows, names, diagnostics', async () => {
     assert.ok(![info.chats.dm_ines.rowid, info.chats.dm_bram.rowid].includes(chat.id));
   }
   const raw = DB.listGroupChats(handle, {}).chats;
-  assert.equal(raw[2].name, '+15550100002, +15550100003, +15550100007 & 1 more');
+  assert.equal(raw[2].name, '\u20260002, \u20260003, \u20260007 & 1 more');
   assert.equal(raw[3].members, 4);
 
   const tiny = chats[3];
@@ -235,7 +235,7 @@ test('rows have the documented shape', async () => {
   assert.ok(m11.text.startsWith('Zo') && m11.text.endsWith('vu or not.') && m11.text.length > 280);
   assert.equal(handle.query('SELECT text FROM message WHERE ROWID = ?', [m11.rowid])[0].text, null);
   // invalid UTF-8 and an embedded NUL are read from the raw bytes
-  const unnamed = DB.loadChat(handle, DB.findChat(chats, '+15550100002, +15550100003')).rows;
+  const unnamed = DB.loadChat(handle, DB.findChat(chats, '\u20260002, \u20260003')).rows;
   const bad = unnamed.filter((r) => r.text && r.text.startsWith('bad '));
   assert.deepEqual(bad.map((r) => r.text), ['bad ' + String.fromCharCode(0xFFFD, 0xFFFD) + ' bytes in a text column']);
   assert.equal(Engine.computeStats(bad, { tz: 'UTC', all_time: true, now: NOW }).totals.words, 6);
@@ -278,7 +278,7 @@ test('database without associated_message_emoji; legacy schema', async () => {
   assert.equal(listing.diagnostics.first_date, '2016-06-01');
   const st = DB.statsForChat(legacy, 'Old Friends', { year: 2016, tz: 'UTC', now: NOW });
   assert.deepEqual(st.totals, { messages: 4, words: 8, attachments: 1, reactions: 0, days_active: 2, longest_streak: 2 });
-  assert.deepEqual(st.senders.map((s) => s.name), ['+15550100001', '+15550100002', 'Me']);
+  assert.deepEqual(st.senders.map((s) => s.name), ['\u20260001', 'Me', '\u20260002']);
   legacy.close();
 });
 

@@ -189,14 +189,15 @@ class Awards(unittest.TestCase):
     def test_awards_from_real_rows(self):
         t = calendar.timegm((2026, 6, 1, 12, 0, 0))
         a, b, c = "+15550100001", "+15550100002", "+15550100003"
+        na, nb, nc = "\u20260001", "\u20260002", "\u20260003"      # no contacts: masked
         rows = [msg(t + i, a, "word " * 3, guid="A%d" % i) for i in range(30)]
         rows += [msg(t + 100 + i, b, "\ufffc", cache_has_attachments=1) for i in range(6)]
         rows += [msg(t - 12 * 3600 + i, c, "night") for i in range(5)]          # midnight UTC
         rows += [tap(t + 500 + i, b, 2003, rows[i]) for i in range(4)]
         st = compute_stats(rows, tz="UTC", now=NOW)
         self.assertEqual(ids(st["awards"]), [
-            ("yapper", a), ("lurker", c), ("hype", b),              # fresh winners first
-            ("night_owl", c), ("comedian", a), ("novelist", a)])    # then deferred, in order
+            ("yapper", na), ("lurker", nc), ("hype", nb),           # fresh winners first
+            ("night_owl", nc), ("comedian", na), ("novelist", na)]) # then deferred, in order
         details = {x["id"]: x["detail"] for x in st["awards"]}
         self.assertEqual(details["novelist"], "3.0 words per message. A paragraph person.")
         self.assertEqual(details["hype"], "Handed out 4 tapbacks.")

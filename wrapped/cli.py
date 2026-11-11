@@ -39,7 +39,7 @@ def _add_source_options(parser: argparse.ArgumentParser) -> None:
                        help="address-book database (or AddressBook folder) to take names "
                             "from; may be repeated (default: found automatically)")
     group.add_argument("--no-contacts", action="store_true",
-                       help="show phone numbers and e-mail addresses instead of names")
+                       help="do not look names up in Contacts (numbers show as \u20261234)")
     group.add_argument("--me", metavar="NAME", default="Me",
                        help="your own name in the recap (default: Me)")
     group.add_argument("--tz", metavar="ZONE",

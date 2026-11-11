@@ -54,7 +54,7 @@ class CommandLine(unittest.TestCase):
         self.assertRegex(lines[0], r"^chat\.db: 7,\d\d\d messages in 7 chats \(4 group chats\), "
                                    r"2025-\d\d-\d\d to \d{4}-\d\d-\d\d$")
         self.assertIn("Taco Tuesday Crew \U0001F32E", out)
-        self.assertIn("Bram, Sam, +15550100007 & 1 more", out)
+        self.assertIn("Bram, Sam, \u20260007 & 1 more", out)
         self.assertIn("Book Club \U0001F4DA", out)
         self.assertNotIn("+15550100001", out)             # 1:1 chats are not listed
 
@@ -96,7 +96,7 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(got["period"]["label"], "All time")
         self.assertEqual(got["period"]["start"], "2025-12-21")       # B1 in UTC
         self.assertIn("Avery", [s["name"] for s in got["senders"]])
-        self.assertIn("+15550100011", [s["name"] for s in got["senders"]])
+        self.assertIn("\u20260011", [s["name"] for s in got["senders"]])
         status, out, _err = run("stats", "Book Club", "--year", "2025", "--tz", LA, *source_args())
         self.assertEqual(json.loads(out)["totals"]["messages"], 2)
         status, out, _err = run("stats", "Old Friends", "--year", "2016", "--tz", "UTC",
@@ -197,7 +197,7 @@ class PublicApi(unittest.TestCase):
     def test_list_chats_and_stats_from_rows(self):
         chats = wrapped.list_chats(db=support.path("chat_db"), contacts=False)
         self.assertEqual(len(chats), 4)
-        self.assertEqual(chats[2]["name"], "+15550100002, +15550100003, +15550100007 & 1 more")
+        self.assertEqual(chats[2]["name"], "\u20260002, \u20260003, \u20260007 & 1 more")
         st = wrapped.stats_from_rows([support.msg(support.NOW - 3600, "+15550100001")],
                                      tz="UTC", now=support.NOW)
         self.assertEqual(st["totals"]["messages"], 1)

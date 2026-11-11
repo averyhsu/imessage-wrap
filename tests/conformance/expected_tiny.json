@@ -16,7 +16,7 @@
   " Sep 15 Tue: M12 Nora 08:30;  Nov 1 Sun: Ma Nora 01:30 PDT, Mb Me 01:30 PST",
   " F1 (Nov 20) is after 'now' and is not counted.",
   "Per sender: Nora 8 messages, 81 words (4+5+4+57+3+2+4+2); Me 7, 12 (3+3+0+3+0+1+2);",
-  " Ezra 6, 39 (4+2+1+25+4+3). Ezra is not in the address book: the raw number shows.",
+  " Ezra 6, 39 (4+2+1+25+4+3). Ezra is not in the address book: he shows as …0012, never the number.",
   "Standing tapbacks (10): M3 laugh x2 (Me, Ezra; Ezra's change to love on Nov 15 comes",
   " after 'now'), M6 laugh (Me), M5 love (Ezra, changed from laugh), M7 emphasize (Nora,",
   " bp: target), M11 emoji x2 (Me 2006, Ezra 2007), M10 question (Me) + dislike (Nora),",
@@ -145,7 +145,7 @@
       "reactions_received": 1
      },
      {
-      "name": "+15550100012",
+      "name": "…0012",
       "messages": 6,
       "share": 0.2857,
       "words": 39,
@@ -166,7 +166,7 @@
       }
      },
      {
-      "sender": "+15550100012",
+      "sender": "…0012",
       "reactions": 2,
       "date": "2026-04-10",
       "text": "I have read exactly one chapter and I already have opinions about every single character in this book so please prepare yourselves for a rant",
@@ -216,7 +216,7 @@
       "id": "lurker",
       "emoji": "👻",
       "title": "The Lurker",
-      "winner": "+15550100012",
+      "winner": "…0012",
       "detail": "6 messages. Reads everything, says little."
      },
      {
@@ -430,7 +430,7 @@
       "reactions_received": 2
      },
      {
-      "name": "+15550100011",
+      "name": "…0011",
       "messages": 6,
       "share": 0.2857,
       "words": 74,
@@ -440,7 +440,7 @@
       "reactions_received": 4
      },
      {
-      "name": "+15550100012",
+      "name": "…0012",
       "messages": 6,
       "share": 0.2857,
       "words": 39,
@@ -450,7 +450,7 @@
       "reactions_received": 4
      },
      {
-      "name": "nora.quill@example.com",
+      "name": "nora.quill",
       "messages": 2,
       "share": 0.0952,
       "words": 7,
@@ -472,7 +472,7 @@
       "id": "lurker",
       "emoji": "👻",
       "title": "The Lurker",
-      "winner": "+15550100011",
+      "winner": "…0011",
       "detail": "6 messages. Reads everything, says little."
      },
      {
@@ -493,7 +493,7 @@
       "id": "favorite",
       "emoji": "⭐",
       "title": "The Crowd Favorite",
-      "winner": "+15550100011",
+      "winner": "…0011",
       "detail": "4 tapbacks received."
      }
     ]

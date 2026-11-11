@@ -418,6 +418,41 @@
     return null;
   }
 
+  /**
+   * The label for a sender who has no contact name. A recap is made to be
+   * shared, so a raw phone number or e-mail address never goes into it
+   * (docs/SCHEMA.md 2):
+   *  - a phone number (only digits and + - ( ) . / and spaces, with at least
+   *    7 digits) becomes an ellipsis and its last four digits;
+   *  - an e-mail address (no whitespace, something before the "@" and a dot
+   *    after it) becomes the part before the "@", cut to 16 characters;
+   *  - anything else (a name from an imported export, a short code) is left
+   *    as it is.
+   */
+  function maskHandle(handle) {
+    var value = trim(String(handle));
+    var at = value.indexOf('@');
+    if (at !== -1) {
+      var local = value.slice(0, at);
+      var domain = value.slice(at + 1);
+      if (local && domain.indexOf('.') !== -1 && !hasSpace(value)) {
+        var points = Array.from(local);
+        return points.length <= 16 ? local : points.slice(0, 16).join('') + '\u2026';
+      }
+      return handle;
+    }
+    if (/^[0-9+\-(). \/]+$/.test(value)) {
+      var digits = value.replace(/[^0-9]/g, '');
+      if (digits.length >= 7) return '\u2026' + digits.slice(-4);
+    }
+    return handle;
+  }
+
+  function hasSpace(text) {
+    for (var i = 0; i < text.length; i++) if (isSpace(text.charCodeAt(i))) return true;
+    return false;
+  }
+
   function ContactLookup() { this.table = new Map(); }
 
   /**
@@ -460,7 +495,7 @@
         name = 'Unknown';
       } else {
         var key = contactKey(handle);
-        name = (key !== null && this.table.get(key)) || handle;
+        name = (key !== null && this.table.get(key)) || maskHandle(handle);
       }
       this.cache.set(handle, name);
     }
@@ -1365,6 +1400,7 @@
     decodeAttributedBody: decodeAttributedBody,
     chatDisplayName: chatDisplayName,
     contactKey: contactKey,
+    maskHandle: maskHandle,
     buildContactLookup: buildContactLookup,
     cleanText: cleanText,
     countWords: countWords,

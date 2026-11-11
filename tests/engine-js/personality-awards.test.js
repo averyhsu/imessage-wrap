@@ -165,14 +165,15 @@ test('novelist ratio is exact and rounds half up', () => {
 test('awards from real rows', () => {
   const t = utc(2026, 6, 1, 12);
   const a = '+15550100001', b = '+15550100002', c = '+15550100003';
+  const na = '\u20260001', nb = '\u20260002', nc = '\u20260003';   // no contacts: masked
   let rows = [];
   for (let i = 0; i < 30; i++) rows.push(msg(t + i, a, 'word word word', { guid: 'A' + i }));
   for (let i = 0; i < 6; i++) rows.push(msg(t + 100 + i, b, '\uFFFC', { cache_has_attachments: 1 }));
   for (let i = 0; i < 5; i++) rows.push(msg(t - 12 * 3600 + i, c, 'night'));
   for (let i = 0; i < 4; i++) rows.push(tap(t + 500 + i, b, 2003, rows[i]));
   const st = Engine.computeStats(rows, { tz: 'UTC', now: NOW });
-  assert.deepEqual(ids(st.awards), [['yapper', a], ['lurker', c], ['hype', b],
-    ['night_owl', c], ['comedian', a], ['novelist', a]]);
+  assert.deepEqual(ids(st.awards), [['yapper', na], ['lurker', nc], ['hype', nb],
+    ['night_owl', nc], ['comedian', na], ['novelist', na]]);
   const details = {};
   st.awards.forEach((x) => { details[x.id] = x.detail; });
   assert.equal(details.novelist, '3.0 words per message. A paragraph person.');

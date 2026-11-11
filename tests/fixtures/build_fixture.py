@@ -1213,7 +1213,7 @@ def build(out_dir):
 
 
 def main(argv):
-    if len(argv) != 2:
+    if len(argv) != 2 or argv[1].startswith("-"):
         sys.stderr.write(__doc__)
         return 2
     info = build(argv[1])

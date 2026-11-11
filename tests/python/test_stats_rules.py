@@ -3,6 +3,7 @@ hand-made rows (no database involved)."""
 
 import calendar
 import datetime
+import json
 import unittest
 from zoneinfo import ZoneInfo
 
@@ -13,6 +14,8 @@ from wrapped import stats as S
 from wrapped.stats import compute_stats
 
 A, B, C = "+15550100001", "+15550100002", "+15550100003"
+# how a number with no contact name is shown: never in full (docs/SCHEMA.md 2)
+NA, NB, NC = "\u20260001", "\u20260002", "\u20260003"
 NOW = calendar.timegm((2026, 11, 11, 20, 0, 0))      # 12:00 PST
 
 
@@ -256,7 +259,7 @@ class Senders(unittest.TestCase):
                 msg(self.t, "INES.CALLOWAY@EXAMPLE.COM")]
         st = run(rows, contacts=contacts)
         got = {s["name"]: s["messages"] for s in st["senders"]}
-        self.assertEqual(got, {"Ines Calloway": 4, "Bram Okoye": 1, "+15550100003": 1})
+        self.assertEqual(got, {"Ines Calloway": 4, "Bram Okoye": 1, NC: 1})
         self.assertEqual(st["chat"]["members"], 4)     # three people plus the owner
 
     def test_contact_pairs_and_conflicts(self):
@@ -338,11 +341,11 @@ class ChatName(unittest.TestCase):
         self.assertEqual(name("", [A, B, C, "+15550100004"], self.contacts), "Ines, Bram, Sam & 1 more")
         self.assertEqual(name(" ", [A, B, C, "+15550100004", "x@example.com", "+15550100009"],
                               self.contacts), "Ines, Bram, Sam & 3 more")
-        self.assertEqual(name("", [B, "+15550100007", A]), "+15550100002, +15550100007, +15550100001")
+        self.assertEqual(name("", [B, "+15550100007", A]), "\u20260002, \u20260007, \u20260001")
         self.assertEqual(name("", []), "Unnamed group")
         self.assertEqual(name("", [A, "(555) 010-0001", "ines@example.com"],
                               {A: "Ines Calloway", "ines@example.com": "Ines Calloway"}), "Ines")
-        self.assertEqual(name("", [A, B], {A: "Avery"}, me="Avery"), "+15550100002")
+        self.assertEqual(name("", [A, B], {A: "Avery"}, me="Avery"), NB)
 
     def test_stats_use_the_same_name(self):
         st = run([msg(utc(2026, 5, 5), A)], participants=[A, B, C, "+15550100004"],
@@ -442,15 +445,15 @@ class Tapbacks(unittest.TestCase):
                 tap(self.t + 9, A, 2001, self.m)]       # reacting to your own message counts
         by_kind, st = self.kinds(rows)
         people = {s["name"]: s for s in st["senders"]}
-        self.assertEqual(people[A]["reactions_received"], 4)
-        self.assertEqual(people[A]["reactions_given"], 1)
-        self.assertEqual(people[B]["reactions_received"], 1)
-        self.assertEqual(people[B]["reactions_given"], 1)
+        self.assertEqual(people[NA]["reactions_received"], 4)
+        self.assertEqual(people[NA]["reactions_given"], 1)
+        self.assertEqual(people[NB]["reactions_received"], 1)
+        self.assertEqual(people[NB]["reactions_given"], 1)
         self.assertEqual(st["totals"]["reactions"], 5)
         self.assertEqual(sum(by_kind.values()), 5)
         # the owner and C never wrote, so they are not in senders, but they can top the list
         self.assertEqual(st["reactions"]["top_giver"], {"name": "Me", "count": 2})
-        self.assertEqual(st["reactions"]["top_receiver"], {"name": A, "count": 4})
+        self.assertEqual(st["reactions"]["top_receiver"], {"name": NA, "count": 4})
 
     def test_most_reacted_order_truncation_and_kinds(self):
         long_text = "\U0001F602" * 200
@@ -469,11 +472,11 @@ class Tapbacks(unittest.TestCase):
         rows.append(tap(t + 20, A, 2000, m4))
         st = run(rows)
         top = st["most_reacted"]
-        self.assertEqual([q["sender"] for q in top], [A, C, A])       # 3, then 2 (earliest first)
-        self.assertEqual(top[0], {"sender": A, "reactions": 3, "date": "2026-03-01", "text": "three",
+        self.assertEqual([q["sender"] for q in top], [NA, NC, NA])       # 3, then 2 (earliest first)
+        self.assertEqual(top[0], {"sender": NA, "reactions": 3, "date": "2026-03-01", "text": "three",
                                   "kinds": {"laugh": 2, "love": 1}})
         self.assertEqual(list(top[0]["kinds"]), ["laugh", "love"])
-        self.assertEqual(top[1], {"sender": C, "reactions": 2, "date": "2026-02-01", "text": "",
+        self.assertEqual(top[1], {"sender": NC, "reactions": 2, "date": "2026-02-01", "text": "",
                                   "kinds": {"like": 1, "emphasize": 1}, "attachment": True})
         self.assertEqual(list(top[1]["kinds"]), ["like", "emphasize"])
         self.assertEqual(top[2]["text"], "same instant, higher rowid")
@@ -510,9 +513,9 @@ class Calendar(unittest.TestCase):
         rows.append(msg(utc(2026, 5, 5, 4, 59, 59), B))
         st = run(rows)
         self.assertEqual(st["late_night"], {"messages": 5, "share": 0.7143,
-                                            "top": {"name": B, "messages": 2}})   # tie: more messages
+                                            "top": {"name": NB, "messages": 2}})   # tie: more messages
         people = {s["name"]: s["late_night"] for s in st["senders"]}
-        self.assertEqual(people, {A: 2, B: 2, "Me": 1})
+        self.assertEqual(people, {NA: 2, NB: 2, "Me": 1})
 
     def test_empty_chat(self):
         st = run([])
@@ -549,6 +552,47 @@ class Calendar(unittest.TestCase):
         b = run(tuple(rows))
         self.assertEqual(a, b)
         self.assertEqual(rows, frozen)
+
+
+class Masking(unittest.TestCase):
+    """A number or address with no contact name never goes into a recap in full."""
+
+    def test_mask_handle(self):
+        cases = {
+            "+15550100001": "\u20260001", "(555) 010-0001": "\u20260001",
+            "  +1 555 010 0001 ": "\u20260001", "555.010.0001": "\u20260001",
+            "+44 20 5550 100002": "\u20260002",
+            "ines.calloway@example.com": "ines.calloway",
+            "a.very.long.local.part.indeed@example.com": "a.very.long.loca\u2026",
+            "\u00e9@ex.com": "\u00e9",
+            # not a number or an address: names from an imported export, short codes
+            "Maya": "Maya", "Agent 47": "Agent 47", "22000": "22000", "Maya @ work": "Maya @ work",
+            "x@y": "x@y", "urn:biz:abc": "urn:biz:abc",
+        }
+        for handle, shown in cases.items():
+            self.assertEqual(S.mask_handle(handle), shown, handle)
+
+    def test_no_raw_number_or_address_anywhere_in_the_stats(self):
+        t = utc(2026, 5, 5, 3)
+        handles = ["+15550100001", "+15550100002", "ines.calloway@example.com"]
+        rows = []
+        for i, h in enumerate(handles * 4):
+            rows.append(msg(t + i, h, "hello there", guid="G%d" % i))
+        rows += [tap(t + 100 + i, h, 2003, rows[0]) for i, h in enumerate(handles)]
+        st = run(rows, participants=handles + ["+15550100009"], chat_name="")
+        text = json.dumps(st, ensure_ascii=False)
+        for secret in ("5550100001", "5550100002", "5550100009", "@example.com"):
+            self.assertNotIn(secret, text)
+        self.assertEqual(sorted(s["name"] for s in st["senders"]),
+                         sorted(["\u20260001", "\u20260002", "ines.calloway"]))
+        # a contact name always wins over the mask
+        named = run(rows, contacts={"+15550100001": "Ines Calloway"})
+        self.assertIn("Ines Calloway", [s["name"] for s in named["senders"]])
+
+    def test_names_from_an_import_are_kept(self):
+        t = utc(2026, 5, 5, 12)
+        st = run([msg(t, "Maya"), msg(t + 1, "Dev"), msg(t + 2, "Maya")])
+        self.assertEqual([s["name"] for s in st["senders"]], ["Maya", "Dev"])
 
 
 if __name__ == "__main__":
