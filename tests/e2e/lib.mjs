@@ -178,6 +178,50 @@ export async function findOverflow(page) {
     if (body.scrollHeight > body.clientHeight + 2) {
       issues.push(`slide body is taller than the stage allows (${body.scrollHeight} > ${body.clientHeight})`);
     }
+    // Display type is set tight. Where it wraps, the distance from one line to the next
+    // has to be more than the font's ink (deepest descender + tallest ascender), or a "y"
+    // touches the "h" under it. Measured on the laid-out lines, whatever CSS produced them.
+    const inks = {};
+    const inkOf = (cs) => {
+      const key = cs.fontWeight + ' ' + cs.fontFamily;
+      if (!(key in inks)) {
+        const ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = `${cs.fontWeight} 200px ${cs.fontFamily}`;
+        inks[key] = (ctx.measureText('gjpqy').actualBoundingBoxDescent + ctx.measureText('bdfhklt').actualBoundingBoxAscent) / 200;
+      }
+      return inks[key];
+    };
+    const blocks = new Map();
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!node.nodeValue.trim() || parent.closest('svg')) continue;
+      const pcs = getComputedStyle(parent);
+      if (!/^"?Archivo/.test(pcs.fontFamily) || pcs.display === 'none' || pcs.visibility === 'hidden') continue;
+      let block = parent;
+      while (block !== body && getComputedStyle(block).display.startsWith('inline')) block = block.parentElement;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const entry = blocks.get(block) || { rects: [], ink: inkOf(pcs) };
+      for (const r of range.getClientRects()) if (r.width > 0) entry.rects.push({ top: r.top, bottom: r.bottom, size: parseFloat(pcs.fontSize) });
+      blocks.set(block, entry);
+    }
+    for (const [block, entry] of blocks) {
+      const lines = [];
+      for (const r of entry.rects.sort((a, b) => a.top - b.top)) {
+        const line = lines[lines.length - 1];
+        if (line && r.top < line.bottom - (r.bottom - r.top) * 0.5) { line.size = Math.max(line.size, r.size); line.bottom = Math.max(line.bottom, r.bottom); }
+        else lines.push({ top: r.top, bottom: r.bottom, size: r.size });
+      }
+      for (let i = 1; i < lines.length; i++) {
+        if (Math.abs(lines[i].size - lines[i - 1].size) > 0.5) continue; // different type on each line
+        const spare = (lines[i].top - lines[i - 1].top) / lines[i].size - entry.ink;
+        if (spare < 0.015) {
+          issues.push(`${describe(block)} "${block.textContent.trim().slice(0, 24)}": wrapped display lines are ${spare < 0 ? 'overlapping' : 'touching'} (line pitch ${((lines[i].top - lines[i - 1].top) / lines[i].size).toFixed(3)}em, ink ${entry.ink.toFixed(3)}em)`);
+          break;
+        }
+      }
+    }
     return issues;
   });
 }

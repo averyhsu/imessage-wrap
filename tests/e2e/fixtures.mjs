@@ -166,6 +166,22 @@ rtl.most_reacted[1].sender = rtlNames[0];
 rtl.most_reacted[2].sender = 'Maximilian Alexander von Hohenzollern-Sigmaringen the Younger';
 rtl.most_reacted[2].reactions = 1234;
 
+// What a recap looks like when nothing is tuned: no contacts file, quotes off. The owner
+// has a real first name, some members are in the chat by first name, the rest are masked
+// numbers ("…0006"), and no message text travels. The top sender is a masked number, so
+// the crown lands on "…0001". This is the recap behind the default-* screenshots.
+const defaultNames = ['…0001', 'Sam', 'Maya', '…0006', 'Dev', 'Priya', '…4417'];
+const defaultRecap = makeStats({ name: 'Sunday Dinner Club', members: 7, total: 18204, names: defaultNames, quotes: false });
+defaultRecap.most_reacted[0].sender = '…0006';
+defaultRecap.most_reacted[1].sender = 'Sam';
+defaultRecap.most_reacted[2].sender = 'Maya';
+
+// No message text and no breakdown of the tapbacks either: the bubble still has to say something.
+// The winner here is a "blank message" (zero-width and filler characters), which must count as no text.
+const quietNoKinds = makeStats({ name: 'Quiet Ones', members: 4, total: 2400, quotes: false });
+quietNoKinds.most_reacted.forEach((m) => { m.kinds = {}; });
+quietNoKinds.most_reacted[0].text = '\u200B\u2800\u3164';
+
 // Names outside Latin: CJK without spaces, right-to-left scripts, combining marks.
 const intl = makeStats({ name: '周末火锅小分队🔥ولائم نهاية الأسبوع', members: 6, total: 15230, label: '2026年', names: ['小明', 'محمد علي', 'Zoë', 'אורי', 'Ngọc Ánh', 'Åsa'] });
 intl.most_reacted[0].text = '今晚谁带锅？我只负责吃。😋 من سيحضر الطبق الرئيسي؟';
@@ -214,7 +230,7 @@ const legacy = {
 
 export const fixtures = {
   demo: clone(vector.stats),
-  tiny, huge, nightHuge, astronomical, duo, dozen, longName, unbroken, emojiName, intl, rtl, masked, bare, sparse, noQuotes, zeroNight, legacy,
+  tiny, huge, nightHuge, astronomical, duo, dozen, longName, unbroken, emojiName, intl, rtl, masked, defaultRecap, quietNoKinds, bare, sparse, noQuotes, zeroNight, legacy,
 };
 
 export const viewports = {

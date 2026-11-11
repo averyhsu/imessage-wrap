@@ -705,6 +705,32 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
           return hits;
         });
         eq(clash, [], `[${vpName}] ${name} / late: nothing runs into the moon`);
+        // Stars are decoration: painted before the text, and never inside the text block
+        // (a star between two letters reads as part of the word), on the moon or behind the header.
+        const sky = await page.evaluate(() => {
+          const slide = document.querySelector('.slide.is-active');
+          const body = slide.querySelector('.slide__body');
+          const blocks = [...body.children].filter((el) => !el.classList.contains('late__moon') && !el.classList.contains('late__space'));
+          const top = Math.min(...blocks.map((el) => el.getBoundingClientRect().top));
+          const bottom = Math.max(...blocks.map((el) => el.getBoundingClientRect().bottom));
+          const header = document.querySelector('.head').getBoundingClientRect().bottom;
+          const stage = document.querySelector('.stage').getBoundingClientRect();
+          const moon = slide.querySelector('.late__moon').getBoundingClientRect();
+          const stars = [...slide.querySelectorAll('.late__star')];
+          const shown = stars.filter((el) => getComputedStyle(el).display !== 'none').map((el) => el.getBoundingClientRect());
+          return {
+            id: slide.getAttribute('data-id') || slide.className,
+            total: stars.length,
+            shown: shown.length,
+            inBackground: stars.every((el) => el.closest('.slide__bg')) && !!(slide.querySelector('.slide__bg').compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING),
+            inText: shown.filter((r) => r.bottom > top - 1 && r.top < bottom + 1).length,
+            onMoon: shown.filter((r) => r.right > moon.left && r.left < moon.right && r.bottom > moon.top && r.top < moon.bottom).length,
+            behindHeader: shown.filter((r) => r.top < header).length,
+            offStage: shown.filter((r) => r.left < stage.left - 1 || r.right > stage.right + 1 || r.bottom > stage.bottom + 1).length,
+          };
+        });
+        eq([sky.total, sky.inBackground, sky.inText, sky.onMoon, sky.behindHeader, sky.offStage], [15, true, 0, 0, 0, 0], `[${vpName}] ${name} / late: stars stay behind and clear of the text (${sky.shown} shown)`);
+        if (vp.mobile && vp.height >= 800) ok(sky.shown >= 8, `[${vpName}] ${name} / late: a tall screen still has a sky full of stars (${sky.shown})`);
       }
       if (name === 'rtl' && st.ids.includes('moty')) {
         const dirs = await page.evaluate(() => ({
@@ -737,6 +763,17 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
         const all = texts.join('\n');
         ok(!/e\+|NaN|Infinity|undefined/.test(all), `[${vpName}] astronomical: no exponent or NaN on any slide`);
         ok(all.includes('9,999,999,999'), `[${vpName}] astronomical: absurd counts are capped at 9,999,999,999`);
+      }
+      if (st.ids.includes('moty')) {
+        await showSettled(page, st.ids.indexOf('moty'));
+        const hero = await page.evaluate(() => {
+          const bubble = document.querySelector('.slide.is-active .moty__bubble');
+          const r = bubble.getBoundingClientRect();
+          const text = (bubble.querySelector('.moty__text') || { textContent: '' }).textContent.trim();
+          const counts = [...bubble.querySelectorAll('.moty__tally--badges > span')].filter((el) => el.querySelector('.tb') && /^×\d/.test(el.querySelector('b').textContent));
+          return { text: text.length, badges: counts.length, w: r.width, h: r.height, from: document.querySelector('.slide.is-active .moty__from b').textContent.trim().length };
+        });
+        ok((hero.text > 0 || hero.badges > 0) && hero.h >= 36 && hero.w >= 80 && hero.from > 0, `[${vpName}] ${name} / moty: the bubble always says something (${JSON.stringify(hero)})`);
       }
       // The card must cope with the same data.
       const size = await page.evaluate(() => { const c = document.querySelector('.sum__card canvas'); return [c.width, c.height]; });
@@ -774,6 +811,28 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
   const landedNow = await s.page.evaluate(() => [...document.querySelectorAll('.slide.is-active .moty__tally--badges > span')].map((el) => Number(getComputedStyle(el).opacity) > 0.5));
   eq(landedNow, [true, false, false], 'no quotes: tapback badges land one at a time');
   await s.page.evaluate(() => WrappedStory.resume());
+
+  // The default recap (no contacts file, quotes off) has to look deliberate.
+  await idsFor(fixtures.defaultRecap);
+  await showSettled(s.page, 7);
+  const crowned = await s.page.evaluate(() => {
+    const first = document.querySelector('.slide.is-active .rank__first');
+    const name = first.querySelector('.rank__name');
+    const crown = first.querySelector('.rank__crown').getBoundingClientRect();
+    const span = name.firstElementChild.getBoundingClientRect();
+    return { text: name.textContent, size: parseFloat(getComputedStyle(name).fontSize), clipped: name.classList.contains('fit--clip'), crownAboveName: crown.bottom <= span.top + span.height * 0.45, crownShown: crown.width > 30 };
+  });
+  eq([crowned.text, crowned.clipped, crowned.crownAboveName, crowned.crownShown], ['…0001', false, true, true], 'default: the crown sits on "…0001", shown in full');
+  ok(crowned.size >= 50, `default: and it is set as large as a name would be (${crowned.size}px)`);
+  eq(await s.page.locator('.slide.is-active .rank__who').allInnerTexts(), ['Sam', 'Maya', '…0006', 'Dev'], 'default: first names and masked numbers side by side');
+  await showSettled(s.page, 8);
+  eq(await s.page.locator('.slide.is-active .moty__from b').innerText(), '…0006', 'default: the message of the year names its (masked) sender');
+  eq(await s.page.locator('.slide.is-active .moty__from .avatar').innerText(), '#', 'default: a masked sender gets the # avatar');
+  eq(await s.page.locator('.slide.is-active .moty__bubble .tb').count(), 3, 'default: the bubble holds the tapbacks, not an empty space');
+  eq(await s.page.locator('.slide.is-active .moty__text').count(), 0, 'default: and no message text');
+  await idsFor(fixtures.quietNoKinds);
+  await showSettled(s.page, 8);
+  eq(await s.page.locator('.slide.is-active .moty__bubble .moty__text').innerText(), '6 tapbacks', 'no text and no breakdown: the bubble states the tapback count');
 
   // People who are not in the owner's contacts arrive masked; they render like anyone else.
   await idsFor(fixtures.masked);
@@ -844,6 +903,19 @@ await section('landing', 'Landing page', async () => {
     ok((await page.locator('.l-cta a[href="make/"]').innerText()).includes('Make your own'), `[${vpName}] make link label`);
     const text = await visibleText(page);
     ok(/never send that part/i.test(text) && /no server/i.test(text) && /on your own device/i.test(text), `[${vpName}] explains the privacy model`);
+    // Display type set tight: a line's descenders must clear the next line's tall letters.
+    // Measured on the font's real ink (canvas metrics at a large size), not on the CSS number.
+    const leading = await page.evaluate(() => [...document.querySelectorAll('.l-h1, .l-h2, .l-step h3, .l-facts h3')].map((el) => {
+      const cs = getComputedStyle(el);
+      const ctx = document.createElement('canvas').getContext('2d');
+      ctx.font = `${cs.fontWeight} 200px ${cs.fontFamily}`;
+      const ink = (ctx.measureText('gjpqy').actualBoundingBoxDescent + ctx.measureText('bdfhklt').actualBoundingBoxAscent) / 200;
+      const size = parseFloat(cs.fontSize);
+      return { what: el.className || el.tagName, ink, spare: parseFloat(cs.lineHeight) / size - ink, lines: Math.round(el.getBoundingClientRect().height / parseFloat(cs.lineHeight)) };
+    }));
+    ok(leading.length >= 10 && leading.every((l) => l.ink > 0.9 && l.ink < 1.05), `[${vpName}] the display font's ink is measurable (${leading[0].ink.toFixed(3)}em)`);
+    ok(leading.every((l) => l.spare >= 0.06), `[${vpName}] headline lines keep clear of each other (${JSON.stringify(leading.map((l) => [l.what, l.lines, +l.spare.toFixed(3)]))})`);
+    ok(leading[0].lines >= 2, `[${vpName}] the main headline wraps here, so the check means something (${leading[0].lines} lines)`);
     const scrollW = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
     ok(scrollW[0] <= scrollW[1] + 1, `[${vpName}] no horizontal scrolling (${scrollW.join(' vs ')})`);
     const heroPixels = await page.evaluate(() => { const c = document.getElementById('hero-card'); const d = c.getContext('2d').getImageData(540, 700, 1, 1).data; return d[3]; });
@@ -951,12 +1023,36 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   eq((await state(d.page)).index, 4, 'the desktop arrow advances');
   await d.close();
 
+  // The default recap: no contacts file, quotes off. Masked numbers next to first names,
+  // and a message of the year without its words. An honest picture for the README.
+  const dflt = await open({ scale: 2 });
+  await dflt.page.goto(link(fixtures.defaultRecap));
+  await waitForStory(dflt.page);
+  const dIds = (await state(dflt.page)).ids;
+  const strip = [];
+  for (const [id, file] of [['senders', 'default-08-senders.png'], ['moty', 'default-09-moty.png'], ['sum', null]]) {
+    await showSettled(dflt.page, dIds.indexOf(id));
+    const png = await dflt.page.screenshot(file ? { path: path.join(SHOTS, file) } : {});
+    eq(pngSize(png), { width: 780, height: 1688 }, `default recap: ${id} slide captured`);
+    strip.push(png);
+  }
+  const dText = await dflt.page.evaluate(() => [...document.querySelectorAll('.slide')].map((el) => el.textContent).join('\n'));
+  ok(dText.includes('…0001') && dText.includes('Sam') && dText.includes('the words stayed in the chat'), 'default recap: masked numbers, a first name and no quotes');
+  eq(dflt.problems, [], 'default recap: no console errors');
+  await dflt.close();
+  const three = await open({ viewport: { width: 1260, height: 900 } });
+  await three.page.setContent(`<body>${strip.map((png) => `<img src="data:image/png;base64,${png.toString('base64')}">`).join('')}</body>`);
+  await three.page.addStyleTag({ content: 'body{margin:0;padding:36px;background:#07070c;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}img{width:100%;border-radius:26px;display:block}' });
+  await three.page.waitForFunction(() => [...document.images].every((img) => img.complete && img.naturalWidth > 0));
+  await three.page.screenshot({ path: path.join(SHOTS, 'default-overview.png'), fullPage: true });
+  await three.close();
+
   // A contact sheet of all twelve, for the README.
   const sheet = await open({ viewport: { width: 1640, height: 1200 } });
   const imgs = files.map((f) => `<img src="data:image/png;base64,${fs.readFileSync(f).toString('base64')}">`).join('');
   await sheet.page.setContent(`<body>${imgs}</body>`);
   await sheet.page.addStyleTag({ content: 'body{margin:0;padding:40px;background:#07070c;display:grid;grid-template-columns:repeat(6,1fr);gap:20px}img{width:100%;border-radius:22px;display:block}' });
-  await sheet.page.waitForTimeout(300);
+  await sheet.page.waitForFunction(() => [...document.images].every((img) => img.complete && img.naturalWidth > 0));
   await sheet.page.screenshot({ path: path.join(SHOTS, 'overview.png'), fullPage: true });
   await sheet.close();
 });
