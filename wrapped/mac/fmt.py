@@ -104,6 +104,25 @@ def first_name(name: object, digits: int = 2) -> str:
     return first if len(first) <= 16 else first[:15] + "…"
 
 
+_NAME_PARTS = re.compile(r"(, | & )")
+
+
+def safe_chat_name(name: object) -> str:
+    """A chat name fit for a shared image.
+
+    A group without a name is called after its members ("Bram, Sam, +1555... & 1
+    more"); a member who is not in the owner's contacts would appear there as a
+    full phone number or e-mail address. Those parts are masked like sender
+    names; everything else is left alone."""
+    parts = _NAME_PARTS.split(clean(name))
+    for i, part in enumerate(parts):
+        if part in (", ", " & "):
+            continue
+        if (part.find("@") > 0 and " " not in part) or _is_phone(part):
+            parts[i] = first_name(part)
+    return "".join(parts)
+
+
 def display_names(names: Iterable[object]) -> Dict[str, str]:
     """Map full sender names to short display names that stay distinguishable.
 

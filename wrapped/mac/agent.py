@@ -32,6 +32,7 @@ from . import PRODUCT_NAME, chatdb
 from .engine import ChatRef, Engine
 from .send import FAILED, SendResult
 from .state import State
+from .fmt import safe_chat_name
 from .text import assert_safe, empty_text, recap_lines
 from .triggers import Trigger, parse_trigger
 
@@ -309,7 +310,8 @@ class Agent:
             assert_safe(link)
 
         label = str((stats.get("period") or {}).get("label") or "")
-        filename = f"threadback-{slugify(chat.name)}-{slugify(label, 'recap')}.png"
+        # the file name travels with the attachment, so no phone numbers in it either
+        filename = f"threadback-{slugify(safe_chat_name(chat.name))}-{slugify(label, 'recap')}.png"
         with tempfile.TemporaryDirectory(prefix="threadback-") as tmp:
             if self.config.dry_run:
                 folder = self._dry_run_folder(chat)
@@ -349,11 +351,12 @@ class Agent:
     def _dry_run_folder(self, chat: ChatRef) -> Path:
         base = self.config.out_dir or (Path.home() / "Pictures" / PRODUCT_NAME / "dry-run")
         stamp = _dt.datetime.fromtimestamp(self._clock()).strftime("%Y%m%d-%H%M%S")
-        folder = Path(base) / f"{stamp}-{slugify(chat.name)}"
+        slug = slugify(safe_chat_name(chat.name))
+        folder = Path(base) / f"{stamp}-{slug}"
         n = 1
         while folder.exists():
             n += 1
-            folder = Path(base) / f"{stamp}-{slugify(chat.name)}-{n}"
+            folder = Path(base) / f"{stamp}-{slug}-{n}"
         folder.mkdir(parents=True)
         return folder
 

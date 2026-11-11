@@ -34,7 +34,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour
+from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name
 
 DESIGN_W, DESIGN_H = 1080, 1350
 EMOJI_SCALE = 0.92  # emoji height relative to the type size
@@ -904,7 +904,7 @@ def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:
     totals = stats.get("totals") or {}
     personality = stats.get("personality") or {}
 
-    chat_name = clean(chat.get("name")) or "Group chat"
+    chat_name = safe_chat_name(chat.get("name")) or "Group chat"
     label = clean(period.get("label"), 18)
     messages = max(0, _int(totals.get("messages")))
     title = clean(personality.get("title"), 48)

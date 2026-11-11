@@ -354,6 +354,24 @@ class AgentCase(unittest.TestCase):
         self.assertTrue(all(r.status == DRY_RUN for r in agent.outcomes[0].results.values()))
         self.assertTrue(any("card=dry-run" in ln and "link=dry-run" in ln for ln in self.logs))
 
+    def test_attachment_file_name_never_contains_a_phone_number(self):
+        numbered = self.db.add_chat("chat777", "", members=[self.maya])
+        agent = self.started(all_chats=True, chats=[])
+        self.db.add_message("/wrapped", chat=numbered, handle=self.maya, when=self.now)
+        real = self.engine.list_group_chats
+
+        def named(db_path):
+            return [
+                c if c.identifier != "chat777" else ChatRef(c.guid, c.identifier, "Bram, +15550100007 & 1 more", c.rowid, 3)
+                for c in real(db_path)
+            ]
+
+        self.engine.list_group_chats = named
+        self.assertEqual(agent.run_once(), 1)
+        self.assertNotIn("5550100007", self.sender.sent[0]["path"])
+        self.assertNotIn("5550100007", self.sender.sent[1]["text"])
+        self.assertIn("…07", self.sender.sent[1]["text"])
+
     def test_no_link_sends_only_card_and_text(self):
         agent = self.started(link=False)
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)

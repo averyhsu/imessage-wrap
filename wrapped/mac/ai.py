@@ -31,7 +31,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
-from .fmt import clean, display_names
+from .fmt import clean, display_names, safe_chat_name
 from .triggers import starts_with_trigger
 
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -107,7 +107,7 @@ def build_payload(stats: dict, quotes: bool = False) -> Tuple[dict, Dict[str, st
 
     payload: dict = {}
     chat = stats.get("chat") or {}
-    payload["chat"] = {"name": clean(chat.get("name"), 80), "members": chat.get("members")}
+    payload["chat"] = {"name": clean(safe_chat_name(chat.get("name")), 80), "members": chat.get("members")}
     for key in ("period", "totals", "by_hour", "by_weekday", "by_month", "busiest_day", "personality"):
         if key in stats:
             payload[key] = copy.deepcopy(stats[key])

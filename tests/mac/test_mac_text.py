@@ -129,6 +129,16 @@ class Formatting(unittest.TestCase):
         self.assertEqual(fmt.first_name("Bartholomew-Alexander Montgomery"), "Bartholomew-Ale…")
         self.assertEqual(fmt.first_name(""), "?")
 
+    def test_unnamed_group_names_never_show_a_number_or_address(self):
+        name = "Bram, Sam, +15550100007 & 1 more"
+        self.assertEqual(fmt.safe_chat_name(name), "Bram, Sam, …07 & 1 more")
+        self.assertEqual(fmt.safe_chat_name("Bram, x.invented@example.invalid"), "Bram, X…")
+        for untouched in ("Dinner Club 🍝", "Class of 2019", "Flat 12 & friends", "24/7", ""):
+            self.assertEqual(fmt.safe_chat_name(untouched), untouched)
+        text = recap_text(sample_stats(chat_name=name))
+        self.assertNotIn("5550100007", text)
+        self.assertIn("Bram, Sam, …07 & 1 more", text)
+
     def test_peak_hour_fallbacks(self):
         self.assertEqual(fmt.peak_hour({"personality": {"peak_hour": 7}}), 7)
         self.assertEqual(fmt.peak_hour({"by_hour": [0] * 9 + [5] + [0] * 14}), 9)

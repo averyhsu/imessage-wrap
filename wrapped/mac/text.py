@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import List
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour, short_date
+from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name, short_date
 from .triggers import starts_with_trigger
 
 PERSONALITY_EMOJI = {
@@ -43,7 +43,7 @@ def recap_lines(stats: dict, with_link: bool = True) -> List[str]:
     senders = [s for s in (stats.get("senders") or []) if isinstance(s, dict)]
     names = display_names(s.get("name") for s in senders)
 
-    chat_name = clean(chat.get("name"), 60) or "This chat"
+    chat_name = clean(safe_chat_name(chat.get("name")), 60) or "This chat"
     label = clean(period.get("label"), 24)
     lines: List[str] = []
 
