@@ -1233,6 +1233,22 @@
 
 .moty__tally .glyph { font-size: calc(var(--u) * 30); }
 
+.moty__bubble--quiet { max-width: 100%; padding: calc(var(--u) * 15) calc(var(--u) * 20) calc(var(--u) * 15) calc(var(--u) * 16); }
+
+/* No message text: one badge per tapback kind with its count, in a tidy grid. */
+.moty__tally--badges {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), auto);
+  justify-content: start;
+  gap: calc(var(--u) * 10) calc(var(--u) * 14);
+  padding: 0;
+}
+
+.moty__tally--badges > span { gap: calc(var(--u) * 6); }
+.moty__tally--badges .tb { width: calc(var(--u) * 40); height: calc(var(--u) * 40); font-size: calc(var(--u) * 23); box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 10) rgba(0, 40, 120, 0.28); }
+.moty__tally--badges .tb .glyph { font-size: inherit; }
+.moty__tally--badges b { font: 900 calc(var(--u) * 22) / 1 var(--font-display); font-variant-numeric: tabular-nums; color: #fff; white-space: nowrap; }
+
 .moty__tbs {
   position: absolute;
   top: calc(var(--u) * -27);

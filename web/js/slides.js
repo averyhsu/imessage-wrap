@@ -625,44 +625,71 @@
     return out;
   }
 
+  function kindEntries(kinds) {
+    return Object.keys(kinds).map(function (k) { return [k, kinds[k]]; }).sort(function (a, z) { return z[1] - a[1]; });
+  }
+
+  /** Compact tapback counts for a runner-up: glyph ×n, glyph ×n. */
   function tally(kinds) {
-    var entries = Object.keys(kinds).map(function (k) { return [k, kinds[k]]; }).sort(function (a, z) { return z[1] - a[1]; });
-    return h('span', 'moty__tally', entries.map(function (e) {
+    return h('span', 'moty__tally', kindEntries(kinds).map(function (e) {
       return h('span', '', [G.icon(e[0]), '×' + F.int(e[1])]);
     }));
+  }
+
+  /**
+   * The hero when the recap carries no message text (the default: quotes are opt-in).
+   * The tapbacks are the content: one badge per kind with its count, landing one by one.
+   */
+  function tallyBadges(kinds, at, step) {
+    var entries = kindEntries(kinds);
+    var node = h('span', 'moty__tally moty__tally--badges', entries.map(function (e, i) {
+      return A(h('span', '', [G.tapback(e[0]), h('b', '', '×' + (e[1] >= 10000 ? F.compact(e[1]) : F.int(e[1])))]), 'drop', at + i * step, 0.5);
+    }));
+    // Up to three per row; four reads better as two and two.
+    return css(node, { '--cols': entries.length === 4 ? 2 : Math.min(3, entries.length) });
   }
 
   function moty(s) {
     var m = s.most_reacted[0];
     if (!m || !(m.reactions > 0 || m.text)) return null;
-    var slide = make('moty', { ink: 'dark', world: '#e9e9eb', backdrop: '#0a84ff', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : '') });
+    var slide = make('moty', { ink: 'dark', world: '#e9e9eb', backdrop: '#0a84ff', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : ', ' + F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')) });
     decos(slide, ['moty__d1', 'moty__d2']);
 
     var len = Array.from(m.text).length;
     var fs = len <= 22 ? 35 : len <= 56 ? 27 : len <= 105 ? 23 : len <= 150 ? 20 : 18;
     var clamp = len <= 22 ? 3 : len <= 56 ? 4 : len <= 105 ? 5 : 6;
-    var hasKinds = Object.keys(m.kinds).length > 0;
-    var badges = badgeList(m.kinds, 6);
-
-    var content = m.text
-      ? h('span', 'moty__text', m.text)
-      : (hasKinds ? tally(m.kinds) : h('span', 'moty__text', F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')));
-    var hero = A(bubble('blue', 'left', content, 'moty__bubble'), 'pop-l', 800);
-    css(hero, { '--fs': m.text ? fs : 26, '--clamp': clamp });
-
+    var kindCount = Object.keys(m.kinds).length;
     var landAt = 1650;
-    if (m.text && badges.length) {
-      var tbs = h('span', 'moty__tbs');
-      // row-reverse: the first badge in the DOM sits rightmost and lands first.
-      badges.forEach(function (kind, i) { tbs.appendChild(A(G.tapback(kind), 'drop', landAt + i * 290, 0.5)); });
-      hero.appendChild(tbs);
-      slide.cues.push({ at: landAt, haptic: 'light' });
+    var landStep = 290;
+    var landed = 0;
+    var hero;
+
+    if (m.text) {
+      // The quote, with its tapbacks landing on the corner of the bubble one by one.
+      hero = A(bubble('blue', 'left', h('span', 'moty__text', m.text), 'moty__bubble'), 'pop-l', 800);
+      css(hero, { '--fs': fs, '--clamp': clamp });
+      var badges = badgeList(m.kinds, 6);
+      if (badges.length) {
+        var tbs = h('span', 'moty__tbs');
+        // row-reverse: the first badge in the DOM sits rightmost and lands first.
+        badges.forEach(function (kind, i) { tbs.appendChild(A(G.tapback(kind), 'drop', landAt + i * landStep, 0.5)); });
+        hero.appendChild(tbs);
+        landed = badges.length;
+      }
+    } else if (kindCount) {
+      // No message text in this recap: the bubble holds what the chat did with it.
+      hero = A(bubble('blue', 'left', tallyBadges(m.kinds, landAt, landStep), 'moty__bubble moty__bubble--quiet'), 'pop-l', 800);
+      landed = kindCount;
+    } else {
+      hero = A(bubble('blue', 'left', h('span', 'moty__text', F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), 'moty__bubble'), 'pop-l', 800);
+      css(hero, { '--fs': 30, '--clamp': 2 });
     }
-    var doneAt = landAt + (m.text ? badges.length : 0) * 290;
+    if (landed) slide.cues.push({ at: landAt, haptic: 'light' });
+    var doneAt = landAt + landed * landStep;
 
     var from = h('p', 'moty__from', [avatar(m.sender, true), b(m.sender), m.date ? h('span', '', '·  ' + F.date(m.date)) : null]);
     var receipt = m.reactions > 0
-      ? h('p', 'moty__receipt', [b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the quote stayed in the chat'])
+      ? h('p', 'moty__receipt', [b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the words stayed in the chat'])
       : null;
 
     var runners = s.most_reacted.slice(1, 3).filter(function (r) { return r.reactions > 0 || r.text; });

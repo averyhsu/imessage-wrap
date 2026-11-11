@@ -85,6 +85,9 @@ const longNames = [
   'Seraphina', 'Christopher-Jonathan', 'Guadalupe Hernández de la Cruz', 'Ng', 'Æthelred', 'Zoë', 'Þórður', 'Łukasz', 'Siobhán',
 ];
 const emojiNames = ['Maya 🌮', '🦖 Dev', 'Priya ✨✨', 'J', '👩‍🚀', 'Marcus 🇨🇦', 'Léna 💅', 'Ok', 'B', 'S', 'A', 'R'];
+// People who are not in the owner's contacts arrive masked (docs/SCHEMA.md §2): an
+// ellipsis plus the last four digits of a phone number, or the part of an e-mail before the @.
+const maskedNames = ['…0001', 'Maya', 'jo.smith', '…4417', 'Tess', '…9902', 'averyveryverylon…'];
 
 const tiny = makeStats({ name: 'Book Club (allegedly)', members: 4, total: 60, label: '2026' });
 tiny.totals.words = 212;
@@ -121,6 +124,10 @@ longName.most_reacted[2].text = 'Pneumonoultramicroscopicsilicovolcanoconiosis-s
 const unbroken = makeStats({ name: 'Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch', members: 3, total: 4020, label: '2026', names: ['Supercalifragilisticexpialidocious', 'Hippopotomonstrosesquippedaliophobia', 'Al'] });
 
 const emojiName = makeStats({ name: '🍕🍕🍕 pizza fam 👨‍👩‍👧‍👦✨ ¡olé!', members: 7, total: 12345, label: '2026', names: emojiNames });
+
+// The default recap: no message text (quotes are opt-in) and some members known only by
+// a masked number. The most-reacted message and the top late-night sender are masked people.
+const masked = makeStats({ name: '…0001, Maya, jo.smith & 4 more', members: 7, total: 20480, names: maskedNames, quotes: false });
 
 // Names outside Latin: CJK without spaces, right-to-left scripts, combining marks.
 const intl = makeStats({ name: '周末火锅小分队🔥ولائم نهاية الأسبوع', members: 6, total: 15230, label: '2026年', names: ['小明', 'محمد علي', 'Zoë', 'אורי', 'Ngọc Ánh', 'Åsa'] });
@@ -170,7 +177,7 @@ const legacy = {
 
 export const fixtures = {
   demo: clone(vector.stats),
-  tiny, huge, duo, dozen, longName, unbroken, emojiName, intl, bare, sparse, noQuotes, zeroNight, legacy,
+  tiny, huge, duo, dozen, longName, unbroken, emojiName, intl, masked, bare, sparse, noQuotes, zeroNight, legacy,
 };
 
 export const viewports = {

@@ -79,22 +79,26 @@ test('parseLocation: fragment, query, demo and embed forms', () => {
 });
 
 test('buildLink: the demo recap fits without trimming', () => {
-  const plan = Codec.planLink(vector.stats);
+  const plan = Codec.planLink(vector.stats, { quotes: true });
   assert.deepStrictEqual(plan.steps, []);
   assert.ok(plan.url.startsWith(Config.BASE_URL + '#w1='));
   assert.ok(plan.length <= 4800);
-  assert.equal(plan.url, Codec.buildLink(vector.stats));
+  assert.equal(plan.url, Codec.buildLink(vector.stats, { quotes: true }));
   assert.deepStrictEqual(Codec.decode(Codec.parseLocation(plan.url).payload), vector.stats);
   assert.ok(Codec.buildLink(vector.stats, { form: 'query' }).startsWith(Config.BASE_URL + '?w1='));
 });
 
-test('buildLink: "no quotes" blanks every most_reacted text and nothing else', () => {
-  const plan = Codec.planLink(vector.stats, { quotes: false });
-  const got = Codec.decode(plan.payload);
-  assert.deepStrictEqual(got.most_reacted.map((m) => m.text), ['', '', '']);
+test('buildLink: message text is opt-in (no quotes unless asked)', () => {
   const expected = clone(vector.stats);
   expected.most_reacted.forEach((m) => { m.text = ''; });
-  assert.deepStrictEqual(got, expected);
+  // Default, explicit false and anything that is not exactly true all leave the text out.
+  for (const opts of [undefined, {}, { quotes: false }, { quotes: 'yes' }, { quotes: 1 }]) {
+    const got = Codec.decode(Codec.planLink(vector.stats, opts).payload);
+    assert.deepStrictEqual(got.most_reacted.map((m) => m.text), ['', '', ''], JSON.stringify(opts));
+    assert.deepStrictEqual(got, expected, 'nothing else changes');
+  }
+  assert.ok(!Codec.buildLink(vector.stats).includes(Codec.encode(vector.stats)), 'the default link is not the quoted payload');
+  assert.deepStrictEqual(Codec.decode(Codec.planLink(vector.stats, { quotes: true }).payload), vector.stats, 'quotes: true keeps the text');
   assert.equal(vector.stats.most_reacted[0].text.length > 0, true, 'input is not mutated');
 });
 
@@ -120,7 +124,7 @@ test('buildLink: trim ladder is applied in order and stops as soon as the link f
     const stats = bulky(noise);
     const untrimmedLength = (Config.BASE_URL + '#w1=' + Codec.encode(stats)).length;
     let plan;
-    try { plan = Codec.planLink(stats); } catch (e) { assert.equal(e.code, 'too_long'); seen.add('error'); continue; }
+    try { plan = Codec.planLink(stats, { quotes: true }); } catch (e) { assert.equal(e.code, 'too_long'); seen.add('error'); continue; }
     assert.ok(plan.length <= 4800, `fits (${plan.length})`);
     assert.equal(plan.url.length, plan.length);
     // Steps are always a prefix of the ladder.
@@ -143,7 +147,7 @@ test('buildLink: trim ladder is applied in order and stops as soon as the link f
 
     // One step fewer would not have fit.
     if (k > 0) {
-      const fewer = Codec.planLink(stats, { maxLength: 1e9 }).stats; // untouched copy
+      const fewer = Codec.planLink(stats, { maxLength: 1e9, quotes: true }).stats; // untouched copy
       const ladder = [
         (s) => s.awards.forEach((a) => delete a.detail),
         (s) => s.most_reacted.forEach((m) => { const c = Array.from(m.text); if (c.length > 60) m.text = c.slice(0, 60).join('') + '…'; }),
@@ -167,7 +171,7 @@ test('buildLink: short quotes are left alone by the 60-character step', () => {
   const afterStepOne = clone(stats);
   afterStepOne.awards.forEach((a) => delete a.detail);
   const budget = (Config.BASE_URL + '#w1=' + Codec.encode(afterStepOne)).length - 1; // step 1 alone is not enough
-  const plan = Codec.planLink(stats, { maxLength: budget });
+  const plan = Codec.planLink(stats, { maxLength: budget, quotes: true });
   assert.deepStrictEqual(plan.steps, Codec.TRIM_STEPS.slice(0, 2));
   assert.equal(plan.stats.most_reacted[0].text, 'short one');
   assert.equal(plan.stats.most_reacted[1].text, '🍝'.repeat(60));
@@ -178,7 +182,7 @@ test('buildLink: short quotes are left alone by the 60-character step', () => {
 test('buildLink: fails with a clear error when nothing fits, and never mutates its input', () => {
   const stats = bulky(1000);
   const before = JSON.stringify(stats);
-  assert.throws(() => Codec.buildLink(stats), (e) => {
+  assert.throws(() => Codec.buildLink(stats, { quotes: true }), (e) => {
     assert.equal(e.name, 'WrappedCodecError');
     assert.equal(e.code, 'too_long');
     assert.match(e.message, /4800/);

@@ -140,7 +140,8 @@
 
   /**
    * Work out the link for a recap.
-   *   opts.quotes    false → blank every most_reacted[].text ("no quotes" mode). Default true.
+   *   opts.quotes    true → keep most_reacted[].text. Message text is opt-in (SCHEMA §5,
+   *                  DECISIONS D12): by default every quote is replaced with "".
    *   opts.base      base URL. Default WrappedConfig.BASE_URL.
    *   opts.maxLength whole-URL budget. Default 4,800.
    *   opts.form      'fragment' (default) or 'query'.
@@ -155,7 +156,7 @@
     var form = opts.form === 'query' ? 'query' : 'fragment';
 
     var working = clone(stats);
-    if (opts.quotes === false && Array.isArray(working.most_reacted)) {
+    if (opts.quotes !== true && Array.isArray(working.most_reacted)) {
       working.most_reacted.forEach(function (m) { if (m && typeof m === 'object') m.text = ''; });
     }
 

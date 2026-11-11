@@ -128,6 +128,9 @@ test('small helpers', () => {
   assert.equal(F.initial('maya'), 'M');
   assert.equal(F.initial('  🍝 club'), '🍝');
   assert.equal(F.initial(''), '?');
+  assert.equal(F.initial('…0001'), '#', 'a masked phone number gets a neutral avatar');
+  assert.equal(F.initial('jo.smith'), 'J', 'a masked e-mail keeps its first letter');
+  assert.equal(F.initial('…'), '?');
   assert.equal(F.truncate('hello world', 5), 'hello…');
   assert.equal(F.truncate('hello', 5), 'hello');
   assert.equal(F.truncate('🍝🍝🍝', 2), '🍝🍝…');

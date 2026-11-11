@@ -508,6 +508,8 @@
     if (!S) return '';
     if (S.opts.payload) return Config.BASE_URL + '#' + Config.PAYLOAD_KEY + '=' + S.opts.payload;
     if (S.opts.demo) return Config.BASE_URL + '?demo=1';
+    // A recap handed over directly (WrappedApp.load) may show quotes on this device, but a
+    // link built from it carries no message text: quotes are opt-in at the maker (D12).
     return Codec.buildLink(S.stats);
   }
 

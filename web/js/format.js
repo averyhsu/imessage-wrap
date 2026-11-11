@@ -163,9 +163,14 @@
     return "That's War and Peace, " + int(wp) + ' times over.';
   }
 
-  /** First visible character of a name, upper-cased, for avatars. */
+  /**
+   * First visible character of a name, upper-cased, for avatars. People without a contact
+   * name arrive masked as "…0001" (docs/SCHEMA.md §2): they get "#".
+   */
   function initial(name) {
-    var chars = Array.from(String(name == null ? '' : name).trim());
+    var text = String(name == null ? '' : name).trim();
+    if (/^\u2026\s*\d/.test(text)) return '#';
+    var chars = Array.from(text.replace(/^[\u2026.\s]+/, ''));
     return chars.length ? chars[0].toUpperCase() : '?';
   }
 

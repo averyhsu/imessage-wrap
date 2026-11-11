@@ -240,6 +240,22 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   eq(Codec.decode(Codec.parseLocation(copied).payload), vector.stats, 'the copied link decodes to the same stats');
   ok((await page.locator('.toast').innerText()).includes('Link copied'), 'a toast confirms the copy');
 
+  // Message text is opt-in (DECISIONS D12): a recap handed to the page directly may show
+  // its quotes on this device, but a link built from it carries none.
+  await page.goto(server.url);
+  await page.waitForFunction(() => window.WrappedApp);
+  await page.evaluate((stats) => window.WrappedApp.load(stats), vector.stats);
+  await waitForStory(page);
+  const built = await page.evaluate(() => WrappedStory.link());
+  ok(built.startsWith(Config.BASE_URL + '#w1=') && built.length <= Config.MAX_URL_LENGTH, `a built link is canonical and within the budget (${built.length})`);
+  const carried = Codec.decode(Codec.parseLocation(built).payload);
+  eq(carried.most_reacted.map((m) => m.text), ['', '', ''], 'a link built by the page carries no message text');
+  eq(carried.most_reacted.map((m) => m.reactions), vector.stats.most_reacted.map((m) => m.reactions), 'but keeps who and how many tapbacks');
+  eq(carried.senders, vector.stats.senders, 'and everything else');
+  await page.goto(server.url + '#w1=' + vector.payload);
+  await page.reload();
+  await waitForStory(page);
+
   // Closing a recap keeps it one tap away.
   await page.locator('.head__close').click();
   await page.waitForFunction(() => document.documentElement.classList.contains('is-landing'));
@@ -537,11 +553,34 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
   eq(await idsFor(fixtures.legacy), ['cover', 'total', 'clock', 'persona', 'late', 'week', 'year', 'senders', 'moty', 'sum'], 'the legacy shape plays (with a derived personality)');
   eq(await idsFor(fixtures.noQuotes), ALL_SLIDES, 'a "no quotes" recap keeps every slide');
 
-  // "No quotes": tapback counts, no bubble text.
+  // No message text (the default now): who wrote it, when, and the tapbacks. No empty bubble.
   await showSettled(s.page, 8);
   eq(await s.page.locator('.slide.is-active .moty__text').count(), 0, 'no quotes: the hero bubble has no message text');
   ok(await s.page.locator('.slide.is-active .moty__bubble .moty__tally').isVisible(), 'no quotes: the hero bubble shows tapback counts instead');
-  ok((await s.page.locator('.slide.is-active .moty__receipt').innerText()).includes('6 tapbacks'), 'no quotes: the tapback total is still shown');
+  eq(await s.page.locator('.slide.is-active .moty__bubble .moty__tally--badges .tb').count(), 3, 'no quotes: one badge per tapback kind');
+  eq(await s.page.locator('.slide.is-active .moty__bubble .moty__tally--badges b').allInnerTexts(), ['×4', '×1', '×1'], 'no quotes: each badge carries its count');
+  const quietFrom = await s.page.locator('.slide.is-active .moty__from').innerText();
+  ok(quietFrom.includes(fixtures.noQuotes.most_reacted[0].sender) && quietFrom.includes('March 14'), `no quotes: sender and date are shown (${quietFrom.replace(/\s+/g, ' ')})`);
+  const quietReceipt = await s.page.locator('.slide.is-active .moty__receipt').innerText();
+  ok(quietReceipt.includes('6 tapbacks') && quietReceipt.includes('the words stayed in the chat'), 'no quotes: the tapback total is shown and the absence is explained');
+  const quietBox = await s.page.locator('.slide.is-active .moty__bubble').boundingBox();
+  ok(quietBox.height > 50 && quietBox.width > 150, 'no quotes: the bubble is not an empty shell');
+  eq(await s.page.locator('.slide.is-active .moty__runner .moty__tally').count(), 2, 'no quotes: runners-up show their tapbacks too');
+  // A mid-flight frame: the badges land one by one.
+  await s.page.evaluate(() => { WrappedStory.goTo(8); WrappedStory.seek(1900); });
+  const landedNow = await s.page.evaluate(() => [...document.querySelectorAll('.slide.is-active .moty__tally--badges > span')].map((el) => Number(getComputedStyle(el).opacity) > 0.5));
+  eq(landedNow, [true, false, false], 'no quotes: tapback badges land one at a time');
+  await s.page.evaluate(() => WrappedStory.resume());
+
+  // People who are not in the owner's contacts arrive masked; they render like anyone else.
+  await idsFor(fixtures.masked);
+  eq(await s.page.locator('.head__badge').innerText(), '#', 'masked: a chat named after a masked number gets a neutral badge');
+  await showSettled(s.page, 7);
+  eq(await s.page.locator('.slide.is-active .rank__name').innerText(), '…0001', 'masked: "…0001" is shown as the top sender');
+  ok((await s.page.locator('.slide.is-active .rank').innerText()).includes('jo.smith'), 'masked: an e-mail local part is shown as a name');
+  await showSettled(s.page, 4);
+  ok((await s.page.locator('.slide.is-active .late__top').innerText()).includes('kept the lights on'), 'masked: the late-night slide renders');
+  await idsFor(fixtures.noQuotes);
   await showSettled(s.page, 10);
   eq(await s.page.locator('.slide.is-active .award__detail').count(), 0, 'awards without detail render without the detail line');
   eq(await s.page.locator('.slide.is-active .award').count(), 6, 'all six awards still render');
@@ -676,7 +715,8 @@ await section('shots', 'Screenshots of every slide → docs/screenshots/web/', a
   await d.page.goto(server.url + '?demo=1');
   await waitForStory(d.page);
   await showSettled(d.page, 3);
-  await d.page.waitForTimeout(800);
+  // Let the backdrop finish changing colour so the committed screenshot is stable.
+  await d.page.evaluate(() => { document.getAnimations().forEach((a) => { if (a.constructor.name === 'CSSTransition') a.finish(); }); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
   await d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') });
   const stage = await d.page.locator('.stage').boundingBox();
   ok(stage.width < 600 && stage.height > 700 && Math.abs(stage.x + stage.width / 2 - 720) < 2, `desktop shows a centred phone-sized stage (${Math.round(stage.width)}×${Math.round(stage.height)})`);
