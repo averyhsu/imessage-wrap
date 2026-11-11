@@ -204,8 +204,12 @@ def build_job(fixture_dir, info):
     job = {
         "fixture": fixture_dir, "sources": sources, "stats": cases, "decode": decode, "texts": texts,
         "identifiers": identifiers, "names": names, "round4": round4, "dates": dates,
+        # Zones whose rules have been stable for years. Each engine asks its
+        # platform's tz database (zoneinfo here, ICU in JavaScript); a zone with
+        # a very recent rule change (Africa/Casablanca on the macOS runner) can
+        # differ between the two until both databases are updated.
         "zones": {"names": ZONES + ["Europe/London", "Asia/Kathmandu", "America/Sao_Paulo",
-                                    "Pacific/Apia", "Africa/Casablanca"],
+                                    "Pacific/Apia", "Europe/Berlin", "Australia/Sydney"],
                   "lo": 1262304000, "hi": 1793491200},          # 2010-01-01 .. 2026-11-01
         "rows": rows_cases,
         "payload": {"objects": objects, "encoded": [payload.encode_payload(o) for o in objects]},

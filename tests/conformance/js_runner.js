@@ -115,7 +115,7 @@ async function main() {
   }
   if (job.vendored_fflate) {
     // the codec the browser uses must interoperate with zlib as well
-    Engine.useCodec(require(path.join(ROOT, 'web', 'make', 'vendor', 'fflate.js')));
+    Engine.useCodec(require(path.join(ROOT, 'web', 'js', 'vendor', 'fflate.min.js')));
     out.payload.fflate_encoded = job.payload.objects.map((o) => Engine.encodePayload(o));
     out.payload.fflate_decoded = job.payload.encoded.map((p) => Engine.canonicalJson(Engine.decodePayload(p)));
     Engine.useCodec(null);

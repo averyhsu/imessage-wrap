@@ -404,8 +404,8 @@ test('the page scripts are classic scripts with no network access', () => {
   const sandbox = { TextDecoder, TextEncoder, Intl, console };
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
-  for (const name of ['vendor/fflate.js', 'engine.js', 'db.js']) {
-    vm.runInContext(fs.readFileSync(path.join(ROOT, 'web', 'make', name), 'utf8'), sandbox, { filename: name });
+  for (const name of ['js/vendor/fflate.min.js', 'make/engine.js', 'make/db.js']) {
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'web', name), 'utf8'), sandbox, { filename: name });
   }
   assert.equal(typeof sandbox.WrappedEngine.computeStats, 'function');
   assert.equal(typeof sandbox.WrappedDB.openDatabase, 'function');

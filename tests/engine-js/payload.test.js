@@ -7,7 +7,7 @@ const path = require('path');
 const zlib = require('zlib');
 const { Engine, VECTOR, ROOT } = require('./support.js');
 
-const fflate = require(path.join(ROOT, 'web', 'make', 'vendor', 'fflate.js'));
+const fflate = require(path.join(ROOT, 'web', 'js', 'vendor', 'fflate.min.js'));
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
 function bigStats(options) {

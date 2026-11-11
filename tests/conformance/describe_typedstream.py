@@ -21,8 +21,8 @@ sys.path.insert(0, os.path.join(ROOT, "tests", "fixtures"))
 import build_fixture  # noqa: E402
 from wrapped.typedstream import decode_with_strategy  # noqa: E402
 
-DUMP = {"len12", "len12_mutable", "len128", "len300_mutable", "attachment_and_text",
-        "link_run_mutable", "no_attributes", "int64_part", "len0", "len0_mutable"}
+DUMP = {"len12", "len12_mutable", "len128", "attachment_and_text", "link_run_mutable",
+        "no_attributes", "int64_part", "len0"}
 
 
 def spaced(hex_text, width=64):
@@ -49,7 +49,7 @@ def main(path):
         print("%-28s %8d  %-10s %-5s %s" % (sample["name"], len(blob), how, "ok" if ok else "WRONG", verdict))
         if sample["name"] in DUMP or not ok or (sample["messages_layout"] and not same and len(blob) < 400):
             print("    real:")
-            print(spaced(sample["hex"][:1600]))
+            print(spaced(sample["hex"][:1024]))
             if not same and len(ours) < 800:
                 print("    fixture writer:")
                 print(spaced(ours.hex()))

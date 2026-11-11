@@ -101,16 +101,17 @@ jobs:
         run: |
           swift tests/conformance/real_typedstream.swift "$RUNNER_TEMP/real_typedstream.json"
           echo "WRAPPED_REAL_TYPEDSTREAM=$RUNNER_TEMP/real_typedstream.json" >> "$GITHUB_ENV"
-      - name: What the decoder makes of them
-        run: /usr/bin/python3 tests/conformance/describe_typedstream.py "$RUNNER_TEMP/real_typedstream.json"
       - name: Install test tools
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Python engine tests under the system Python (includes the real-format check)
         run: /usr/bin/python3 -m unittest discover -s tests/python
       - name: JavaScript engine tests (includes the real-format check)
-        run: node --test tests/engine-js/*.test.js
+        run: node --test --test-reporter=dot tests/engine-js/*.test.js
       - name: Conformance (both engines, byte-identical JSON)
-        run: /usr/bin/python3 -m unittest discover -s tests/conformance -v
+        run: /usr/bin/python3 -m unittest discover -s tests/conformance
+      - name: What the decoder makes of the real samples
+        if: always()
+        run: /usr/bin/python3 tests/conformance/describe_typedstream.py "$RUNNER_TEMP/real_typedstream.json"
       - name: Keep the real samples
         if: always()
         uses: actions/upload-artifact@v4

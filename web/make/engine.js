@@ -47,8 +47,8 @@
  *   participants  handle ids from chat_handle_join
  *   source        recorded in meta.source (default "chat.db")
  *
- * Payload functions need a raw-DEFLATE codec: the page loads
- * vendor/fflate.js (global `fflate`) before this file; Node uses zlib.
+ * Payload functions need a raw-DEFLATE codec: the page loads the site's
+ * ../js/vendor/fflate.min.js (global `fflate`) before this file; Node uses zlib.
  */
 (function (root, factory) {
   'use strict';
@@ -1209,7 +1209,7 @@
         return codec;
       } catch (error) { /* not Node */ }
     }
-    throw new Error('No DEFLATE implementation found: load vendor/fflate.js before engine.js');
+    throw new Error('No DEFLATE implementation found: load js/vendor/fflate.min.js before engine.js');
   }
 
   /** Compact JSON; identical to the Python engine's canonical_json(). */
