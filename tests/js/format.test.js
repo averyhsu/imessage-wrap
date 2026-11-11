@@ -18,6 +18,37 @@ test('int: thousands separators', () => {
   assert.equal(F.int('12004'), '12,004');
 });
 
+test('int: absurd values never print as an exponent', () => {
+  assert.equal(F.int(Number.MAX_SAFE_INTEGER), '9,007,199,254,740,991');
+  for (const huge of [1e21, 1e22, 1e100, 1e308, Number.MAX_VALUE, '1e21', '9'.repeat(40)]) {
+    const text = F.int(huge);
+    assert.equal(text, '9,007,199,254,740,991', String(huge));
+    assert.match(text, /^\d{1,3}(,\d{3})*$/, 'digits and separators only');
+  }
+  assert.equal(F.int(-1e30), '-9,007,199,254,740,991');
+  for (const bad of [Infinity, -Infinity, NaN, '1e400', {}, [], null, undefined, 'abc']) assert.equal(F.int(bad), '0', String(bad));
+  for (const n of [1e15, 1e18, 123456789012345680000]) assert.doesNotMatch(F.int(n), /e|\+|NaN/i, String(n));
+  for (const n of [1e21, 1e300, Infinity, -1e21, NaN]) {
+    assert.doesNotMatch(F.compact(n), /e\+|NaN|Infinity/i, 'compact ' + String(n));
+    assert.doesNotMatch(F.pct(n), /e\+|NaN|Infinity/i, 'pct ' + String(n));
+  }
+});
+
+test('pick and personaEmoji: only own entries, never Object.prototype', () => {
+  const map = { a: 1 };
+  assert.equal(F.pick(map, 'a', 0), 1);
+  for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf', '__defineGetter__', 'b', '', null, undefined, 5, {}, ['a']]) {
+    assert.equal(F.pick(map, key, 'fallback'), 'fallback', String(key));
+  }
+  assert.equal(F.personaEmoji('night_owls'), '🦉');
+  assert.equal(F.personaEmoji('after_hours'), '🌙');
+  for (const id of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'custom', '', null, undefined, 7, {}]) {
+    const emoji = F.personaEmoji(id);
+    assert.equal(emoji, '💬', String(id));
+    assert.equal(typeof emoji, 'string');
+  }
+});
+
 test('compact: short numbers for tight spaces', () => {
   assert.equal(F.compact(0), '0');
   assert.equal(F.compact(60), '60');

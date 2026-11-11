@@ -18,9 +18,14 @@
     return isFinite(n) ? n : 0;
   }
 
-  /** 48213 → "48,213" */
+  /** Largest count shown as plain digits: beyond this JavaScript prints "1e+21". */
+  var MAX_INT = 9007199254740991; // Number.MAX_SAFE_INTEGER
+
+  /** 48213 → "48,213". Anything past MAX_INT is shown as MAX_INT, never as an exponent. */
   function int(n) {
     n = Math.round(num(n));
+    if (n > MAX_INT) n = MAX_INT;
+    if (n < -MAX_INT) n = -MAX_INT;
     var sign = n < 0 ? '-' : '';
     var digits = String(Math.abs(n));
     var out = '';
@@ -33,7 +38,7 @@
 
   /** 950 → "950", 1234 → "1.2K", 48213 → "48K", 1200000 → "1.2M" */
   function compact(n) {
-    n = num(n);
+    n = Math.max(-MAX_INT, Math.min(MAX_INT, num(n)));
     var abs = Math.abs(n);
     function scaled(div, suffix) {
       var v = abs / div;
@@ -49,7 +54,7 @@
 
   /** 0.2456 → "25%"; with digits 1 → "24.6%". Tiny non-zero shares read "<1%". */
   function pct(share, digits) {
-    var v = num(share) * 100;
+    var v = Math.max(0, Math.min(1, num(share))) * 100; // a share is a fraction of the whole
     digits = digits || 0;
     if (v > 0 && v < (digits ? 0.1 : 1)) return digits ? '<0.1%' : '<1%';
     var f = Math.pow(10, digits);
@@ -186,6 +191,23 @@
     return label ? label + ' in review' : 'In review';
   }
 
+  /**
+   * map[key] for keys that arrive in a recap. Only the map's own entries count, so a key
+   * such as "constructor" or "toString" gets the fallback instead of something inherited
+   * from Object.prototype.
+   */
+  function pick(map, key, fallback) {
+    return typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fallback;
+  }
+
+  var PERSONA_EMOJI = {
+    quiet_ones: '🤫', night_owls: '🦉', weekend_warriors: '🎉', always_on: '🔋', early_birds: '🐦',
+    morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️', after_hours: '🌙'
+  };
+
+  /** The emoji that goes with a personality id; a speech balloon for ids we do not know. */
+  function personaEmoji(id) { return pick(PERSONA_EMOJI, id, '💬'); }
+
   /** Index of the largest value (lowest index wins ties), or -1 for an empty/zero list. */
   function argmax(list) {
     var best = -1, bestV = 0;
@@ -204,7 +226,7 @@
   var Format = {
     MONTHS: MONTHS, MONTHS_SHORT: MONTHS_SHORT, MONTH_LETTERS: MONTH_LETTERS,
     WEEKDAYS: WEEKDAYS, WEEKDAYS_SHORT: WEEKDAYS_SHORT, WEEKDAY_LETTERS: WEEKDAY_LETTERS,
-    int: int, compact: compact, pct: pct,
+    MAX_INT: MAX_INT, int: int, compact: compact, pct: pct, pick: pick, personaEmoji: personaEmoji,
     hour: hour, hourTick: hourTick, hourSpan: hourSpan,
     parseDate: parseDate, date: date, weekdayOf: weekdayOf, daysInclusive: daysInclusive, dateRange: dateRange,
     plural: plural, perDay: perDay, wordFact: wordFact,

@@ -179,6 +179,62 @@ test('untrusted input is sanitised', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(s.reactions.by_kind, '__proto__'), false);
 });
 
+test('absurd numbers are capped, and shares stay within 0..1', () => {
+  const { MAX_COUNT } = require('../../web/js/normalize.js');
+  assert.equal(MAX_COUNT, 9999999999);
+  const F = require('../../web/js/format.js');
+  const s = normalize({
+    chat: { name: 'Big numbers', members: 1e300 },
+    totals: { messages: 1e21, words: 1e308, attachments: '1e25', reactions: 9e99, days_active: 1e400, longest_streak: Number.MAX_VALUE },
+    by_hour: new Array(24).fill(1e30),
+    by_weekday: new Array(7).fill(1e22),
+    by_month: { '2026-01': 1e21, '2027-01': 1e21 },
+    busiest_day: { date: '2026-07-04', messages: 1e50 },
+    late_night: { messages: 1e40, share: 1e9, top: { name: 'N', messages: 1e21 } },
+    senders: [{ name: 'A', messages: 1e21, share: 7e30, words: 1e99, reactions_given: 1e21 }, { name: 'B', messages: 5, share: -3 }],
+    most_reacted: [{ sender: 'A', reactions: 1e21, text: 'x', kinds: { laugh: 1e21, sticker: 1e21, other: 1e21 } }],
+    reactions: { by_kind: { love: 1e21, like: 1e308 }, top_giver: { name: 'A', count: 1e21 }, top_receiver: { name: 'B', count: 1e99 } },
+  });
+  const numbers = [];
+  (function walk(v) {
+    if (typeof v === 'number') numbers.push(v);
+    else if (v && typeof v === 'object') Object.values(v).forEach(walk);
+  })(s);
+  assert.ok(numbers.length > 60);
+  for (const v of numbers) {
+    assert.ok(Number.isFinite(v) && v >= 0 && v <= MAX_COUNT, `every number is finite and capped (${v})`);
+    assert.match(F.int(v), /^\d{1,3}(,\d{3})*$/, `prints as plain digits (${v})`);
+  }
+  assert.equal(s.totals.messages, MAX_COUNT);
+  assert.equal(s.totals.days_active, 0, 'a value that overflows to Infinity is dropped, not shown');
+  assert.equal(s.by_month[0], MAX_COUNT, 'summed buckets are capped too');
+  assert.deepStrictEqual(s.most_reacted[0].kinds, { laugh: MAX_COUNT, emoji: MAX_COUNT });
+  for (const share of [s.late_night.share, ...s.senders.map((x) => x.share)]) assert.ok(share >= 0 && share <= 1, `share within 0..1 (${share})`);
+  assert.equal(JSON.stringify(s).includes('e+'), false, 'no exponent anywhere in the normalised recap');
+});
+
+test('ids and kinds taken from a link cannot reach Object.prototype', () => {
+  for (const id of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+    const input = clone(vector.stats);
+    input.personality.id = id;
+    input.awards.forEach((a) => { a.id = id; });
+    input.most_reacted[0].kinds = JSON.parse(`{"${id}": 2, "laugh": 1}`);
+    input.reactions.by_kind = JSON.parse(`{"${id}": 5, "love": 3}`);
+    const s = normalize(input);
+    assert.equal(s.personality.id, id, 'the id is kept as plain text');
+    assert.equal(s.personality.title, 'The Night Owls');
+    assert.deepStrictEqual(s.most_reacted[0].kinds, { laugh: 1, emoji: 2 }, 'an unknown kind is counted as emoji');
+    assert.deepStrictEqual(Object.keys(s.reactions.by_kind), ['love', 'like', 'dislike', 'laugh', 'emphasize', 'question', 'emoji']);
+    assert.equal(s.reactions.by_kind.love, 3);
+    assert.equal(s.reactions.by_kind.emoji, 5);
+    assert.doesNotMatch(JSON.stringify(s), /native code|\[object/);
+  }
+  // A kinds object with no own entries contributes nothing, whatever it inherits.
+  const inherit = clone(vector.stats);
+  inherit.most_reacted[0].kinds = {};
+  assert.deepStrictEqual(normalize(inherit).most_reacted[0].kinds, {});
+});
+
 test('senders are sorted, capped at 12 and get shares', () => {
   const senders = Array.from({ length: 15 }, (_, k) => ({ name: 'P' + String(k).padStart(2, '0'), messages: 10 + k }));
   senders.push({ name: 'Tie-B', messages: 24 }, { name: 'Tie-A', messages: 24 });

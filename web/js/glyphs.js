@@ -64,18 +64,21 @@
     { kind: 'emoji', label: 'Emoji' }
   ];
 
+  /** True for the glyphs defined above; never for names inherited from Object.prototype. */
+  function has(name) { return typeof name === 'string' && Object.prototype.hasOwnProperty.call(ICONS, name); }
+
   /** A <span class="glyph glyph--name"> holding the SVG. Requires a DOM. */
   function icon(name, extraClass) {
     var span = document.createElement('span');
-    span.className = 'glyph glyph--' + name + (extraClass ? ' ' + extraClass : '');
+    span.className = 'glyph glyph--' + (has(name) ? name : 'none') + (extraClass ? ' ' + extraClass : '');
     span.setAttribute('aria-hidden', 'true');
-    span.innerHTML = ICONS[name] || '';
+    span.innerHTML = has(name) ? ICONS[name] : '';
     return span;
   }
 
   /** A round tapback badge: <span class="tb tb--love"><span class="glyph">…</span></span>. */
   function tapback(kind, extraClass) {
-    if (!ICONS[kind]) kind = 'emoji';
+    if (!has(kind)) kind = 'emoji';
     var badge = document.createElement('span');
     badge.className = 'tb tb--' + kind + (extraClass ? ' ' + extraClass : '');
     badge.setAttribute('aria-hidden', 'true');
@@ -83,7 +86,7 @@
     return badge;
   }
 
-  var Glyphs = { ICONS: ICONS, TAPBACKS: TAPBACKS, icon: icon, tapback: tapback };
+  var Glyphs = { ICONS: ICONS, TAPBACKS: TAPBACKS, has: has, icon: icon, tapback: tapback };
 
   root.WrappedGlyphs = Glyphs;
   if (typeof module === 'object' && module.exports) module.exports = Glyphs;

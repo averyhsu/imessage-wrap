@@ -40,3 +40,37 @@ test('cardName: a raw handle from older data never reaches the card', () => {
     assert.ok(!/\d{5,}/.test(shown) && !shown.includes('@'), `${raw} → ${shown}`);
   }
 });
+
+// A canvas stand-in whose glyphs are all `glyph` px wide.
+const fakeCtx = (glyph) => ({ measureText: (t) => ({ width: Array.from(t).length * glyph }) });
+
+test('wrap: ordinary text breaks at spaces', () => {
+  assert.deepStrictEqual(Card.wrap(fakeCtx(10), 'one two three four', 80), ['one two', 'three', 'four']);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(10), '', 80), []);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(10), '   spaced   out   ', 200), ['spaced out']);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(10), 'abcdefghij', 40), ['abcd', 'efgh', 'ij'], 'a long word is broken');
+});
+
+test('wrap: always terminates, even when one glyph is wider than the line', () => {
+  // Every glyph is 100 px wide and the line is 50 px: nothing fits, so each glyph gets a line.
+  assert.deepStrictEqual(Card.wrap(fakeCtx(100), 'abc', 50), ['a', 'b', 'c']);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(100), 'a', 50), ['a']);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(100), '🍝', 50), ['🍝']);
+  assert.deepStrictEqual(Card.wrap(fakeCtx(100), 'ab 🍝 cd', 50), ['a', 'b', '🍝', 'c', 'd']);
+  // A word that ends in one oversized glyph (the case from the review).
+  const ctx = { measureText: (t) => ({ width: Array.from(t).reduce((w, ch) => w + (ch === 'W' ? 500 : 10), 0) }) };
+  assert.deepStrictEqual(Card.wrap(ctx, 'abcW', 100), ['abc', 'W']);
+  assert.deepStrictEqual(Card.wrap(ctx, 'W', 100), ['W']);
+  assert.deepStrictEqual(Card.wrap(ctx, 'WW ok', 100), ['W', 'W', 'ok']);
+  // Degenerate widths and measurements must not hang either.
+  for (const width of [0, -5, NaN]) {
+    const lines = Card.wrap(fakeCtx(10), 'hello world', width);
+    assert.equal(lines.join(''), 'helloworld', 'no glyph is lost at width ' + width);
+  }
+  assert.equal(Card.wrap(fakeCtx(Infinity), 'héllo wörld', 300).join(''), 'héllowörld');
+  // Every line holds at least one glyph and nothing is dropped, for a long hostile string.
+  const hostile = 'W'.repeat(300) + ' ' + '🍝'.repeat(200);
+  const out = Card.wrap(ctx, hostile, 100);
+  assert.ok(out.every((l) => Array.from(l).length >= 1));
+  assert.equal(out.join(''), hostile.replace(' ', ''));
+});

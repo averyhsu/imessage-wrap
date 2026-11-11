@@ -22,10 +22,14 @@
 
   function isObj(v) { return !!v && typeof v === 'object' && !Array.isArray(v); }
 
+  /** No chat has more than this of anything; larger values in a link are capped to it. */
+  var MAX_COUNT = 9999999999;
+
   function n(v) {
     if (typeof v === 'string') v = v.replace(/,/g, '');
     v = Number(v);
-    return isFinite(v) && v > 0 ? v : 0;
+    if (!isFinite(v) || !(v > 0)) return 0; // NaN, ±Infinity (JSON "1e400"), zero, negatives
+    return v < MAX_COUNT ? v : MAX_COUNT;
   }
 
   function i(v) { return Math.round(n(v)); }
@@ -77,7 +81,7 @@
       var keys = Object.keys(value);
       for (k = 0; k < keys.length; k++) {
         var idx = indexOf(keys[k], keys);
-        if (idx >= 0 && idx < size) out[idx] += i(value[keys[k]]);
+        if (idx >= 0 && idx < size) out[idx] = Math.min(MAX_COUNT, out[idx] + i(value[keys[k]]));
       }
     }
     return out;
@@ -191,10 +195,13 @@
   function readKinds(src) {
     var out = {};
     if (!isObj(src)) return out;
-    KINDS.forEach(function (k) { if (i(src[k]) > 0) out[k] = i(src[k]); });
+    // Own entries only: a payload cannot reach Object.prototype through a kind name.
+    KINDS.forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(src, k) && i(src[k]) > 0) out[k] = i(src[k]);
+    });
     // Unknown kinds (stickers and the like) are reported as "emoji", per the counting rules.
     Object.keys(src).forEach(function (k) {
-      if (KINDS.indexOf(k) === -1 && i(src[k]) > 0) out.emoji = (out.emoji || 0) + i(src[k]);
+      if (KINDS.indexOf(k) === -1 && i(src[k]) > 0) out.emoji = Math.min(MAX_COUNT, (out.emoji || 0) + i(src[k]));
     });
     return out;
   }
@@ -207,7 +214,7 @@
       if (!isObj(m)) return;
       var kinds = readKinds(m.kinds);
       var reactions = i(first(m.reactions, m.count));
-      if (!reactions) reactions = F.sum(Object.keys(kinds).map(function (k) { return kinds[k]; }));
+      if (!reactions) reactions = Math.min(MAX_COUNT, F.sum(Object.keys(kinds).map(function (k) { return kinds[k]; })));
       var sender = str(first(m.sender, m.name), 60);
       if (!sender && !reactions) return;
       out.push({
@@ -318,9 +325,9 @@
 
     var rawSenders = first(raw.senders, raw.top_senders, raw.messages_by_sender, raw.by_sender);
     var messages = i(first(totals.messages, raw.total_messages, raw.message_count, typeof raw.messages === 'number' ? raw.messages : undefined));
-    if (!messages) messages = Math.max(F.sum(byHour), F.sum(byWeekday), F.sum(byMonth));
+    if (!messages) messages = Math.min(MAX_COUNT, Math.max(F.sum(byHour), F.sum(byWeekday), F.sum(byMonth)));
     var senders = readSenders(raw, messages);
-    if (!messages) messages = F.sum(senders.map(function (s) { return s.messages; }));
+    if (!messages) messages = Math.min(MAX_COUNT, F.sum(senders.map(function (s) { return s.messages; })));
     if (!messages && rawSenders === undefined && !str(first(chat.name, raw.chat_name), 10)) {
       throw new Error('That recap is empty.');
     }
@@ -339,7 +346,7 @@
     var reactionsTotal = i(first(totals.reactions, raw.total_reactions));
     var reactions = readReactions(raw, reactionsTotal);
     if (reactions && !reactionsTotal) {
-      reactionsTotal = F.sum(KINDS.map(function (k) { return reactions.by_kind[k]; }));
+      reactionsTotal = Math.min(MAX_COUNT, F.sum(KINDS.map(function (k) { return reactions.by_kind[k]; })));
     }
 
     var meta = isObj(raw.meta) ? raw.meta : {};
@@ -381,6 +388,7 @@
     normalize: normalize,
     computePersonality: computePersonality,
     KINDS: KINDS,
+    MAX_COUNT: MAX_COUNT,
     PERSONALITIES: PERSONALITIES
   };
 

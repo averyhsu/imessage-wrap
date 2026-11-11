@@ -28,11 +28,6 @@
   var NARROW = 'condensed';     // 75%
   var XNARROW = 'extra-condensed'; // 62.5%
 
-  var PERSONA_EMOJI = {
-    quiet_ones: '🤫', night_owls: '🦉', weekend_warriors: '🎉', always_on: '🔋', early_birds: '🐦',
-    morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️', after_hours: '🌙'
-  };
-
   /**
    * Set the canvas font. The plain version goes in first because it is valid everywhere;
    * a browser that does not accept a width keyword in the canvas font shorthand ignores
@@ -111,7 +106,11 @@
     return chars.join('').replace(/\s+$/, '') + '…';
   }
 
-  /** Greedy word wrap; words wider than the line are broken. */
+  /**
+   * Greedy word wrap; words wider than the line are broken. Every pass of the inner loop
+   * moves at least one glyph out of `line`, so it ends even when a single glyph is wider
+   * than the line (it then gets a line to itself).
+   */
   function wrap(ctx, text, width) {
     var lines = [];
     var line = '';
@@ -122,6 +121,7 @@
       line = word;
       while (ctx.measureText(line).width > width) {
         var chars = Array.from(line);
+        if (chars.length <= 1) break; // one glyph cannot be split any further
         var cut = chars.length - 1;
         while (cut > 1 && ctx.measureText(chars.slice(0, cut).join('')).width > width) cut--;
         lines.push(chars.slice(0, cut).join(''));
@@ -241,7 +241,7 @@
     // Personality.
     if (s.personality && s.personality.title) {
       blocks.push({ h: 178, draw: function (top) {
-        var emoji = PERSONA_EMOJI[s.personality.id] || '💬';
+        var emoji = F.personaEmoji(s.personality.id);
         var text = s.personality.title;
         var fit = fitOne(ctx, text, 640, 900, 62, 34, [SEMI_WIDE, NORMAL, NARROW, XNARROW]);
         setFont(ctx, 900, fit.stretch, fit.size);
@@ -394,7 +394,7 @@
     return Promise.race([loads, timeout]);
   }
 
-  var Card = { WIDTH: W, HEIGHT: H, render: render, toBlob: toBlob, toDataURL: toDataURL, ready: ready, cardName: cardName };
+  var Card = { WIDTH: W, HEIGHT: H, render: render, toBlob: toBlob, toDataURL: toDataURL, ready: ready, cardName: cardName, wrap: wrap };
 
   root.WrappedCard = Card;
   if (typeof module === 'object' && module.exports) module.exports = Card;
