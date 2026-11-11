@@ -1244,31 +1244,39 @@
     $('first-names').hidden = !spaced;
   }
 
+  /**
+   * Shorten "Sam Rivera" to "Sam", or to "Sam R." when someone else is a Sam too. Works on
+   * the distinct names, so people who are counted together stay together and nobody is
+   * merged by accident.
+   */
   function useFirstNames() {
     var taken = {};
+    var long = [];
     S.people.forEach(function (person) {
       var name = shownName(person);
       if (person.me || !/\s/.test(name)) taken[name] = true;
+      else if (long.indexOf(name) === -1) long.push(name);
     });
     var firsts = {};
-    S.people.forEach(function (person) {
-      if (person.me) return;
-      var name = shownName(person);
-      if (!/\s/.test(name)) return;
+    long.forEach(function (name) {
       var first = name.split(/\s+/)[0];
       firsts[first] = (firsts[first] || 0) + 1;
     });
+    var short = {};
+    long.forEach(function (name) {
+      var tokens = name.split(/\s+/);
+      var candidate = tokens[0];
+      if (firsts[candidate] > 1 || taken[candidate]) candidate = tokens[0] + ' ' + Array.from(tokens[tokens.length - 1])[0] + '.';
+      if (taken[candidate]) return;             // still a clash: this name stays as it is
+      taken[candidate] = true;
+      short[name] = candidate;
+    });
     S.people.forEach(function (person, index) {
       if (person.me) return;
-      var name = shownName(person);
-      if (!/\s/.test(name)) return;
-      var tokens = name.split(/\s+/);
-      var short = tokens[0];
-      if (firsts[short] > 1 || taken[short]) short = tokens[0] + ' ' + Array.from(tokens[tokens.length - 1])[0] + '.';
-      if (taken[short]) return;                 // still a clash: leave the full name
-      taken[short] = true;
-      S.names[person.key] = short;
-      $('person-' + index).value = short;
+      var to = short[shownName(person)];
+      if (!to) return;
+      S.names[person.key] = to;
+      $('person-' + index).value = to;
     });
     peopleTags();
     changed();
