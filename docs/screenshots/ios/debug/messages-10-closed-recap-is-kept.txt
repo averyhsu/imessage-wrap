@@ -1,163 +1,163 @@
-Attributes: Application, 0x1144a3c00, pid: 19934, label: 'Messages'
+Attributes: Application, 0x11702fc00, pid: 22972, label: 'Messages'
 Element subtree:
- →Application, 0x1144a3c00, pid: 19934, label: 'Messages'
-    Window (Main), 0x1144a3e80, {{0.0, 0.0}, {402.0, 874.0}}
-      Other, 0x1144a3d40, {{0.0, 0.0}, {402.0, 874.0}}
-        Other, 0x1141b8000, {{0.0, 0.0}, {402.0, 874.0}}
-          Other, 0x1141b8140, {{-402.0, -874.0}, {1206.0, 2622.0}}
-          Other, 0x1141b8280, {{0.0, 0.0}, {402.0, 874.0}}
-            Other, 0x1141b83c0, {{0.0, 0.0}, {402.0, 874.0}}
-              Other, 0x1141b8500, {{0.0, 0.0}, {402.0, 874.0}}
-                Other, 0x1141b8640, {{0.0, 0.0}, {402.0, 874.0}}
-                  NavigationBar, 0x1141b8780, {{0.0, 62.0}, {402.0, 95.3}}, identifier: 'Messages'
-                    Button, 0x1141b88c0, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Messages'
-                    Button, 0x1141b8a00, {{171.0, 62.0}, {60.0, 60.0}}, label: 'Contact photo'
-                      Image, 0x1141b8b40, {{171.0, 62.0}, {60.0, 60.0}}
-                    Button, 0x1141b8c80, {{107.3, 117.0}, {187.3, 32.3}}, identifier: 'ConversationTitle', label: '+1 (888) 555-1212'
-                  Other, 0x1141b8dc0, {{0.0, 0.0}, {402.0, 874.0}}
-                    Other, 0x1141b8f00, {{0.0, 0.0}, {402.0, 874.0}}
-                      Other, 0x1141b9040, {{0.0, 0.0}, {402.0, 874.0}}
-                        Other, 0x1141b9180, {{0.0, 0.0}, {402.0, 874.0}}
-                          Other, 0x1141b92c0, {{0.0, 0.0}, {402.0, 874.0}}
-                            Other, 0x1141b9400, {{0.0, 0.0}, {402.0, 874.0}}
-                              Other, 0x1141b9540, {{0.0, 0.0}, {402.0, 874.0}}
-                                Other, 0x1141b9680, {{0.0, 431.0}, {402.0, 57.0}}, identifier: 'MessageEntryView'
-                                  Other, 0x1141b97c0, {{0.0, 431.0}, {402.0, 57.0}}
-                                    Button, 0x1141b9900, {{16.0, 432.0}, {40.0, 40.0}}, label: 'add'
-                                  Other, 0x1141b9a40, {{0.0, 431.0}, {402.0, 57.0}}
-                                    Other, 0x1141b9b80, {{0.0, 431.0}, {402.0, 57.0}}
-                                      Other, 0x1141b9cc0, {{0.0, 431.0}, {402.0, 57.0}}
-                                        Other, 0x1141b9e00, {{0.0, 431.0}, {402.0, 57.0}}
-                                          Other, 0x1141b9f40, {{0.0, 431.0}, {402.0, 57.0}}
-                                            Other, 0x1141ba080, {{0.0, 431.0}, {402.0, 69.0}}
-                                        Other, 0x1141ba1c0, {{0.0, 431.0}, {402.0, 57.0}}
-                                          Other, 0x1141ba300, {{0.0, 431.0}, {402.0, 69.0}}
-                                  Other, 0x1141ba440, {{68.0, 431.7}, {318.0, 40.3}}
-                                    ScrollView, 0x1141ba580, {{68.0, 431.7}, {318.0, 40.3}}
-                                      TextField, 0x1141ba6c0, {{79.0, 431.7}, {262.7, 40.3}}, identifier: 'messageBodyField', label: 'Message', placeholderValue: 'iMessage'
-                                        Other, 0x1141ba800, {{308.7, 431.7}, {30.0, 38.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
-                                          Other, 0x1141ba940, {{335.7, 431.3}, {3.0, 36.0}}
-                                        Other, 0x1141baa80, {{79.0, 448.8}, {261.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
-                                          Other, 0x1141babc0, {{82.0, 466.0}, {255.0, 3.0}}
-                                      Other, 0x1141bad00, {{68.0, 431.8}, {313.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
-                                        Other, 0x1141bae40, {{71.2, 449.0}, {291.7, 3.0}}
-                                      Other, 0x1141baf80, {{348.0, 448.7}, {30.0, 6.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
-                                        Other, 0x1141bb0c0, {{375.0, 412.8}, {3.0, 36.0}}
-                                      Other, 0x1141bb200, {{348.0, 448.7}, {30.0, 6.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
-                                        Other, 0x1141bb340, {{375.0, 412.8}, {3.0, 36.0}}
-                                      Other, 0x1141bb480, {{68.0, 431.8}, {313.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
-                                        Other, 0x1141bb5c0, {{71.2, 449.0}, {291.7, 3.0}}
-                                    Button, 0x1141bb700, {{354.0, 441.0}, {22.0, 22.0}}
-                                      Other, 0x1141bb840, {{354.0, 441.0}, {22.0, 22.0}}
-                                        Other, 0x1141bb980, {{354.0, 441.0}, {22.0, 22.0}}
-                                          Button, 0x1141bbac0, {{354.0, 441.0}, {22.0, 22.0}}, label: 'Dictate'
-                              CollectionView, 0x1141bbc00, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'TranscriptCollectionView', label: 'Messages'
-                                Other, 0x1141bbd40, {{0.0, 0.0}, {402.0, 874.0}}
-                                Other, 0x1141bbe80, {{0.0, 0.0}, {402.0, 874.0}}
-                                  Other, 0x112c2c000, {{0.0, 0.0}, {402.0, 214.1}}
-                                    Image, 0x112c2c140, {{-120.0, -209.3}, {642.0, 418.7}}, identifier: 'AdditionalDimmingOverlay'
-                                    Other, 0x112c2c280, {{0.0, 0.0}, {402.0, 214.1}}
-                                      Other, 0x112c2c3c0, {{0.0, 0.0}, {402.0, 214.1}}
-                                    Other, 0x112c2c500, {{0.0, 0.0}, {402.0, 214.1}}
-                                      Other, 0x112c2c640, {{0.0, 0.0}, {402.0, 214.1}}
-                                      Other, 0x112c2c780, {{0.0, 0.0}, {402.0, 214.1}}
-                                Cell, 0x112c2c8c0, {{0.0, 71.3}, {402.0, 26.3}}
-                                  Other, 0x112c2ca00, {{0.0, 71.3}, {402.0, 26.3}}
-                                    StaticText, 0x112c2cb40, {{16.0, 71.3}, {370.0, 26.3}}
-                                      StaticText, 0x112c2cc80, {{16.0, 71.3}, {370.0, 26.3}}, label: 'iMessage  Encrypted'
-                                Cell, 0x112c2cdc0, {{0.0, 112.3}, {402.0, 13.3}}
-                                  Other, 0x112c2cf00, {{0.0, 112.3}, {402.0, 13.3}}
-                                    StaticText, 0x112c2d040, {{16.0, 112.3}, {370.0, 13.3}}
-                                      StaticText, 0x112c2d180, {{16.0, 112.3}, {370.0, 13.3}}, label: 'Today 7:45 PM'
-                                Cell, 0x112c2d2c0, {{0.0, 132.7}, {402.0, 263.0}}, label: 'Your iMessage, 7:45 PM'
-                                  Other, 0x112c2d400, {{106.0, 132.7}, {280.0, 269.8}}, identifier: 'Sticker', label: 'Your iMessage, 7:45 PM'
-                                    Other, 0x112c2d540, {{106.0, 132.7}, {280.0, 269.8}}
-                                      Other, 0x112c2d680, {{106.0, 132.7}, {280.0, 269.8}}
-                                        Link, 0x112c2d7c0, {{106.0, 132.7}, {280.0, 269.8}}, label: 'Sunday Hikers 🥾 · 2026 in review, 13,018 messages · Tap to play, 1 image'
-                                          Other, 0x112c2d900, {{106.0, 132.7}, {280.0, 269.8}}
-                                            Other, 0x112c2da40, {{106.0, 132.7}, {280.0, 263.0}}
-                                              Other, 0x112c2db80, {{106.0, 132.7}, {280.0, 210.0}}
-                                                Other, 0x112c2dcc0, {{106.0, 132.7}, {280.0, 210.0}}
-                                                  Image, 0x112c2de00, {{106.0, 132.7}, {280.0, 210.0}}
-                                              Other, 0x112c2df40, {{106.0, 342.7}, {280.0, 53.0}}
-                                                Other, 0x112c2e080, {{106.0, 342.7}, {280.0, 53.0}}
-                                                  Other, 0x112c2e1c0, {{122.0, 350.7}, {248.0, 18.0}}, identifier: 'LP.CaptionBar.TopCaption'
-                                                    Other, 0x112c2e300, {{122.0, 350.7}, {245.0, 18.0}}, label: 'Sunday Hikers 🥾 · 2026 in review'
-                                                  Other, 0x112c2e440, {{122.0, 370.7}, {248.0, 16.0}}, identifier: 'LP.CaptionBar.BottomCaption'
-                                                    Other, 0x112c2e580, {{122.0, 370.7}, {181.0, 16.0}}, label: '13,018 messages · Tap to play'
-                                        Image, 0x112c2e6c0, {{112.0, 138.7}, {32.0, 24.0}}
-                                Cell, 0x112c2e800, {{0.0, 401.7}, {402.0, 13.3}}
-                                  Other, 0x112c2e940, {{0.0, 401.7}, {402.0, 13.3}}
-                                    StaticText, 0x112c2ea80, {{314.0, 401.7}, {52.0, 13.3}}
-                                      StaticText, 0x112c2ebc0, {{314.0, 401.7}, {52.0, 13.3}}, label: 'Delivered'
-                                Other, 0x112c2ed00, {{369.0, 157.3}, {30.0, 273.7}}, label: 'Vertical scroll bar, 2 pages', value: 100%
-                                  Other, 0x112c2ee40, {{396.0, 187.7}, {3.0, 240.3}}
-                                Other, 0x112c2ef80, {{369.0, 157.3}, {30.0, 273.7}}, label: 'Vertical scroll bar, 2 pages', value: 100%
-                                  Other, 0x112c2f0c0, {{396.0, 187.7}, {3.0, 240.3}}
-                  Other, 0x112c2f200, {{0.0, 0.0}, {402.0, 874.0}}
-                    Other, 0x112c2f340, {{0.0, 0.0}, {402.0, 874.0}}
-            Other, 0x112c2f480, {{0.0, 0.0}, {402.0, 874.0}}
-              Other, 0x112c2f5c0, {{0.0, 0.0}, {402.0, 874.0}}
-      Other, 0x112c2f700, {{0.0, 0.0}, {402.0, 874.0}}
-        Other, 0x112c2f840, {{-402.0, -874.0}, {1206.0, 2622.0}}
-        Other, 0x112c2f980, {{0.0, 0.0}, {402.0, 874.0}}
-          Other, 0x112c2fac0, {{0.0, 0.0}, {402.0, 874.0}}
-            Other, 0x112c2fc00, {{0.0, 0.0}, {402.0, 874.0}}
-              Other, 0x112c2fd40, {{0.0, 0.0}, {402.0, 874.0}}
-                Other, 0x112c2fe80, {{0.0, 0.0}, {402.0, 874.0}}
-                  Other, 0x1141bc000, {{0.0, 0.0}, {402.0, 874.0}}
-                    Other, 0x1141bc140, {{0.0, 0.0}, {402.0, 874.0}}
-                      Other, 0x1141bc280, {{0.0, 0.0}, {402.0, 874.0}}
-                        Other, 0x1141bc3c0, {{0.0, 0.0}, {402.0, 874.0}}
-                          Other, 0x1141bc500, {{0.0, 0.0}, {402.0, 874.0}}
-                            Other, 0x1141bc640, {{8.0, 495.4}, {386.0, 370.6}}
-                              Button, 0x1141bc780, {{164.5, 490.6}, {73.0, 24.0}}, label: 'Sheet Grabber', value: Half screen
-                              Other, 0x1141bc8c0, {{8.0, 495.4}, {386.0, 370.6}}
-                                Other, 0x1141bca00, {{8.0, 495.4}, {386.0, 370.6}}
-                                  Other, 0x1141bcb40, {{8.0, 495.4}, {386.0, 370.6}}
-                                    Other, 0x1141bcc80, {{8.0, 495.4}, {386.0, 370.6}}
-                                      Other, 0x1141bcdc0, {{8.0, 495.4}, {386.0, 370.6}}
-                                        Other, 0x1141bcf00, {{8.0, 495.4}, {386.0, 370.6}}
-                                          ScrollView, 0x1141bd040, {{8.0, 495.4}, {386.0, 370.6}}
-                                            Other, 0x1141bd180, {{8.0, 514.6}, {386.0, 274.6}}
-                                              StaticText, 0x1141bd2c0, {{23.4, 526.1}, {208.0, 47.7}}, identifier: 'launcher.headline', label: 'Your group chat,, in review.'
-                                                StaticText, 0x1141bd400, {{23.4, 526.1}, {208.0, 24.3}}, label: 'Your group chat,'
-                                                StaticText, 0x1141bd540, {{23.4, 549.5}, {119.4, 24.3}}, label: 'in review.'
-                                              Button, 0x1141bd680, {{291.9, 543.4}, {13.4, 13.4}}, identifier: 'launcher.sendDemoLive', label: 'Stage the sample as a live bubble (debug)'
-                                              Button, 0x1141bd7c0, {{316.9, 543.4}, {13.4, 13.4}}, identifier: 'launcher.sendDemoTemplate', label: 'Stage the sample as a card (debug)'
-                                              Button, 0x1141bd900, {{23.4, 583.4}, {355.3, 49.9}}, identifier: 'launcher.paste', label: 'Paste a recap link'
-                                                Image, 0x1141bda40, {{116.8, 598.7}, {19.2, 19.2}}, identifier: 'link', label: 'Link'
-                                                StaticText, 0x1141bdb80, {{116.8, 598.7}, {169.8, 19.5}}, label: 'Paste a recap link'
-                                              StaticText, 0x1141bdcc0, {{23.4, 650.3}, {109.1, 12.2}}, label: 'YOUR RECAPS'
-                                              Button, 0x1141bde00, {{327.4, 642.9}, {51.2, 26.9}}, identifier: 'recents.clear', label: 'Clear your recaps'
-                                              ScrollView, 0x1141bdf40, {{23.4, 677.5}, {355.3, 52.2}}
-                                                Other, 0x1141be080, {{23.4, 677.5}, {240.0, 52.2}}
-                                                  Button, 0x1141be1c0, {{33.0, 687.1}, {180.5, 33.0}}, identifier: 'recents.play', label: 'Play Sunday Hikers 🥾 · 2026 in review'
-                                                    Image, 0x1141be300, {{44.2, 698.3}, {9.3, 10.6}}, identifier: 'play.fill', label: 'Play'
-                                                    StaticText, 0x1141be440, {{73.3, 687.1}, {125.1, 17.3}}, label: 'Sunday Hikers 🥾'
-                                                    StaticText, 0x1141be580, {{73.3, 706.3}, {128.0, 13.8}}, label: '2026 · 13,018 messages'
-                                                  Button, 0x1141be6c0, {{221.2, 687.2}, {32.6, 32.6}}, identifier: 'recents.send', label: 'Send Sunday Hikers 🥾 · 2026 in review'
-                                              Button, 0x1141be800, {{23.4, 741.2}, {142.7, 36.5}}, identifier: 'launcher.seeSample', label: 'See a sample'
-                                                Image, 0x1141be940, {{38.1, 752.1}, {14.7, 14.7}}, identifier: 'play.circle', label: 'Play'
-                                                StaticText, 0x1141bea80, {{38.1, 750.8}, {114.6, 17.3}}, label: 'See a sample'
-                              Other, 0x1141bebc0, {{8.0, 495.4}, {386.0, 370.6}}
-                                Other, 0x1141bed00, {{8.0, 495.4}, {386.0, 370.6}}
-                                  Other, 0x1141bee40, {{8.0, 495.4}, {386.0, 370.6}}
-                                    Other, 0x1141bef80, {{8.0, 495.4}, {386.0, 370.6}}
-                                      Other, 0x1141bf0c0, {{8.0, 495.4}, {386.0, 370.6}}
-                                        Other, 0x1141bf200, {{8.0, 495.4}, {386.0, 370.6}}
-                                    Other, 0x1141bf340, {{8.0, 495.4}, {386.0, 370.6}}
-                                      Other, 0x1141bf480, {{8.0, 495.4}, {386.0, 370.6}}
-                        Other, 0x1141bf5c0, {{0.0, 0.0}, {402.0, 874.0}}
-                          Other, 0x1141bf700, {{0.0, 0.0}, {402.0, 874.0}}
-                            Other, 0x1141bf840, {{0.0, 0.0}, {402.0, 874.0}}
-    Window, 0x1141bf980, {{0.0, 0.0}, {402.0, 874.0}}
-      Other, 0x1141bfac0, {{0.0, 0.0}, {402.0, 874.0}}
-        Other, 0x1141bfc00, {{0.0, 0.0}, {402.0, 874.0}}
+ →Application, 0x11702fc00, pid: 22972, label: 'Messages'
+    Window (Main), 0x11702fe80, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x11702fd40, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x116c80000, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x116c80140, {{-402.0, -874.0}, {1206.0, 2622.0}}
+          Other, 0x116c80280, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x116c803c0, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x116c80500, {{0.0, 0.0}, {402.0, 874.0}}
+                Other, 0x116c80640, {{0.0, 0.0}, {402.0, 874.0}}
+                  NavigationBar, 0x116c80780, {{0.0, 62.0}, {402.0, 95.3}}, identifier: 'Messages'
+                    Button, 0x116c808c0, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Messages'
+                    Button, 0x116c80a00, {{171.0, 62.0}, {60.0, 60.0}}, label: 'Contact photo'
+                      Image, 0x116c80b40, {{171.0, 62.0}, {60.0, 60.0}}
+                    Button, 0x116c80c80, {{107.3, 117.0}, {187.3, 32.3}}, identifier: 'ConversationTitle', label: '+1 (888) 555-1212'
+                  Other, 0x116c80dc0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x116c80f00, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x116c81040, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x116c81180, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x116c812c0, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x116c81400, {{0.0, 0.0}, {402.0, 874.0}}
+                              Other, 0x116c81540, {{0.0, 0.0}, {402.0, 874.0}}
+                                Other, 0x116c81680, {{0.0, 431.0}, {402.0, 57.0}}, identifier: 'MessageEntryView'
+                                  Other, 0x116c817c0, {{0.0, 431.0}, {402.0, 57.0}}
+                                    Button, 0x116c81900, {{16.0, 432.0}, {40.0, 40.0}}, label: 'add'
+                                  Other, 0x116c81a40, {{0.0, 431.0}, {402.0, 57.0}}
+                                    Other, 0x116c81b80, {{0.0, 431.0}, {402.0, 57.0}}
+                                      Other, 0x116c81cc0, {{0.0, 431.0}, {402.0, 57.0}}
+                                        Other, 0x116c81e00, {{0.0, 431.0}, {402.0, 57.0}}
+                                          Other, 0x116c81f40, {{0.0, 431.0}, {402.0, 57.0}}
+                                            Other, 0x116c82080, {{0.0, 431.0}, {402.0, 69.0}}
+                                        Other, 0x116c821c0, {{0.0, 431.0}, {402.0, 57.0}}
+                                          Other, 0x116c82300, {{0.0, 431.0}, {402.0, 69.0}}
+                                  Other, 0x116c82440, {{68.0, 431.7}, {318.0, 40.3}}
+                                    ScrollView, 0x116c82580, {{68.0, 431.7}, {318.0, 40.3}}
+                                      TextField, 0x116c826c0, {{79.0, 431.7}, {262.7, 40.3}}, identifier: 'messageBodyField', label: 'Message', placeholderValue: 'iMessage'
+                                        Other, 0x116c82800, {{308.7, 431.7}, {30.0, 38.7}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                          Other, 0x116c82940, {{335.7, 431.3}, {3.0, 36.0}}
+                                        Other, 0x116c82a80, {{79.0, 448.8}, {261.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                          Other, 0x116c82bc0, {{82.0, 466.0}, {255.0, 3.0}}
+                                      Other, 0x116c82d00, {{68.0, 431.8}, {313.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                        Other, 0x116c82e40, {{71.2, 449.0}, {291.7, 3.0}}
+                                      Other, 0x116c82f80, {{348.0, 448.7}, {30.0, 6.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                        Other, 0x116c830c0, {{375.0, 412.8}, {3.0, 36.0}}
+                                      Other, 0x116c83200, {{348.0, 448.7}, {30.0, 6.3}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                        Other, 0x116c83340, {{375.0, 412.8}, {3.0, 36.0}}
+                                      Other, 0x116c83480, {{68.0, 431.8}, {313.0, 20.2}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                        Other, 0x116c835c0, {{71.2, 449.0}, {291.7, 3.0}}
+                                    Button, 0x116c83700, {{354.0, 441.0}, {22.0, 22.0}}
+                                      Other, 0x116c83840, {{354.0, 441.0}, {22.0, 22.0}}
+                                        Other, 0x116c83980, {{354.0, 441.0}, {22.0, 22.0}}
+                                          Button, 0x116c83ac0, {{354.0, 441.0}, {22.0, 22.0}}, label: 'Dictate'
+                              CollectionView, 0x116c83c00, {{0.0, 0.0}, {402.0, 874.0}}, identifier: 'TranscriptCollectionView', label: 'Messages'
+                                Other, 0x116c83d40, {{0.0, 0.0}, {402.0, 874.0}}
+                                Other, 0x116c83e80, {{0.0, 0.0}, {402.0, 874.0}}
+                                  Other, 0x115840000, {{0.0, 0.0}, {402.0, 214.1}}
+                                    Image, 0x115840140, {{-120.0, -209.3}, {642.0, 418.7}}, identifier: 'AdditionalDimmingOverlay'
+                                    Other, 0x115840280, {{0.0, 0.0}, {402.0, 214.1}}
+                                      Other, 0x1158403c0, {{0.0, 0.0}, {402.0, 214.1}}
+                                    Other, 0x115840500, {{0.0, 0.0}, {402.0, 214.1}}
+                                      Other, 0x115840640, {{0.0, 0.0}, {402.0, 214.1}}
+                                      Other, 0x115840780, {{0.0, 0.0}, {402.0, 214.1}}
+                                Cell, 0x1158408c0, {{0.0, 71.3}, {402.0, 26.3}}
+                                  Other, 0x115840a00, {{0.0, 71.3}, {402.0, 26.3}}
+                                    StaticText, 0x115840b40, {{16.0, 71.3}, {370.0, 26.3}}
+                                      StaticText, 0x115840c80, {{16.0, 71.3}, {370.0, 26.3}}, label: 'iMessage  Encrypted'
+                                Cell, 0x115840dc0, {{0.0, 112.3}, {402.0, 13.3}}
+                                  Other, 0x115840f00, {{0.0, 112.3}, {402.0, 13.3}}
+                                    StaticText, 0x115841040, {{16.0, 112.3}, {370.0, 13.3}}
+                                      StaticText, 0x115841180, {{16.0, 112.3}, {370.0, 13.3}}, label: 'Today 8:03 PM'
+                                Cell, 0x1158412c0, {{0.0, 132.7}, {402.0, 263.0}}, label: 'Your iMessage, 8:03 PM'
+                                  Other, 0x115841400, {{106.0, 132.7}, {280.0, 269.8}}, identifier: 'Sticker', label: 'Your iMessage, 8:03 PM'
+                                    Other, 0x115841540, {{106.0, 132.7}, {280.0, 269.8}}
+                                      Other, 0x115841680, {{106.0, 132.7}, {280.0, 269.8}}
+                                        Link, 0x1158417c0, {{106.0, 132.7}, {280.0, 269.8}}, label: 'Sunday Hikers 🥾 · 2026 in review, 13,018 messages · Tap to play, 1 image'
+                                          Other, 0x115841900, {{106.0, 132.7}, {280.0, 269.8}}
+                                            Other, 0x115841a40, {{106.0, 132.7}, {280.0, 263.0}}
+                                              Other, 0x115841b80, {{106.0, 132.7}, {280.0, 210.0}}
+                                                Other, 0x115841cc0, {{106.0, 132.7}, {280.0, 210.0}}
+                                                  Image, 0x115841e00, {{106.0, 132.7}, {280.0, 210.0}}
+                                              Other, 0x115841f40, {{106.0, 342.7}, {280.0, 53.0}}
+                                                Other, 0x115842080, {{106.0, 342.7}, {280.0, 53.0}}
+                                                  Other, 0x1158421c0, {{122.0, 350.7}, {248.0, 18.0}}, identifier: 'LP.CaptionBar.TopCaption'
+                                                    Other, 0x115842300, {{122.0, 350.7}, {245.0, 18.0}}, label: 'Sunday Hikers 🥾 · 2026 in review'
+                                                  Other, 0x115842440, {{122.0, 370.7}, {248.0, 16.0}}, identifier: 'LP.CaptionBar.BottomCaption'
+                                                    Other, 0x115842580, {{122.0, 370.7}, {181.0, 16.0}}, label: '13,018 messages · Tap to play'
+                                        Image, 0x1158426c0, {{112.0, 138.7}, {32.0, 24.0}}
+                                Cell, 0x115842800, {{0.0, 401.7}, {402.0, 13.3}}
+                                  Other, 0x115842940, {{0.0, 401.7}, {402.0, 13.3}}
+                                    StaticText, 0x115842a80, {{314.0, 401.7}, {52.0, 13.3}}
+                                      StaticText, 0x115842bc0, {{314.0, 401.7}, {52.0, 13.3}}, label: 'Delivered'
+                                Other, 0x115842d00, {{369.0, 157.3}, {30.0, 273.7}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                                  Other, 0x115842e40, {{396.0, 187.7}, {3.0, 240.3}}
+                                Other, 0x115842f80, {{369.0, 157.3}, {30.0, 273.7}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                                  Other, 0x1158430c0, {{396.0, 187.7}, {3.0, 240.3}}
+                  Other, 0x115843200, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x115843340, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x115843480, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x1158435c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x115843700, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x115843840, {{-402.0, -874.0}, {1206.0, 2622.0}}
+        Other, 0x115843980, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x115843ac0, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x115843c00, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x115843d40, {{0.0, 0.0}, {402.0, 874.0}}
+                Other, 0x115843e80, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x116c8c000, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x116c8c140, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x116c8c280, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x116c8c3c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x116c8c500, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x116c8c640, {{8.0, 495.4}, {386.0, 370.6}}
+                              Button, 0x116c8c780, {{164.5, 490.6}, {73.0, 24.0}}, label: 'Sheet Grabber', value: Half screen
+                              Other, 0x116c8c8c0, {{8.0, 495.4}, {386.0, 370.6}}
+                                Other, 0x116c8ca00, {{8.0, 495.4}, {386.0, 370.6}}
+                                  Other, 0x116c8cb40, {{8.0, 495.4}, {386.0, 370.6}}
+                                    Other, 0x116c8cc80, {{8.0, 495.4}, {386.0, 370.6}}
+                                      Other, 0x116c8cdc0, {{8.0, 495.4}, {386.0, 370.6}}
+                                        Other, 0x116c8cf00, {{8.0, 495.4}, {386.0, 370.6}}
+                                          ScrollView, 0x116c8d040, {{8.0, 495.4}, {386.0, 370.6}}
+                                            Other, 0x116c8d180, {{8.0, 514.6}, {386.0, 274.6}}
+                                              StaticText, 0x116c8d2c0, {{23.4, 526.1}, {208.0, 47.7}}, identifier: 'launcher.headline', label: 'Your group chat,, in review.'
+                                                StaticText, 0x116c8d400, {{23.4, 526.1}, {208.0, 24.3}}, label: 'Your group chat,'
+                                                StaticText, 0x116c8d540, {{23.4, 549.5}, {119.4, 24.3}}, label: 'in review.'
+                                              Button, 0x116c8d680, {{291.9, 543.4}, {13.4, 13.4}}, identifier: 'launcher.sendDemoLive', label: 'Stage the sample as a live bubble (debug)'
+                                              Button, 0x116c8d7c0, {{316.9, 543.4}, {13.4, 13.4}}, identifier: 'launcher.sendDemoTemplate', label: 'Stage the sample as a card (debug)'
+                                              Button, 0x116c8d900, {{23.4, 583.4}, {355.3, 49.9}}, identifier: 'launcher.paste', label: 'Paste a recap link'
+                                                Image, 0x116c8da40, {{116.8, 598.7}, {19.2, 19.2}}, identifier: 'link', label: 'Link'
+                                                StaticText, 0x116c8db80, {{116.8, 598.7}, {169.8, 19.5}}, label: 'Paste a recap link'
+                                              StaticText, 0x116c8dcc0, {{23.4, 650.3}, {109.1, 12.2}}, label: 'YOUR RECAPS'
+                                              Button, 0x116c8de00, {{327.4, 642.9}, {51.2, 26.9}}, identifier: 'recents.clear', label: 'Clear your recaps'
+                                              ScrollView, 0x116c8df40, {{23.4, 677.5}, {355.3, 52.2}}
+                                                Other, 0x116c8e080, {{23.4, 677.5}, {240.0, 52.2}}
+                                                  Button, 0x116c8e1c0, {{33.0, 687.1}, {180.5, 33.0}}, identifier: 'recents.play', label: 'Play Sunday Hikers 🥾 · 2026 in review'
+                                                    Image, 0x116c8e300, {{44.2, 698.3}, {9.3, 10.6}}, identifier: 'play.fill', label: 'Play'
+                                                    StaticText, 0x116c8e440, {{73.3, 687.1}, {125.1, 17.3}}, label: 'Sunday Hikers 🥾'
+                                                    StaticText, 0x116c8e580, {{73.3, 706.3}, {128.0, 13.8}}, label: '2026 · 13,018 messages'
+                                                  Button, 0x116c8e6c0, {{221.2, 687.2}, {32.6, 32.6}}, identifier: 'recents.send', label: 'Send Sunday Hikers 🥾 · 2026 in review'
+                                              Button, 0x116c8e800, {{23.4, 741.2}, {142.7, 36.5}}, identifier: 'launcher.seeSample', label: 'See a sample'
+                                                Image, 0x116c8e940, {{38.1, 752.1}, {14.7, 14.7}}, identifier: 'play.circle', label: 'Play'
+                                                StaticText, 0x116c8ea80, {{38.1, 750.8}, {114.6, 17.3}}, label: 'See a sample'
+                              Other, 0x116c8ebc0, {{8.0, 495.4}, {386.0, 370.6}}
+                                Other, 0x116c8ed00, {{8.0, 495.4}, {386.0, 370.6}}
+                                  Other, 0x116c8ee40, {{8.0, 495.4}, {386.0, 370.6}}
+                                    Other, 0x116c8ef80, {{8.0, 495.4}, {386.0, 370.6}}
+                                      Other, 0x116c8f0c0, {{8.0, 495.4}, {386.0, 370.6}}
+                                        Other, 0x116c8f200, {{8.0, 495.4}, {386.0, 370.6}}
+                                    Other, 0x116c8f340, {{8.0, 495.4}, {386.0, 370.6}}
+                                      Other, 0x116c8f480, {{8.0, 495.4}, {386.0, 370.6}}
+                        Other, 0x116c8f5c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x116c8f700, {{0.0, 0.0}, {402.0, 874.0}}
+                            Other, 0x116c8f840, {{0.0, 0.0}, {402.0, 874.0}}
+    Window, 0x116c8f980, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x116c8fac0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x116c8fc00, {{0.0, 0.0}, {402.0, 874.0}}
 Path to element:
- →Application, 0x1144a3c00, pid: 19934, label: 'Messages'
+ →Application, 0x11702fc00, pid: 22972, label: 'Messages'
 Query chain:
  →Find: Application 'com.apple.MobileSMS'
   Output: {
-    Application, 0x1141bfd40, pid: 19934, label: 'Messages'
+    Application, 0x116c8fd40, pid: 22972, label: 'Messages'
   }
