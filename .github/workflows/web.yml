@@ -1,0 +1,59 @@
+# Web story: unit tests (codec, normalize, formatting) and the Playwright end-to-end run
+# (every slide, the robustness matrix, embed bridge, file:// + CSP, zero foreign requests).
+name: Web story
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'web/**'
+      - 'tests/js/**'
+      - 'tests/e2e/**'
+      - 'package*.json'
+      - '.github/workflows/web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit + end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Install fonts used in screenshots
+        run: sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji
+
+      - name: Unit tests
+        run: npm test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-screenshots
+          path: docs/screenshots/web/
+          if-no-files-found: warn

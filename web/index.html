@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Locked down: same-origin files only, no inline code, no outbound requests of any kind.
+     data:/blob: images are needed for the bubble-tail masks and the share-card PNG. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+
+<!-- ════════════════════════════════════════════════════════════════════════════════════
+     BRAND + ADDRESS. This block is the one place in this file that names the product and
+     the public URL. To rename or re-host: edit this block and web/js/config.js (and
+     regenerate nothing else; tests/js/site.test.js fails if the two drift apart).
+     These tags are static on purpose: Messages and other link-preview fetchers run no
+     JavaScript, and Open Graph URLs must be absolute.
+     ════════════════════════════════════════════════════════════════════════════════════ -->
+<!-- brand:start -->
+<title>Threadback: your group chat's year in review</title>
+<meta name="application-name" content="Threadback">
+<meta name="apple-mobile-web-app-title" content="Threadback">
+<meta property="og:site_name" content="Threadback">
+<link rel="canonical" href="https://averyhsu.github.io/imessage-wrap/">
+<meta property="og:url" content="https://averyhsu.github.io/imessage-wrap/">
+<meta property="og:image" content="https://averyhsu.github.io/imessage-wrap/assets/og.png">
+<meta property="og:video" content="https://averyhsu.github.io/imessage-wrap/assets/og-video.mp4">
+<meta property="og:video:secure_url" content="https://averyhsu.github.io/imessage-wrap/assets/og-video.mp4">
+<meta name="twitter:image" content="https://averyhsu.github.io/imessage-wrap/assets/og.png">
+<!-- brand:end -->
+
+<meta name="description" content="A tap-through recap of your group chat's year: who carried it, who was up at 3 AM, the message of the year. Made on your own device. Nothing is uploaded.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Your group chat, in review">
+<meta property="og:description" content="Who carried it, who was up at 3 AM, the message of the year. Tap to play.">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Speech bubbles, tapbacks and a typing indicator on a bright blue background.">
+<meta property="og:video:type" content="video/mp4">
+<meta property="og:video:width" content="1200">
+<meta property="og:video:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Your group chat, in review">
+<meta name="twitter:description" content="Who carried it, who was up at 3 AM, the message of the year. Tap to play.">
+
+<meta name="theme-color" content="#07070c">
+<meta name="color-scheme" content="dark">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
+
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/landing.css">
+<link rel="stylesheet" href="css/story.css">
+<noscript><link rel="stylesheet" href="css/noscript.css"></noscript>
+<script src="js/boot.js"></script>
+</head>
+<body>
+
+<!-- ── landing page (hidden when the URL carries a recap) ─────────────────────────────── -->
+<main id="landing" class="landing">
+  <div class="l-sky" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="l-top">
+    <a class="l-brand" href="./" aria-label="Home">
+      <span class="l-brand__mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="l-brand__name" data-brand></span>
+    </a>
+    <a class="l-top__link" href="make/">Make your own</a>
+  </header>
+
+  <section class="l-hero">
+    <div class="l-hero__copy">
+      <p class="l-eyebrow" data-descriptor></p>
+      <h1 class="l-h1">The group chat had <span class="l-h1__pop">a year.</span></h1>
+      <p class="l-lede">Who carried it. Who was up at 3&nbsp;AM. The message that got every tapback. One link, and the whole chat taps through the same story.</p>
+      <div class="l-cta">
+        <a class="l-btn l-btn--primary" id="play-demo" href="?demo=1"><span class="l-btn__play" aria-hidden="true"></span>Play the demo</a>
+        <a class="l-btn" id="play-recap" href="#" hidden><span class="l-btn__play" aria-hidden="true"></span>Play your recap again</a>
+        <a class="l-btn" href="make/">Make your own</a>
+      </div>
+      <p class="l-note">No sign-up, no upload, nothing to install. Works with iMessage group chats.</p>
+    </div>
+
+    <a class="l-hero__art" id="hero-art" href="?demo=1" aria-label="Play the demo">
+      <span class="l-card"><canvas id="hero-card" width="1080" height="1350"></canvas></span>
+      <span class="l-float l-float--typing" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="l-float l-float--tb l-float--tb1" aria-hidden="true" data-tapback="love"></span>
+      <span class="l-float l-float--tb l-float--tb2" aria-hidden="true" data-tapback="laugh"></span>
+      <span class="l-float l-float--tb l-float--tb3" aria-hidden="true" data-tapback="emphasize"></span>
+      <span class="l-float l-float--play" aria-hidden="true">Tap to play</span>
+    </a>
+  </section>
+
+  <section class="l-section" aria-labelledby="how">
+    <h2 class="l-h2" id="how">How it works</h2>
+    <ol class="l-steps">
+      <li class="l-step l-step--blue">
+        <span class="l-step__n">1</span>
+        <h3>Pick the chat</h3>
+        <p>Open the maker and point it at your Messages history. It lists your group chats; you choose one.</p>
+      </li>
+      <li class="l-step l-step--green">
+        <span class="l-step__n">2</span>
+        <h3>It counts, on your device</h3>
+        <p>Messages per person, busiest hours, tapbacks, streaks. The numbers are worked out in your browser, not on a server.</p>
+      </li>
+      <li class="l-step l-step--grey">
+        <span class="l-step__n">3</span>
+        <h3>Send one link</h3>
+        <p>The whole recap is packed into the link itself. Drop it in the chat and everyone taps through, on any phone.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="l-section l-privacy" aria-labelledby="privacy">
+    <h2 class="l-h2" id="privacy">Where your messages go: nowhere</h2>
+    <ul class="l-facts">
+      <li>
+        <h3>There is no server</h3>
+        <p>This site is a folder of static files. Your message history is read on your own device and never uploaded, because there is nothing to upload it to.</p>
+      </li>
+      <li>
+        <h3>The link is the recap</h3>
+        <p>The stats are compressed into the part of the link after the <code>#</code>. Browsers never send that part to any website, this one included.</p>
+      </li>
+      <li>
+        <h3>What a link contains</h3>
+        <p>Counts, the names in your chat, and up to three most-reacted messages, which you can switch off. Anyone holding the link can read it, so share it like a screenshot.</p>
+      </li>
+      <li>
+        <h3>No tracking</h3>
+        <p>No analytics, cookies, remote fonts or third-party scripts. A content security policy locks the page to its own files, so it cannot call out to anyone.</p>
+      </li>
+    </ul>
+  </section>
+
+  <footer class="l-foot">
+    <p><span data-brand></span> is an independent, open-source project. It is not affiliated with or endorsed by Apple. iMessage is a trademark of Apple Inc.</p>
+    <p><a href="https://github.com/averyhsu/imessage-wrap" rel="noopener">Source on GitHub</a></p>
+  </footer>
+</main>
+
+<noscript>
+  <p class="noscript">This page needs JavaScript to play a recap. Everything runs on your device; nothing is uploaded.</p>
+</noscript>
+
+<!-- ── the story player mounts here ───────────────────────────────────────────────────── -->
+<div id="story" class="story" hidden></div>
+
+<!-- Classic scripts, in dependency order. No modules: this page also runs from file://. -->
+<script src="js/vendor/fflate.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/format.js"></script>
+<script src="js/codec.js"></script>
+<script src="js/normalize.js"></script>
+<script src="js/glyphs.js"></script>
+<script src="js/bridge.js"></script>
+<script src="js/card.js"></script>
+<script src="js/slides.js"></script>
+<script src="js/player.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
