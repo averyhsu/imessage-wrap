@@ -9,7 +9,10 @@ logged in one line.
 
 What it will never do:
 
-- reply anywhere the owner has not explicitly allowed (``chats`` / ``all_chats``)
+- reply in a chat the owner has not approved. ``--chat`` names (or ``--all-chats``)
+  are turned into a fixed set of chat ids once, at start, and that list is what
+  the owner approves. After that only the ids count: a chat that is created or
+  renamed later is never added, whatever it is called, until a restart
 - replay commands typed before it started, or more than ten minutes ago
 - answer more than once per chat inside the cooldown
 - react to its own replies
@@ -41,8 +44,8 @@ from .triggers import Trigger, parse_trigger
 class AgentConfig:
     db_path: Path
     state_path: Path
-    chats: Sequence[str] = ()  # allowlist: case-insensitive substrings of chat names
-    all_chats: bool = False  # explicit opt-in to every group chat
+    chats: Sequence[str] = ()  # names to look for AT START (case-insensitive substrings)
+    all_chats: bool = False  # every group chat that exists at start
     me: str = "Me"  # the owner's display name in the recap
     cooldown: float = 120.0  # seconds between replies in one chat
     stale_after: float = 600.0  # ignore commands older than this (sleep/wake catch-up)
@@ -114,35 +117,42 @@ class Agent:
         self._awards_hook = awards_hook
         self._connect = connect
         self.state = State.load(config.state_path)
-        self._known: Dict[str, ChatRef] = {}
-        self._allowed: set = set()
-        self._known_loaded = False
+        self._known: Dict[str, ChatRef] = {}  # the approved chats as they were at start
+        self._approved: Optional[frozenset] = None  # chat ids; None until approve()
+        self._warned: set = set()  # unapproved chat ids already mentioned in the log
         self.outcomes: List[TriggerOutcome] = []
 
     # -- scope ---------------------------------------------------------------
 
-    def refresh_chats(self) -> List[ChatRef]:
-        """(Re)load the group chats and work out which ones are in scope."""
-        chats = list(self.engine.list_group_chats(self.config.db_path))
-        self._known = {c.key: c for c in chats}
-        if self.config.all_chats:
-            allowed = chats
-        else:
-            allowed = match_chats(chats, self.config.chats)
-        self._allowed = {c.key for c in allowed}
-        self._known_loaded = True
-        return allowed
+    def resolve_scope(self) -> List[ChatRef]:
+        """The group chats the configuration selects *right now* (by name, or all).
 
-    def allowed_chats(self) -> List[ChatRef]:
-        if not self._known_loaded:
-            self.refresh_chats()
-        return [c for k, c in self._known.items() if k in self._allowed]
+        Names are used here and nowhere else: this list is shown to the owner,
+        and what they approve is frozen by ``approve``."""
+        chats = list(self.engine.list_group_chats(self.config.db_path))
+        return chats if self.config.all_chats else match_chats(chats, self.config.chats)
+
+    def approve(self, chats: Iterable[ChatRef]) -> None:
+        """Freeze the scope to exactly these chats, by id, for the life of this helper.
+
+        Any member can rename a group or start a new one, so a name can never add
+        a chat afterwards; a renamed approved chat stays approved (same id)."""
+        approved = list(chats)
+        self._known = {c.key: c for c in approved}
+        self._approved = frozenset(self._known)
+
+    def approved_chats(self) -> List[ChatRef]:
+        if self._approved is None:
+            self.approve(self.resolve_scope())
+        return list(self._known.values())
 
     # -- loop ----------------------------------------------------------------
 
     def run_once(self) -> int:
         """Process every pending row, then return. Returns the number of commands answered."""
         answered = 0
+        if self._approved is None:
+            self.approve(self.resolve_scope())  # programmatic use: start = first pass
         conn = self._connect(self.config.db_path)
         try:
             top = chatdb.max_message_rowid(conn)
@@ -211,10 +221,18 @@ class Agent:
         chat_row = self._find_group_chat(conn, row.rowid)
         if chat_row is None:
             return False
-        chat = self._chat_ref(chat_row)
-        if not (self.config.all_chats or chat.key in self._allowed):
-            self._log(f'ignored /{trigger.command} in "{chat.name}": that chat is not in the allowed list')
+        key = chat_row.identifier or chat_row.guid
+        if self._approved is None or key not in self._approved:
+            # Scope is the approved id set and nothing else. The chat's name is
+            # deliberately not consulted and not logged.
+            if key not in self._warned:
+                self._warned.add(key)
+                self._log(
+                    f"ignored /{trigger.command} in a group chat that is not in the approved list "
+                    f"(id ending {key[-4:]}); restart the helper to add it"
+                )
             return False
+        chat = self._chat_ref(chat_row)
 
         last = self.state.cooldowns.get(chat.key)
         if last is not None and 0 <= now - last < self.config.cooldown:
@@ -253,14 +271,10 @@ class Agent:
 
     def _chat_ref(self, row: chatdb.ChatRow) -> ChatRef:
         key = row.identifier or row.guid
-        if not self._known_loaded or key not in self._known:
-            try:
-                self.refresh_chats()  # a chat created after start-up
-            except Exception as exc:
-                self._known_loaded = True
-                self._log(f"could not list group chats: {type(exc).__name__}: {exc}")
         known = self._known.get(key)
-        name = (known.name if known else "") or row.display_name or "Group chat"
+        # the current name if the group has one (an approved chat may have been
+        # renamed since start), else the name worked out from its members at start
+        name = row.display_name.strip() or (known.name if known else "") or "Group chat"
         # Reply through the exact chat row the command arrived on.
         return ChatRef(
             guid=row.guid,
@@ -370,9 +384,8 @@ def _stop_after(res: SendResult) -> bool:
 
 
 def scope_signature(config: AgentConfig, allowed: Sequence[ChatRef]) -> str:
-    """What exactly the owner agreed to; a different scope asks again."""
-    if config.all_chats:
-        return "all-group-chats"
+    """What exactly the owner agreed to: the set of chat ids. A different set
+    (one more chat, in either mode) asks again; a renamed chat does not."""
     return "chats:" + "|".join(sorted(c.key for c in allowed))
 
 
@@ -385,11 +398,15 @@ def consent_text(config: AgentConfig, allowed: Sequence[ChatRef], total_groups: 
         "(or /recap, optionally followed by a year or 'all'):",
     ]
     if config.all_chats:
-        lines.append(f"  - EVERY group chat on this Mac ({total_groups} right now, and any new one)")
+        lines.append(f"  EVERY group chat on this Mac as of now ({len(allowed)}):")
+    for chat in sorted(allowed, key=lambda c: c.name.casefold()):
+        members = f" ({chat.members} members)" if chat.members else ""
+        lines.append(f"  - {chat.name}{members}")
+    if config.all_chats:
+        lines.append("Groups created later are NOT included until you restart the helper and approve them.")
     else:
-        for chat in sorted(allowed, key=lambda c: c.name.casefold()):
-            members = f" ({chat.members} members)" if chat.members else ""
-            lines.append(f"  - {chat.name}{members}")
+        lines.append("Only these exact chats. A chat that is created or renamed later is not added,")
+        lines.append("whatever it is called; restart the helper to approve a new one.")
     lines.append("")
     if config.link:
         lines += [

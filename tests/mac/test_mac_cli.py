@@ -369,6 +369,36 @@ class AgentCommand(EngineCase):
         code, out, err = self.live("--all-chats", "--yes")
         self.assertEqual(code, 0, err)
 
+    def add_group(self, identifier, name):
+        conn = sqlite3.connect(str(self.db))
+        try:
+            cur = conn.execute(
+                "INSERT INTO chat (guid, style, chat_identifier, display_name) VALUES (?, 43, ?, ?)",
+                (f"iMessage;+;{identifier}", identifier, name),
+            )
+            conn.commit()
+            return cur.lastrowid
+        finally:
+            conn.close()
+
+    def test_a_new_chat_with_a_matching_name_needs_fresh_approval(self):
+        code, out, err = self.live("--chat", "taco", stdin_tty=True, answers=["y"])
+        self.assertEqual(code, 0, err + out)
+        self.assertIn("Only these exact chats", out)
+        strangers = self.add_group("chat900000000000000009", "Taco night with strangers")
+        add_message(self.db, strangers, text="/wrapped 2026")
+        # the same command again, unattended: the list is no longer what was approved
+        code, out, err = self.live("--chat", "taco")
+        self.assertEqual(code, 2, err + out)
+        self.assertIn("Taco night with strangers", out)
+        self.assertIn("--yes", err)
+        self.assertEqual(FakeMessagesSender.instances[-1].sent, [])
+        # ... and a dry run names exactly what it watches
+        code, out, err = self.run_cli(*self.agent_args("--dry-run", "--once", "--chat", "taco", "--out", str(self.out)))
+        self.assertEqual(code, 0, err + out)
+        self.assertIn("Taco night with strangers", out)
+        self.assertIn("created or renamed later needs a restart", out)
+
     def test_second_helper_on_the_same_state_is_refused(self):
         from wrapped.mac.agent import acquire_lock
 

@@ -281,16 +281,21 @@ def cmd_agent(args: argparse.Namespace) -> int:
     try:
         agent = Agent(config, engine, sender, log=log)
         all_groups = _list_chats(engine, db_path)
-        allowed = agent.refresh_chats()
+        # Names are resolved to chats exactly once, here. What is listed below is
+        # what gets approved, and from then on only those chat ids are in scope.
+        allowed = list(all_groups) if config.all_chats else match_chats(all_groups, patterns)
         if not config.all_chats:
             for pattern in patterns:
                 if not match_chats(all_groups, [pattern]):
                     raise CliError(f'no group chat matches --chat "{pattern}".', "Run `wrapped chats` to see the names.")
+        if not allowed:
+            raise CliError("there are no group chats to reply in.")
 
         if config.dry_run:
             _say(f"{PRODUCT_NAME} DRY RUN: nothing will be sent and Messages is never touched.")
-            where = "every group chat" if config.all_chats else ", ".join(f'"{c.name}"' for c in allowed)
+            where = ", ".join(f'"{c.name}"' for c in allowed)
             _say(f"Watching for /wrapped in: {where}")
+            _say("(Only these chats. One that is created or renamed later needs a restart.)")
             _say(f"Cards, text and links are written to: {config.out_dir or (send.staging_dir() / 'dry-run')}")
         else:
             signature = scope_signature(config, allowed)
@@ -311,6 +316,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
                 )
             agent.state.consent["send"] = signature
             agent.state.save()
+        agent.approve(allowed)
         _say()
 
         agent._awards_hook = _ai_hook(args, agent.state, log, interactive)
@@ -331,7 +337,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
                     if outcome.out_dir:
                         _say(f"Wrote {outcome.out_dir}")
                 return EXIT_OK
-            _say("Listening. Type /wrapped in an allowed group chat. Press Ctrl-C to stop.")
+            _say("Listening. Type /wrapped in an approved group chat. Press Ctrl-C to stop.")
             agent.run_forever()
         finally:
             if awake is not None:
@@ -595,15 +601,17 @@ def register(subparsers: Any) -> None:
         help="answer /wrapped typed in your group chats (asks before it ever sends)",
         description=(
             f"Watch your Messages database and, when someone types /wrapped (or /recap, optionally with a "
-            f"year or 'all') in an allowed group chat, reply in that chat with a recap image, a short text "
+            f"year or 'all') in an approved group chat, reply in that chat with a recap image, a short text "
             f"and a link. Replies come from YOUR Apple ID. You must name the chats, and {PRODUCT_NAME} "
             "asks before it starts. Use --dry-run first: it sends nothing."
         ),
     )
     scope = agent.add_argument_group("where it may reply (required)")
     scope.add_argument("--chat", metavar="NAME", action="append",
-                       help="a group chat it may reply in; part of the name is enough; repeat for more")
-    scope.add_argument("--all-chats", action="store_true", help="every group chat (think twice)")
+                       help="a group chat it may reply in; part of the name is enough; repeat for more. "
+                            "The matching chats are listed for your approval at start and fixed from then on")
+    scope.add_argument("--all-chats", action="store_true",
+                       help="every group chat that exists when the helper starts (think twice)")
     agent.add_argument("--dry-run", action="store_true",
                        help="send nothing; write the card, text and link to a folder instead")
     agent.add_argument("--out", metavar="DIR", help="folder for --dry-run output (default: ~/Pictures/Threadback/dry-run)")

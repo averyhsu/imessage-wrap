@@ -130,11 +130,20 @@ checks in the Messages database that the message really went out, and tells you 
 threadback agent --chat "Dinner Club" --keep-awake
 ```
 
-- `--chat` says where it may reply. Repeat it for more chats. `--all-chats` allows every group
-  chat; think twice before using that.
+- `--chat` says where it may reply. Repeat it for more chats; part of a name is enough.
+  `--all-chats` means every group chat that exists at that moment; think twice before using it.
 - It first prints exactly what it will do: *replies are sent from YOUR Apple ID into these
-  group chats when someone types /wrapped*, with the list of chats, and asks `y/N`. It
-  remembers your answer for that exact list of chats and asks again if the list changes.
+  group chats when someone types /wrapped*, with **the list of the exact chats** the names
+  matched, and asks `y/N`.
+- **That list is then fixed.** The helper remembers those chats by their internal id, not by
+  name. A group that is created later, or renamed so that it would match, is *not* answered,
+  whatever it is called (anyone in a group can rename it, so a name must never be enough).
+  The terminal says once that a command came from a chat that is not on the list. To add a
+  chat, stop the helper and start it again: it shows the new list and asks again. Renaming a
+  chat you approved changes nothing; it stays approved.
+- It remembers your answer for that exact set of chats, so restarting with the same chats
+  does not ask again. `--yes` skips the question and approves whatever the names match at
+  that start, so use it only with names that cannot match a chat you do not mean.
 - Then anyone in the chat types `/wrapped`. Also understood: `/recap`, `/wrapped 2025`,
   `/wrapped all`. The command must be the whole message.
 - It answers at most once per chat every two minutes (`--cooldown SECONDS` to change), never
@@ -230,7 +239,7 @@ unless you enable `--ai` (above).
 | `unverified ... attached to no chat` | The known macOS 26 symptom: Messages said yes but sent nothing. Check the chat on your phone; use `preview` and send by hand. |
 | `unverified ... no outgoing message appeared` | Look at the chat on another device. If it did arrive, Messages was slow to record it; if not, see Limits. |
 | `Messages did not answer` | Messages is showing a dialog or still starting. Open it, dismiss anything on screen, try again. |
-| Nothing happens when someone types `/wrapped` | Is the helper running in a terminal window, and is that chat in its list? The command must be the whole message. Was there a reply in that chat in the last two minutes (cooldown)? The terminal prints one line for every command it ignores, with the reason. |
+| Nothing happens when someone types `/wrapped` | Is the helper running in a terminal window, and was that chat on the list it showed at start? A chat created or renamed since then needs a restart. The command must be the whole message. Was there a reply in that chat in the last two minutes (cooldown)? The terminal says why it ignored a command. |
 | `another copy of the helper is already running` | Stop the other one (Ctrl-C in its window). Two helpers would both answer. |
 | `command not found: threadback` | Run the PATH line the installer printed, or use `~/.local/bin/threadback`. |
 | A window offers to install "command line developer tools" | That is Apple's installer for Python and friends. Click Install, wait, run the Threadback installer again. |

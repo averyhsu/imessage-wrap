@@ -306,38 +306,104 @@ class AgentCase(unittest.TestCase):
         self.assertEqual(len(self.slept), 3)
         self.assertTrue(any("never showed up" in ln for ln in self.logs))
 
-    def test_allowlist(self):
+    # -- scope: frozen at start, by chat id, never by name ---------------------
+
+    def rename(self, chat_rowid, name):
+        self.db.conn.execute("UPDATE chat SET display_name = ? WHERE ROWID = ?", (name, chat_rowid))
+        self.db.conn.commit()
+
+    def test_only_approved_chats_are_answered(self):
         agent = self.started(chats=["DINNER"])
         self.db.add_message("/wrapped", chat=self.other, handle=self.maya, when=self.now)
         self.db.add_message("/wrapped", chat=self.unnamed, handle=self.dev, when=self.now)
         self.assertEqual(agent.run_once(), 0)
         self.assertEqual(self.sender.sent, [])
         self.assertEqual(self.engine.compute_calls, [])
-        self.assertEqual(sum("not in the allowed list" in ln for ln in self.logs), 2)
+        self.assertEqual(sum("not in the approved list" in ln for ln in self.logs), 2)
         self.db.add_message("/wrapped", chat=self.group, handle=self.dev, when=self.now)
         self.assertEqual(agent.run_once(), 1)
 
-    def test_no_chats_and_no_all_chats_means_nothing_is_allowed(self):
+    def test_no_chats_and_no_all_chats_means_nothing_is_approved(self):
         agent = self.started(chats=[])
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
         self.assertEqual(agent.run_once(), 0)
-        self.assertEqual(agent.allowed_chats(), [])
+        self.assertEqual(agent.approved_chats(), [])
 
-    def test_all_chats_covers_unnamed_and_new_groups(self):
+    def test_new_group_with_a_matching_name_is_never_answered(self):
+        # the reviewer's repro: started with --chat Dinner, then someone creates this
+        agent = self.started(chats=["Dinner"])
+        strangers = self.db.add_chat("chat999", "Dinner plans with strangers", members=[self.dev])
+        for _ in range(3):  # however often the helper looks again
+            self.db.add_message("/wrapped", chat=strangers, handle=self.dev, when=self.now)
+            self.assertEqual(agent.run_once(), 0)
+        self.assertEqual(self.sender.sent, [])
+        self.assertEqual(self.engine.compute_calls, [])
+        self.db.add_message("/wrapped", chat=self.group, handle=self.dev, when=self.now)
+        self.assertEqual(agent.run_once(), 1)  # the approved chat still works
+
+    def test_renaming_another_chat_to_match_does_not_add_it(self):
+        # any member can rename a group; a name must never widen the scope
+        agent = self.started(chats=["Dinner"])
+        self.rename(self.other, "Work Stuff (Dinner edition)")
+        strangers = self.db.add_chat("chat998", "x", members=[self.dev])
+        self.db.add_message("/wrapped", chat=strangers, handle=self.dev, when=self.now)  # forces any "refresh"
+        agent.run_once()
+        for _ in range(3):
+            self.db.add_message("/wrapped", chat=self.other, handle=self.maya, when=self.now)
+            self.assertEqual(agent.run_once(), 0)
+        self.assertEqual(self.sender.sent, [])
+        self.assertEqual(self.engine.compute_calls, [])
+
+    def test_renaming_an_approved_chat_keeps_it_approved(self):
+        agent = self.started(chats=["Dinner"])
+        self.rename(self.group, "Supper Society")
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 1)
+        self.assertEqual(self.engine.compute_calls, [("chat111", None, "Me")])
+        self.assertIn("Supper Society", self.sender.sent[1]["text"])
+
+    def test_all_chats_is_frozen_at_start_too(self):
         agent = self.started(all_chats=True, chats=[])
         self.db.add_message("/wrapped", chat=self.unnamed, handle=self.dev, when=self.now)
         newer = self.db.add_chat("chat555", "Made After Start", members=[self.maya])
         self.db.add_message("/wrapped", chat=newer, handle=self.maya, when=self.now)
-        self.assertEqual(agent.run_once(), 2)
-        self.assertEqual([c[0] for c in self.engine.compute_calls], ["chat333", "chat555"])
-        self.assertIn("Made After Start", self.sender.sent[4]["text"])
+        self.assertEqual(agent.run_once(), 1)
+        self.assertEqual([c[0] for c in self.engine.compute_calls], ["chat333"])
+        self.assertEqual({s["chat"] for s in self.sender.sent}, {"chat333"})
 
-    def test_allowlisted_chat_created_after_start_is_picked_up(self):
+    def test_chat_created_after_start_needs_a_restart(self):
         agent = self.started(chats=["ski trip"])
-        self.assertEqual(agent.allowed_chats(), [])
+        self.assertEqual(agent.approved_chats(), [])
         newer = self.db.add_chat("chat666", "Ski Trip 2027", members=[self.maya])
         self.db.add_message("/wrapped", chat=newer, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 0)
+        restarted = self.make(chats=["ski trip"])  # a restart resolves (and asks about) the list again
+        self.assertEqual([c.key for c in restarted.resolve_scope()], ["chat666"])
+        self.db.add_message("/wrapped", chat=newer, handle=self.maya, when=self.now)
+        self.assertEqual(restarted.run_once(), 1)
+
+    def test_unapproved_chat_is_logged_once_by_id_and_never_by_name(self):
+        agent = self.started(chats=["Dinner"])
+        secret = self.db.add_chat("chat424242", "Surprise Dinner for Maya", members=[self.dev])
+        for _ in range(3):
+            self.db.add_message("/wrapped", chat=secret, handle=self.dev, when=self.now)
+            agent.run_once()
+        lines = [ln for ln in self.logs if "not in the approved list" in ln]
+        self.assertEqual(len(lines), 1, self.logs)
+        self.assertIn("restart", lines[0])
+        self.assertIn("4242", lines[0])
+        self.assertFalse(any("Surprise" in ln for ln in self.logs), self.logs)
+
+    def test_approving_fewer_chats_than_the_names_match(self):
+        agent = self.make(chats=["club"])
+        scope = agent.resolve_scope()
+        self.assertEqual(sorted(c.key for c in scope), ["chat111", "chat222"])
+        agent.approve([c for c in scope if c.key == "chat222"])
+        self.assertEqual(agent.run_once(), 0)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.db.add_message("/wrapped", chat=self.other, handle=self.maya, when=self.now)
         self.assertEqual(agent.run_once(), 1)
+        self.assertEqual([c[0] for c in self.engine.compute_calls], ["chat222"])
 
     # -- dry run --------------------------------------------------------------
 
@@ -358,8 +424,6 @@ class AgentCase(unittest.TestCase):
 
     def test_attachment_file_name_never_contains_a_phone_number(self):
         numbered = self.db.add_chat("chat777", "", members=[self.maya])
-        agent = self.started(all_chats=True, chats=[])
-        self.db.add_message("/wrapped", chat=numbered, handle=self.maya, when=self.now)
         real = self.engine.list_group_chats
 
         def named(db_path):
@@ -369,6 +433,8 @@ class AgentCase(unittest.TestCase):
             ]
 
         self.engine.list_group_chats = named
+        agent = self.started(all_chats=True, chats=[])
+        self.db.add_message("/wrapped", chat=numbered, handle=self.maya, when=self.now)
         self.assertEqual(agent.run_once(), 1)
         self.assertNotIn("5550100007", self.sender.sent[0]["path"])
         self.assertNotIn("5550100007", self.sender.sent[1]["text"])
@@ -555,7 +621,12 @@ class Scope(unittest.TestCase):
         everything = consent_text(
             AgentConfig(db_path=Path("x"), state_path=Path("y"), all_chats=True, quotes=True), self.CHATS, 3
         )
-        self.assertIn("EVERY group chat on this Mac (3 right now", everything)
+        self.assertIn("EVERY group chat on this Mac as of now (3)", everything)
+        for chat in self.CHATS:  # ... and it still names each one
+            self.assertIn(f"  - {chat.name}", everything)
+        self.assertIn("created later are NOT included until you restart", everything)
+        self.assertIn("Only these exact chats", text)
+        self.assertIn("renamed", text)
         self.assertIn("including the text of the most-reacted messages, because you passed --quotes", everything)
         no_link = consent_text(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], link=False), self.CHATS[:1], 3)
         self.assertIn("two messages", no_link)
@@ -568,6 +639,14 @@ class Scope(unittest.TestCase):
         c = scope_signature(AgentConfig(db_path=Path("x"), state_path=Path("y"), all_chats=True), self.CHATS)
         self.assertEqual(len({a, b, c}), 3)
         self.assertEqual(a, scope_signature(cfg, list(reversed(self.CHATS[:2]))))
+        # the signature is the set of chat ids, in both modes: names are not part of it,
+        # and "all chats" means the chats that existed when it was approved
+        renamed = [ChatRef(c.guid, c.identifier, "Renamed " + c.name, c.rowid, c.members) for c in self.CHATS[:2]]
+        self.assertEqual(a, scope_signature(cfg, renamed))
+        everything = AgentConfig(db_path=Path("x"), state_path=Path("y"), all_chats=True)
+        self.assertNotEqual(scope_signature(everything, self.CHATS), scope_signature(everything, self.CHATS[:2]))
+        for key in ("chat1", "chat2"):
+            self.assertIn(key, a)
 
     def test_lock_is_exclusive(self):
         with tempfile.TemporaryDirectory() as tmp:
