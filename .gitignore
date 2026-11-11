@@ -12,7 +12,18 @@ sms.db-*
 *.sqlite3
 Manifest.plist
 Manifest.db
-# Generated stats / recaps from real chats
+# iPhone backup files by their hashed names (sms.db, its -wal, the address book)
+3d0d7e5fb2ce288813306e4d4636395e047a3d28
+cd47480f213dba9bc38ee792775d17e3f5a73a59
+31bb7ba8914766d4ba40d6dfb6113c8b614be442
+# Address books and message exports
+*.abcddb
+*.abcddb-*
+*.sqlitedb
+*.sqlitedb-*
+*.csv
+*.tsv
+# Generated stats / recaps from real chats, including the tools' default outputs
 stats.json
 *_stats.json
 *-stats.json
@@ -20,6 +31,12 @@ wrapped-output/
 out/
 recap-*.png
 recap-*.json
+recap.txt
+link.txt
+threadback-preview/
+threadback-card*.png
+threadback-*-20[0-9][0-9].png
+threadback-*-all-time.png
 # Secrets
 .env
 .env.*
