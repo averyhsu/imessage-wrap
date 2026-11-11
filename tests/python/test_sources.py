@@ -33,8 +33,8 @@ class Sources(unittest.TestCase):
     def test_the_engine_uses_only_the_standard_library(self):
         allowed = {
             "__future__", "argparse", "base64", "binascii", "bisect", "copy", "datetime", "fractions",
-            "glob", "hashlib", "json", "math", "os", "plistlib", "re", "shutil", "sqlite3", "sys",
-            "tempfile", "time", "typing", "urllib", "zlib", "zoneinfo", "wrapped",
+            "glob", "hashlib", "json", "math", "os", "pathlib", "plistlib", "re", "shutil", "sqlite3",
+            "sys", "tempfile", "time", "typing", "zlib", "zoneinfo", "wrapped",
         }
         for path in tracked("wrapped/*.py"):
             with open(path, encoding="utf-8") as handle:

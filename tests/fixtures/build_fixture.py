@@ -70,6 +70,7 @@ class Archiver:
         self.out = bytearray(b"\x04\x0bstreamtyped\x81\xe8\x03")
         self.strings = {}   # shared strings (type encodings, class names)
         self.classes = {}   # class name -> object-table index
+        self.shared = {}    # objects written once and referenced afterwards
         self.n_objects = 0
 
     def integer(self, n):
@@ -117,7 +118,14 @@ class Archiver:
 
     # -- Foundation objects ------------------------------------------------- #
 
-    def ns_string(self, text, mutable=False):
+    def ns_string(self, text, mutable=False, shared=False):
+        """shared: the same string object is archived more than once (the
+        attribute-name constants), so later uses are references to the first."""
+        if shared:
+            if ("string", text) in self.shared:
+                self._ref(self.shared[("string", text)])
+                return
+            self.shared[("string", text)] = self.n_objects
         chain = [(b"NSString", 1), (b"NSObject", 0)]
         if mutable:
             chain.insert(0, (b"NSMutableString", 1))
@@ -131,9 +139,13 @@ class Archiver:
     def ns_number(self, value):
         self.begin_object([(b"NSNumber", 0), (b"NSValue", 0), (b"NSObject", 0)])
         self.type(b"*")
-        self.out.append(0x84)      # a C string value takes an object slot...
-        self.n_objects += 1
-        self.shared_string(b"i")   # ...and its bytes are a shared string
+        if "i" in self.shared:     # the same C string again: a reference
+            self._ref(self.shared["i"])
+        else:
+            self.out.append(0x84)      # a C string value takes an object slot...
+            self.shared["i"] = self.n_objects
+            self.n_objects += 1
+            self.shared_string(b"i")   # ...and its bytes are a shared string
         self.type(b"i")
         self.integer(value)
         self.end_object()
@@ -144,7 +156,7 @@ class Archiver:
         self.integer(len(items))
         for key, value in items:
             self.type(b"@")
-            self.ns_string(key)
+            self.ns_string(key, shared=True)
             self.type(b"@")
             if isinstance(value, int):
                 self.ns_number(value)

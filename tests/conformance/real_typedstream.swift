@@ -7,9 +7,10 @@
 //
 // macOS only (NSArchiver does not exist elsewhere). Everything is invented text.
 // Output: [{"name", "string", "mutable", "messages_layout", "hex"}, ...] where
-// "messages_layout" marks the samples built exactly like a plain Messages row
-// (one run carrying __kIMMessagePartAttributeName = 0), which the fixture
-// writer in tests/fixtures/build_fixture.py must reproduce byte for byte.
+// "messages_layout" marks the samples built the way Messages builds a row (a
+// text run carrying __kIMMessagePartAttributeName, attachments as U+FFFC runs
+// with a transfer GUID), which the fixture writer in
+// tests/fixtures/build_fixture.py must reproduce byte for byte.
 
 import Foundation
 
@@ -102,7 +103,7 @@ plain("decoy_marker", "NSString\u{1}+\u{5}hello NSString\u{1}+")
 record("attachment_only", NSAttributedString(string: objectReplacement, attributes: [
     fileKey: "at_0_FAKE-TRANSFER-GUID" as NSString,
     partKey: NSNumber(value: Int32(0)),
-]), mutable: false, messagesLayout: false)
+]), mutable: false, messagesLayout: true)
 
 // ---- other shapes Messages produces ------------------------------------------------
 record("no_attributes", NSAttributedString(string: "plain, no attributes at all"),
@@ -123,8 +124,8 @@ func attachmentAndText(mutable: Bool) -> NSAttributedString {
     ]))
     return mutable ? whole : NSAttributedString(attributedString: whole)
 }
-record("attachment_and_text", attachmentAndText(mutable: false), mutable: false, messagesLayout: false)
-record("attachment_and_text_mutable", attachmentAndText(mutable: true), mutable: true, messagesLayout: false)
+record("attachment_and_text", attachmentAndText(mutable: false), mutable: false, messagesLayout: true)
+record("attachment_and_text_mutable", attachmentAndText(mutable: true), mutable: true, messagesLayout: true)
 
 func threeRuns(mutable: Bool) -> NSAttributedString {
     let whole = NSMutableAttributedString(string: "see https://example.com/menu for the menu \u{1F32E}",

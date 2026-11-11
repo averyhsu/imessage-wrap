@@ -473,6 +473,16 @@ class OldAndOddDatabases(unittest.TestCase):
         other = db._access_error("/tmp/x.db", sqlite3.DatabaseError("file is not a database"))
         self.assertEqual(other.code, "open")
 
+    def test_paths_with_awkward_characters(self):
+        folder = tempfile.mkdtemp(prefix="wrapped odd #1 50% ?x=")
+        try:
+            target = os.path.join(folder, "copy of chat (2) #final?.db")
+            shutil.copyfile(support.path("legacy_db"), target)
+            with wrapped.open_source(db=target, contacts=False) as source:
+                self.assertEqual([c["name"] for c in source.chats()], ["Old Friends"])
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+
     def test_default_locations(self):
         self.assertTrue(db.default_chat_db().endswith(os.path.join("Library", "Messages", "chat.db")))
         self.assertIsInstance(db.default_address_books(), list)

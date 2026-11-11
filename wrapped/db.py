@@ -20,12 +20,12 @@ from __future__ import annotations
 import glob
 import hashlib
 import os
+import pathlib
 import plistlib
 import shutil
 import sqlite3
 import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
-from urllib.parse import quote
 
 from .product import PRODUCT_NAME
 from .stats import (APPLE_EPOCH, WHITESPACE, _NS_THRESHOLD, _Names, _distinct, _fallback_name,
@@ -169,7 +169,8 @@ def _sniff(path: str) -> None:
 
 
 def _connect(path: str, flags: str) -> _Connection:
-    uri = "file:" + quote(os.path.abspath(path)) + "?" + flags
+    # as_uri() gives file:///C:/... on Windows and escapes "?", "#" and "%"
+    uri = pathlib.Path(os.path.abspath(path)).as_uri() + "?" + flags
     con = sqlite3.connect(uri, uri=True, factory=_Connection)
     try:
         con.execute("SELECT count(*) FROM sqlite_master").fetchone()
