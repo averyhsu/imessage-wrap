@@ -146,13 +146,13 @@ test('steps tolerate missing sections', () => {
 });
 
 test('nothing is trimmed when the link fits', () => {
-  const result = Engine.fitLink(VECTOR.stats);
+  const result = Engine.fitLink(VECTOR.stats, { quotes: true });
   assert.equal(result.steps, 0);
   assert.deepEqual(result.stats, VECTOR.stats);
   assert.deepEqual(Engine.statsFromUrl(result.url), VECTOR.stats);
   assert.equal(result.length, result.url.length);
   assert.ok(result.length <= 4800);
-  assert.equal(Engine.buildLink(VECTOR.stats), result.url);
+  assert.equal(Engine.buildLink(VECTOR.stats, { quotes: true }), result.url);
 });
 
 test('the ladder stops at the first step that fits', () => {
@@ -162,12 +162,12 @@ test('the ladder stops at the first step that fits', () => {
   assert.deepEqual(lengths, lengths.slice().sort((a, b) => b - a));
   for (let steps = 0; steps <= 6; steps++) {
     if (steps && lengths[steps] === lengths[steps - 1]) continue;
-    const result = Engine.fitLink(stats, { max_length: lengths[steps] });
+    const result = Engine.fitLink(stats, { quotes: true, max_length: lengths[steps] });
     assert.equal(result.steps, steps);
     assert.equal(result.length, lengths[steps]);
     assert.deepEqual(result.stats, lengthAfter(stats, steps)[1]);
     assert.deepEqual(Engine.statsFromUrl(result.url), result.stats);
-    if (steps) assert.equal(Engine.fitLink(stats, { maxLength: lengths[steps - 1] - 1 }).steps, steps);
+    if (steps) assert.equal(Engine.fitLink(stats, { quotes: true, maxLength: lengths[steps - 1] - 1 }).steps, steps);
   }
   assert.equal(JSON.stringify(stats), frozen);           // the input is never modified
 });
@@ -175,13 +175,15 @@ test('the ladder stops at the first step that fits', () => {
 test('default budget is 4,800 characters; too long is an error', () => {
   const stats = bigStats({ nameLen: 150 });
   assert.ok(lengthAfter(stats, 0)[0] > 4800);
-  const result = Engine.fitLink(stats);
+  const result = Engine.fitLink(stats, { quotes: true });
   assert.ok(result.steps > 0);
   assert.ok(result.url.length <= 4800);
   assert.ok(lengthAfter(stats, result.steps - 1)[0] > 4800);
   const small = bigStats();
-  assert.throws(() => Engine.fitLink(small, { max_length: lengthAfter(small, 6)[0] - 1 }),
+  assert.throws(() => Engine.fitLink(small, { quotes: true, max_length: lengthAfter(small, 6)[0] - 1 }),
     (error) => error.code === 'link_too_long' && /does not fit/.test(error.message));
+  assert.throws(() => Engine.fitLink(small, { max_length: lengthAfter(small, 6, false)[0] - 1 }),
+    (error) => error.code === 'link_too_long');
   const huge = bigStats();
   huge.chat.name = Array.from({ length: 4000 }, (_x, i) => String.fromCharCode(0x4E00 + (i * 7919) % 20000)).join('');
   assert.throws(() => Engine.buildLink(huge), (error) => error.code === 'link_too_long');
@@ -189,21 +191,55 @@ test('default budget is 4,800 characters; too long is an error', () => {
 
 test('no quotes blanks the text before encoding', () => {
   const stats = bigStats();
-  for (const options of [{ quotes: false }, { no_quotes: true }, { noQuotes: true }]) {
+  const loud = Engine.fitLink(stats, { quotes: true, max_length: 100000 });
+  assert.deepEqual(loud.stats, stats);
+  // message text is opt-in (section 5): saying nothing about quotes leaves it out
+  for (const options of [{}, { quotes: false }, { no_quotes: true }, { noQuotes: true }, { quotes: 0 },
+    { quotes: null }, { quotes: true, no_quotes: true }, { quotes: true, noQuotes: true }]) {
     const result = Engine.fitLink(stats, Object.assign({ max_length: 100000 }, options));
-    assert.deepEqual(result.stats.most_reacted.map((q) => q.text), ['', '', '']);
+    assert.deepEqual(result.stats.most_reacted.map((q) => q.text), ['', '', ''], JSON.stringify(options));
     assert.deepEqual(result.stats.most_reacted.map((q) => q.reactions), [9, 8, 7]);
+    assert.deepEqual(result.stats.most_reacted.map((q) => q.sender), stats.most_reacted.map((q) => q.sender));
     assert.equal(result.steps, 0);
-    assert.ok(result.length < Engine.fitLink(stats, { max_length: 100000 }).length);
+    assert.ok(result.length < loud.length);
+    assert.equal(Engine.buildLink(stats, Object.assign({ max_length: 100000 }, options)), result.url);
+    for (const quote of stats.most_reacted) {
+      assert.ok(!JSON.stringify(Engine.statsFromUrl(result.url)).includes(quote.text.slice(0, 20)));
+    }
   }
+  assert.deepEqual(Engine.statsFromUrl(Engine.buildLink(VECTOR.stats)).most_reacted.map((q) => q.text),
+    VECTOR.stats.most_reacted.map(() => ''));
+  assert.deepEqual(Engine.fitLink(VECTOR.stats), Engine.fitLink(VECTOR.stats, { quotes: false }));
   assert.equal(stats.most_reacted[0].text.length, 180);
   const budget = lengthAfter(stats, 3, false)[0];
   const trimmed = Engine.fitLink(stats, { quotes: false, max_length: budget });
   assert.equal(trimmed.steps, 3);
   assert.equal(trimmed.stats.senders.length, 8);
-  const url = Engine.buildLink(VECTOR.stats, { base_url: 'http://localhost:4173/' });
+  const url = Engine.buildLink(VECTOR.stats, { quotes: true, base_url: 'http://localhost:4173/' });
   assert.ok(url.startsWith('http://localhost:4173/#w1='));
   assert.deepEqual(Engine.statsFromUrl(url), VECTOR.stats);
+});
+
+test('stats that are not a recap are refused with a code; odd shapes never break the ladder', () => {
+  for (const bad of [[], [1, 2], 'text', 5, null, undefined, true]) {
+    assert.throws(() => Engine.fitLink(bad), (error) => error.code === 'bad_stats', JSON.stringify(bad));
+    assert.throws(() => Engine.buildLink(bad, { quotes: true }), (error) => error.code === 'bad_stats');
+  }
+  const odd = { v: 1, senders: 'nobody', most_reacted: { text: 'x' }, awards: 7 };
+  const whole = Engine.fitLink(odd, { max_length: 100000 });
+  assert.equal(whole.steps, 0);
+  assert.deepEqual(whole.stats, odd);
+  const result = Engine.fitLink(odd, { max_length: whole.length - 1 });
+  assert.equal(result.steps, 5);                           // only "delete awards" helps
+  assert.deepEqual(Engine.statsFromUrl(result.url), result.stats);
+  assert.ok(!('awards' in result.stats));
+  assert.deepEqual(Engine.stripQuotes({ most_reacted: [null, 5, { text: 'x' }, { sender: 'a' }] }),
+    { most_reacted: [null, 5, { text: '' }, { sender: 'a', text: '' }] });
+  for (const bad of ['', 'AAAA', '!!!', null, 5]) {
+    assert.throws(() => Engine.decodePayload(bad), (error) => error.code === 'bad_payload', JSON.stringify(bad));
+  }
+  assert.throws(() => Engine.statsFromUrl(Engine.BASE_URL), (error) => error.code === 'bad_payload');
+  assert.throws(() => Engine.applyTrimStep({}, 7), (error) => error.code === 'range');
 });
 
 test('base64url helpers', () => {

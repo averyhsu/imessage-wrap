@@ -158,13 +158,13 @@ class TrimLadder(unittest.TestCase):
             P.apply_trim_step({}, 7)
 
     def test_nothing_is_trimmed_when_the_link_fits(self):
-        result = P.fit_link(VECTOR["stats"])
+        result = P.fit_link(VECTOR["stats"], quotes=True)
         self.assertEqual(result["steps"], 0)
         self.assertEqual(result["stats"], VECTOR["stats"])
         self.assertEqual(P.stats_from_url(result["url"]), VECTOR["stats"])
         self.assertEqual(result["length"], len(result["url"]))
         self.assertLessEqual(result["length"], 4800)
-        self.assertEqual(P.build_link(VECTOR["stats"]), result["url"])
+        self.assertEqual(P.build_link(VECTOR["stats"], quotes=True), result["url"])
 
     def test_ladder_stops_at_the_first_step_that_fits(self):
         stats = big_stats()
@@ -175,20 +175,20 @@ class TrimLadder(unittest.TestCase):
         for steps in range(7):
             if steps and lengths[steps] == lengths[steps - 1]:
                 continue
-            result = P.fit_link(stats, max_length=lengths[steps])
+            result = P.fit_link(stats, quotes=True, max_length=lengths[steps])
             self.assertEqual(result["steps"], steps)
             self.assertEqual(result["length"], lengths[steps])
             self.assertEqual(result["stats"], length_after(stats, steps)[1])
             self.assertEqual(P.stats_from_url(result["url"]), result["stats"])
             if steps:
-                roomy = P.fit_link(stats, max_length=lengths[steps - 1] - 1)
+                roomy = P.fit_link(stats, quotes=True, max_length=lengths[steps - 1] - 1)
                 self.assertEqual(roomy["steps"], steps)
         self.assertEqual(stats, frozen)                      # the input is never modified
 
     def test_default_budget_is_4800_characters(self):
         stats = big_stats(name_len=150)
         self.assertGreater(length_after(stats, 0)[0], 4800)
-        result = P.fit_link(stats)
+        result = P.fit_link(stats, quotes=True)
         self.assertGreater(result["steps"], 0)
         self.assertLessEqual(len(result["url"]), 4800)
         self.assertGreater(length_after(stats, result["steps"] - 1)[0], 4800)
@@ -196,8 +196,10 @@ class TrimLadder(unittest.TestCase):
     def test_too_long_even_after_every_step(self):
         stats = big_stats()
         with self.assertRaises(P.LinkTooLongError) as caught:
-            P.fit_link(stats, max_length=length_after(stats, 6)[0] - 1)
+            P.fit_link(stats, quotes=True, max_length=length_after(stats, 6)[0] - 1)
         self.assertIn("does not fit", str(caught.exception))
+        with self.assertRaises(P.LinkTooLongError):
+            P.fit_link(stats, max_length=length_after(stats, 6, quotes=False)[0] - 1)
         huge = big_stats()
         huge["chat"]["name"] = "".join(chr(0x4E00 + (i * 7919) % 20000) for i in range(4000))
         with self.assertRaises(P.LinkTooLongError):
@@ -210,8 +212,9 @@ class TrimLadder(unittest.TestCase):
         self.assertEqual([q["reactions"] for q in result["stats"]["most_reacted"]], [9, 8, 7])
         self.assertEqual(result["steps"], 0)
         self.assertEqual(len(stats["most_reacted"][0]["text"]), 180)
-        with_quotes = P.fit_link(stats, max_length=100000)
+        with_quotes = P.fit_link(stats, quotes=True, max_length=100000)
         self.assertLess(result["length"], with_quotes["length"])
+        self.assertEqual(len(with_quotes["stats"]["most_reacted"][0]["text"]), 180)
         self.assertEqual(P.stats_from_url(P.build_link(stats, quotes=False, max_length=100000)),
                          result["stats"])
         # the ladder still applies afterwards
@@ -220,8 +223,48 @@ class TrimLadder(unittest.TestCase):
         self.assertEqual(trimmed["steps"], 3)
         self.assertEqual(len(trimmed["stats"]["senders"]), 8)
 
+    def test_message_text_is_left_out_unless_asked_for(self):
+        """Section 5, "Quotes are opt-in": every way of building a link."""
+        import wrapped
+        stats = big_stats()
+        frozen = copy.deepcopy(stats)
+        quiet = P.fit_link(stats, quotes=False, max_length=100000)
+        for result in (P.fit_link(stats, max_length=100000), P.fit_link(stats, None, None, 100000),
+                       P.fit_link(stats, 0, max_length=100000)):
+            self.assertEqual(result, quiet)
+        for url in (P.build_link(stats, max_length=100000),
+                    wrapped.build_link(stats, max_length=100000),
+                    wrapped.api.build_link(stats, max_length=100000),
+                    wrapped.build_link(stats, quotes=False, max_length=100000)):
+            self.assertEqual(url, quiet["url"])
+            shared = P.stats_from_url(url)
+            self.assertEqual([q["text"] for q in shared["most_reacted"]], ["", "", ""])
+            self.assertEqual([q["sender"] for q in shared["most_reacted"]],
+                             [q["sender"] for q in stats["most_reacted"]])
+            for quote in stats["most_reacted"]:
+                self.assertNotIn(quote["text"][:20], json.dumps(shared, ensure_ascii=False))
+        loud = wrapped.build_link(stats, quotes=True, max_length=100000)
+        self.assertEqual(P.stats_from_url(loud), stats)
+        self.assertEqual(stats, frozen)
+
+    def test_stats_that_are_not_a_recap_are_refused(self):
+        for bad in ([], [1, 2], "text", 5, None, True):
+            with self.assertRaises(ValueError) as caught:
+                P.fit_link(bad)
+            self.assertNotIsInstance(caught.exception, P.LinkTooLongError)
+        # odd shapes inside an object never break the ladder
+        odd = {"v": 1, "senders": "nobody", "most_reacted": {"text": "x"}, "awards": 7}
+        whole = P.fit_link(odd, max_length=100000)
+        self.assertEqual((whole["steps"], whole["stats"]), (0, odd))
+        result = P.fit_link(odd, max_length=whole["length"] - 1)
+        self.assertEqual(result["steps"], 5)                     # only "delete awards" helps
+        self.assertEqual(P.stats_from_url(result["url"]), result["stats"])
+        self.assertNotIn("awards", result["stats"])
+        self.assertEqual(P.strip_quotes({"most_reacted": [None, 5, {"text": "x"}, {"sender": "a"}]}),
+                         {"most_reacted": [None, 5, {"text": ""}, {"sender": "a", "text": ""}]})
+
     def test_base_url_is_configurable(self):
-        url = P.build_link(VECTOR["stats"], base_url="http://localhost:4173/")
+        url = P.build_link(VECTOR["stats"], quotes=True, base_url="http://localhost:4173/")
         self.assertTrue(url.startswith("http://localhost:4173/#w1="))
         self.assertEqual(P.stats_from_url(url), VECTOR["stats"])
 

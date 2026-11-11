@@ -4,8 +4,13 @@
  * The invented fixture databases are generated with the Python builder into a
  * temporary folder, or reused from WRAPPED_FIXTURE_DIR when it already holds
  * one. Python 3.9+ must be on PATH (or $PYTHON).
+ *
+ * Nothing is written into the repository: everything goes to temporary
+ * folders, and the Python helpers are told not to leave __pycache__ behind.
  */
 'use strict';
+
+process.env.PYTHONDONTWRITEBYTECODE = '1';
 
 const fs = require('fs');
 const os = require('os');
@@ -125,10 +130,92 @@ function subsetMismatches(expected, actual, where) {
   return problems;
 }
 
+// ---- nothing private in what is shown or shared ---------------------------------
+
+const CONTROL_RANGES = [[0x00, 0x09], [0x0B, 0x1F], [0x7F, 0x9F], [0x2028, 0x2029], [0x202A, 0x202E],
+  [0x2066, 0x2069]];
+const ADDRESS = /[^\s<>()[\]"',;:@]+@[^\s<>()[\]"',;:@]+/gu;
+
+/** How many decimal digits (of any script) a string holds. */
+function countDecimals(text) {
+  const found = String(text).match(/\p{Nd}/gu);
+  return found ? found.length : 0;
+}
+
+/**
+ * What a piece of output must never contain: a run of seven or more digits
+ * (in any script), an e-mail address, a control character or a direction
+ * override. Returns a list of findings (empty = clean).
+ */
+function textLeaks(text, where) {
+  where = where || 'text';
+  const found = [];
+  for (const match of text.matchAll(/\p{Nd}{7,}/gu)) found.push(where + ': a run of ' + Array.from(match[0]).length + ' digits');
+  for (const match of text.matchAll(ADDRESS)) found.push(where + ': an address (' + JSON.stringify(match[0]) + ')');
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    if (CONTROL_RANGES.some(([low, high]) => code >= low && code <= high)) {
+      found.push(where + ': control character U+' + code.toString(16).toUpperCase().padStart(4, '0'));
+    }
+  }
+  return found;
+}
+
+/** [where, name] for the chat name and every place that names a person. */
+function namesIn(stats) {
+  const out = [];
+  if (stats.chat && typeof stats.chat.name === 'string') out.push(['chat.name', stats.chat.name]);
+  (stats.senders || []).forEach((sender, i) => out.push(['senders[' + i + '].name', sender.name]));
+  if (stats.late_night && stats.late_night.top) out.push(['late_night.top.name', stats.late_night.top.name]);
+  (stats.most_reacted || []).forEach((quote, i) => out.push(['most_reacted[' + i + '].sender', quote.sender]));
+  for (const key of ['top_giver', 'top_receiver']) {
+    if (stats.reactions && stats.reactions[key]) out.push(['reactions.' + key + '.name', stats.reactions[key].name]);
+  }
+  (stats.awards || []).forEach((award, i) => out.push(['awards[' + i + '].winner', award.winner]));
+  return out;
+}
+
+function strings(value, where, out) {
+  if (typeof value === 'string') out.push([where, value]);
+  else if (Array.isArray(value)) value.forEach((item, i) => strings(item, where + '[' + i + ']', out));
+  else if (value && typeof value === 'object') {
+    for (const key of Object.keys(value)) {
+      out.push([where + ' (key)', key]);
+      strings(value[key], where + '.' + key, out);
+    }
+  }
+  return out;
+}
+
+/**
+ * Findings for a whole stats object: textLeaks() for every string in it (the
+ * quoted message text aside: that is the user's own content and only goes
+ * into a link when asked for), and no name in it may hold seven digits in
+ * total, however they are separated ("+1 555-010-0123" has no long run but
+ * is a phone number).
+ */
+function leaks(stats) {
+  let found = [];
+  for (const [where, text] of strings(stats, 'stats', [])) {
+    if (!(where.startsWith('stats.most_reacted[') && where.endsWith('.text'))) found = found.concat(textLeaks(text, where));
+  }
+  for (const [where, name] of namesIn(stats)) {
+    // a chat without a name of its own is called after its members: "Ines, Bram & 2 more"
+    const parts = where === 'chat.name' ? name.split(/, | & /) : [name];
+    for (const part of parts) {
+      if (countDecimals(part) >= 7) found.push(where + ': ' + countDecimals(part) + ' digits in ' + JSON.stringify(part));
+    }
+  }
+  return found;
+}
+
 const EXPECTED = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'conformance', 'expected_tiny.json'), 'utf8'));
+// hand-written clean / mask / short-name cases, shared with the Python tests
+const NAMES = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'conformance', 'names.json'), 'utf8'));
 const VECTOR = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'vectors', 'payload-v1.json'), 'utf8'));
 
 module.exports = {
-  ROOT, PYTHON, Engine, DB, LA, APPLE_EPOCH, EXPECTED, VECTOR, python, fixture, read, tempDir,
-  macContacts, openMac, utc, ns, msg, tap, hexToBytes, bytes, subsetMismatches
+  ROOT, PYTHON, Engine, DB, LA, APPLE_EPOCH, EXPECTED, VECTOR, NAMES, python, fixture, read, tempDir,
+  macContacts, openMac, utc, ns, msg, tap, hexToBytes, bytes, subsetMismatches, countDecimals,
+  textLeaks, namesIn, leaks
 };

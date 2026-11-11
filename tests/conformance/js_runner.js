@@ -81,6 +81,10 @@ async function main() {
     I.truncate(t, 10)]);
   out.identifiers = job.identifiers.map((s) => Engine.contactKey(s));
   out.names = job.names.map((n) => Engine.chatDisplayName(n[0], n[1], n[2], n[3]));
+  out.cleans = job.labels.map((s) => Engine.cleanName(s));
+  out.masks = job.labels.map((s) => Engine.maskHandle(Engine.cleanName(s)));
+  out.chat_labels = job.labels.map((s) => I.chatLabel(s));
+  out.shorts = job.shorts.map((c) => Array.from(I.shortForms(c[0], c[1])));
   out.round4 = job.round4.map((p) => I.round4(p[0], p[1]));
   out.dates = job.dates.map((d) => I.splitDate(d));
   out.zones = {};
@@ -89,10 +93,18 @@ async function main() {
     out.zones[zone] = [table.starts, table.offsets];
   }
   out.rows = job.rows.map((r) => {
-    const rows = r.rows.map((row) => Object.assign({}, row,
-      row.attributedBody ? { attributedBody: hex(row.attributedBody) } : {}));
+    // attributedBody travels as hex; anything else is handed over as it is
+    const rows = r.rows.map((row) => (row && typeof row === 'object' && !Array.isArray(row) &&
+      typeof row.attributedBody === 'string' && /^([0-9a-f]{2})+$/.test(row.attributedBody))
+      ? Object.assign({}, row, { attributedBody: hex(row.attributedBody) }) : row);
     return Engine.canonicalJson(Engine.computeStats(rows, r.options));
   });
+
+  out.short_stats = {};
+  for (const item of job.short_stats) {
+    out.short_stats[item.id] = Engine.canonicalJson(
+      Engine.shortNames(JSON.parse(out.stats[item.stats]), item.me === null ? undefined : item.me));
+  }
 
   // ---- payload and the link ladder ---------------------------------------
   out.payload = {};
@@ -105,7 +117,9 @@ async function main() {
     const entry = { lengths: linkLengths(stats, true), lengths_no_quotes: linkLengths(stats, false) };
     entry.fits = item.budgets.map((b) => {
       try {
-        const r = Engine.fitLink(stats, { quotes: b.quotes, max_length: b.max_length });
+        // quotes: null means "not given": the default must leave message text out
+        const r = Engine.fitLink(stats, b.quotes === null ? { max_length: b.max_length }
+          : { quotes: b.quotes, max_length: b.max_length });
         return { steps: r.steps, stats: Engine.canonicalJson(r.stats), url: r.url, length: r.length };
       } catch (error) {
         return { error: error.code || String(error) };

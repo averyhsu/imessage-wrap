@@ -2,6 +2,7 @@
 
 import glob
 import os
+import re
 import subprocess
 import unittest
 
@@ -33,7 +34,8 @@ class Sources(unittest.TestCase):
     def test_the_engine_uses_only_the_standard_library(self):
         allowed = {
             "__future__", "argparse", "base64", "binascii", "bisect", "copy", "datetime", "fractions",
-            "glob", "hashlib", "json", "math", "os", "pathlib", "plistlib", "re", "shutil", "sqlite3",
+            "functools", "glob", "hashlib", "json", "math", "os", "pathlib", "plistlib", "re", "shutil",
+            "sqlite3",
             "sys", "tempfile", "time", "typing", "zlib", "zoneinfo", "wrapped",
         }
         for path in tracked("wrapped/*.py"):
@@ -50,6 +52,36 @@ class Sources(unittest.TestCase):
                         if name.startswith("."):
                             continue
                         self.assertIn(name.split(".")[0], allowed, "%s imports %s" % (path, name))
+
+    def test_test_data_is_invented(self):
+        """Every phone number in the tests is inside +1 555 01xx xxxx and every
+        e-mail address is at example.com (or the specification's own
+        "jane@localhost"), so nothing here can be somebody's."""
+        files = (tracked("tests/python/*.py") + tracked("tests/conformance/*") + tracked("tests/engine-js/*")
+                 + tracked("tests/fixtures/*.py"))
+        address = re.compile(r"[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+(?:[.][A-Za-z0-9-]+)*)")
+        plus = re.compile(r"[+][0-9][0-9 ().-]{7,}")
+        spaced = re.compile(r"(?<![0-9.])[(]?([0-9]{3})[)]?[ .-]([0-9]{3})[ .-][0-9]{4}(?![0-9])")
+        checked = 0
+        for path in files:
+            if not os.path.isfile(path):
+                continue
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+            name = os.path.relpath(path, ROOT)
+            for match in address.finditer(text):
+                checked += 1
+                self.assertIn(match.group(1).lower(), ("example.com", "localhost"),
+                              "%s: %s" % (name, match.group(0)))
+            for match in plus.finditer(text):
+                checked += 1
+                digits = re.sub("[^0-9]", "", match.group(0))
+                self.assertTrue(digits.startswith("155501"), "%s: %s" % (name, match.group(0)))
+            for match in spaced.finditer(text):
+                checked += 1
+                self.assertEqual((match.group(1), match.group(2)[:2]), ("555", "01"),
+                                 "%s: %s" % (name, match.group(0)))
+        self.assertGreater(checked, 150)
 
     def test_no_database_files_are_tracked(self):
         try:

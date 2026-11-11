@@ -470,8 +470,11 @@ class OldAndOddDatabases(unittest.TestCase):
         self.assertNotIn("iMessage Wrapped", text)
         denied = db._access_error("/tmp/x.db", PermissionError(1, "Operation not permitted"))
         self.assertEqual(denied.code, "permission")
-        other = db._access_error("/tmp/x.db", sqlite3.DatabaseError("file is not a database"))
+        other = db._access_error("/tmp/x.db", sqlite3.OperationalError("disk I/O error"))
         self.assertEqual(other.code, "open")
+        damaged = db._access_error("/tmp/x.db", sqlite3.DatabaseError("file is not a database"))
+        self.assertEqual(damaged.code, "corrupt")
+        self.assertNotIn("\n", str(damaged))
 
     def test_paths_with_awkward_characters(self):
         folder = tempfile.mkdtemp(prefix="wrapped odd #1 50% ?x=")

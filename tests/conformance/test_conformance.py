@@ -9,6 +9,7 @@ Needs Node 18+ on PATH (or $NODE); the suite is skipped without it.
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -31,6 +32,8 @@ ZONES = ["America/Los_Angeles", "Asia/Kolkata", "UTC", "Australia/Lord_Howe"]
 PERIODS = [{"year": 2026}, {"year": 2025}, {"all_time": True},
            {"start": "2026-02-10", "end": "2026-03-10"}]
 LOCAL_ZONE = "America/Los_Angeles"
+HEX = re.compile(r"(?:[0-9a-f]{2})+\Z")
+EVIL_ME = "\x1b]0;owned\x07Avery\u202e\r\nQuinn\x00"
 
 with open(os.path.join(HERE, "expected_tiny.json"), encoding="utf-8") as handle:
     EXPECTED = json.load(handle)
@@ -38,6 +41,22 @@ with open(os.path.join(HERE, "expected_tiny.json"), encoding="utf-8") as handle:
 
 class Rng(build_fixture.Rng):
     pass
+
+
+ODD_VALUES = {
+    "is_from_me": [True, False, None, "1", 1.0, 0.5, 2, -1, "yes", [], {}],
+    "associated_message_type": [2000.0, "2000", None, True, 2000.9, 1e18, -1, 3007.5, [], 999.999],
+    "item_type": [None, "0", 0.0, 0.2, False, True, 1.5, []],
+    "cache_has_attachments": [None, True, "1", 2.7, 0.3, -1, {}],
+    "keep_empty": [None, True, "1", 1, 0.5, 2],
+    "date": [804914400.5, 8.049144e17, True, [], {}, 1e30, -1.5, "8.0e17", " 804914400 ", 0.99],
+    "text": [5, 1.5, True, [], {}, 0, 1099511627776],
+    "handle": [5, None, [], {}, True, 1.5, ""],
+    "guid": [7, None, [], True],
+    "associated_message_guid": [5, None, [], "p:0/", "", {}],
+    "rowid": [1.5, "7", None, True, [], 1e18, -3],
+    "attributedBody": [5, "text", [1, 2], True],
+}
 
 
 def random_rows(rng, n):
@@ -105,6 +124,9 @@ def build_job(fixture_dir, info):
          "contacts": ["%s/%s/%s" % (wal_root, db.ADDRESS_BOOK_ID[:2], db.ADDRESS_BOOK_ID)]},
         {"id": "noemoji", "kind": "chat.db", "db": paths["noemoji_db"], "contacts": mac_books},
         {"id": "legacy", "kind": "chat.db", "db": paths["legacy_db"], "contacts": []},
+        {"id": "evil", "kind": "chat.db", "db": paths["evil_db"],
+         "contacts": [paths["evil_address_book"]]},
+        {"id": "nojoin", "kind": "chat.db", "db": paths["nojoin_db"], "contacts": []},
     ]
     now = info["now"]
     group_keys = ["lively", "tiny", "unnamed", "stress"]
@@ -138,6 +160,18 @@ def build_job(fixture_dir, info):
                   "options": {"year": 2016, "tz": "Europe/London", "now": now}})
     cases.append({"id": "later-now", "source": "mac", "chat": tiny, "contacts": True,
                   "options": {"tz": "UTC", "now": now + 400 * 86400, "year": 2026}})
+    # hostile names and cells of the wrong type (see build_fixture.EVIL_*)
+    for key, chat in sorted(info["evil"]["chats"].items()):
+        for contacts in (True, False):
+            cases.append({"id": "evil/%s/%s" % (key, contacts), "source": "evil",
+                          "chat": chat["rowid"], "contacts": contacts,
+                          "options": {"all_time": True, "tz": ZONES[0], "now": now}})
+        cases.append({"id": "evil/%s/me" % key, "source": "evil", "chat": chat["rowid"],
+                      "contacts": True,
+                      "options": {"year": 2026, "tz": "UTC", "now": now, "me": EVIL_ME,
+                                  "label": "Evil\x1b[1m\r\nlabel"}})
+    cases.append({"id": "nojoin", "source": "nojoin", "chat": 1, "contacts": False,
+                  "options": {"year": 2016, "tz": "Europe/London", "now": now}})
 
     rng = Rng(7)
     samples = [s["hex"] for s in info["typedstream_samples"]]
@@ -163,9 +197,10 @@ def build_job(fixture_dir, info):
         "tab\there", "  lead", "trail  ", "\u2003x\u2003", build_fixture.M11_TEXT,
     ]
     identifiers = ["+1 (555) 010-0001", "5550100001", "0015550100001", "22000", "Ines@Example.COM",
-                   " spaced@example.com ", "\xc9cole@example.com", "\u0130@x.y", "Pizza Planet", "",
-                   "urn:biz:42", "\u202a+1\xa0555\u2011010\u20110001\u202c", "+44 20 7946 0000",
-                   "\u0661\u0662\u0663", "ext. 5", "a@b@c"]
+                   " spaced@example.com ", "\xc9cole@example.com", "\u0130@example.com",
+                   "Pizza Planet", "", "urn:biz:42", "\u202a+1\xa0555\u2011010\u20110001\u202c",
+                   "+1 555 010 0000 ext. 12345", "\u0661\u0662\u0663", "ext. 5",
+                   "a@example.com@example.com", "\x1b[0m+1555\x000100001\r\n", "\x00", None]
     contacts = [["+15550100001", "Ines Calloway"], ["+15550100002", "Bram Okoye"],
                 ["sam@example.com", " Sam  Rivera "], ["+15550100004", "\U0001F525 Jake"],
                 ["5550100001", "Aaa First"], ["+15550100009", "Me"]]
@@ -178,6 +213,45 @@ def build_job(fixture_dir, info):
         ["", ["+15550100007", "+15550100008"], None, "Avery"],
         ["", ["+15550100002", "+15550100002", "(555) 010-0002"], contacts, None],
     ]
+    labels = [ident for ident, _label in build_fixture.EVIL_HANDLES if isinstance(ident, str)]
+    labels += [display for _key, display, _style, _shown, _who in build_fixture.EVIL_CHATS
+               if isinstance(display, str)]
+    labels += [
+        "", " ", "Maya", "Agent 47", "22000", "Maya @ work", "@", "jane@", "@example.com", "j@example.com",
+        "x @example.com", "jane@ example.com",
+        "one two@example.com four", "<a@example.com>", "(a@example.com)", "a@example.com;b@example.com",
+        "@@", "a@@example.com", "sixteen.chars.xx@example.com", "seventeen.chars.xx@example.com",
+        "\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600"
+        "\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600\U0001F600"
+        "\U0001F600@example.com",
+        "123456", "1234567", "1 2 3 4 5 6 7", "12-34-56", "room 1234567", "\u0661\u0662\u0663\u0664\u0665\u0666\u0667",
+        "\U0001D7CE\U0001D7CF\U0001D7D0\U0001D7D1\U0001D7D2\U0001D7D3\U0001D7D4 bold digits",
+        "\u00b2\u00b3\u00b9\u2460\u2461\u2462\u2463 not decimal digits", "\u0bf0\u0bf1\u0bf2\u0bf0\u0bf1\u0bf2\u0bf0",
+        "tab\there", "line\nbreak", "cr\r\nlf", "nul\x00inside", "bell\x07", "esc\x1b[31mred\x1b[0m",
+        "del\x7f", "c1\x85\x9b", "\u202eevil\u202c", "\u2066iso\u2069", "obj\ufffc\ufffd",
+        "zwj \U0001F469\u200d\U0001F4BB stays", "  many   spaces  ", "\u2028line\u2029para",
+        "\xa0nbsp\xa0", "\u3000wide\u3000", "\ufeffbom", "a\x00 \x00b", "\t\n\r", "\u202a\u202c",
+    ]
+    labels += [chr(start + delta) * 7 for start in S._DIGIT_BLOCKS for delta in (-1, 0, 9, 10)]
+    people = ["Sam Rivera", "Sam Chen", "Me", "\u20260123", "Dave plumber", "Ana", "Ana Lima",
+              "Bo Reed", "Bo Ray", "jane.doe", "Zo\xeb M\xfcller", "\u738b \u5c0f\u660e", "\u738b \u5927\u660e",
+              "\u0645\u062d\u0645\u062f \u0639\u0644\u064a", "\U0001F525 Jake", "\U0001F525 \U0001F9CA",
+              "Mary  Jane\tWatson", "Sam", "Sam R.", "Unknown", "Agent 47", "22000", "Maya @ work",
+              "x", "Dr. Who", "Dr. No", "\u00c9lodie \u00c9mile", "Elodie Emile", "a b c", "a c"]
+    shorts = [[people, "Me"], [people[:9], "Me"], [people, "Sam Rivera"], [people, "Sam"],
+              [["Sam Rivera", "Sam Reed"], "Me"], [["Sam Rivera", "Sam Reed", "Sam R."], "Me"],
+              [["Sam", "Sam Rivera"], "Me"], [["Me", "Me Too"], "Me"], [[], "Me"],
+              [["\u2026ellipsis name", "\u2026ellipsis other"], "Me"],
+              [["Ana Lima", "Ana Lima", "Ana"], None]]
+    rng_names = Rng(11)
+    firsts = ["Sam", "Ana", "Bo", "Dr.", "\u738b", "\U0001F525", "Me"]
+    lasts = ["Rivera", "Reed", "Chen", "Ray", "\u5c0f\u660e", "\u00c9mile", "R.", ""]
+    for _ in range(40):
+        group = []
+        for _ in range(2 + rng_names.below(9)):
+            last = rng_names.pick(lasts)
+            group.append(rng_names.pick(firsts) + (" " + last if last else ""))
+        shorts.append([group, rng_names.pick(["Me", "Sam", "Ana Reed", None])])
     round4 = [[n, t] for t in (1, 3, 7, 8, 16, 21, 32, 64, 127, 4096, 20000, 20001, 48213, 99999)
               for n in sorted({0, 1, 2, t // 3, t // 2, t - 1, t})] + [[0, 0], [5, 0]]
     dates = [0, 1, 5, 99999, 100000000000, 100000000001, "100000000000", "100000000001",
@@ -195,6 +269,25 @@ def build_job(fixture_dir, info):
         rows_cases.append({"rows": random_rows(rng, 40 + rng.below(260)), "options": options})
     # no tz option: both engines must use the process's local zone
     rows_cases.append({"rows": random_rows(rng, 200), "options": {"now": 1795000000, "all_time": True}})
+    # values of the wrong type, rows that are not rows, options that are not what they should be
+    odd = Rng(23)
+    for _ in range(16):
+        rows = random_rows(odd, 150)
+        for row in rows:
+            for key, choices in ODD_VALUES.items():
+                if odd.chance(10):
+                    row[key] = odd.pick(choices)
+        for _ in range(6):
+            rows.insert(odd.below(len(rows)), odd.pick([None, 5, "row", [], [1, 2], True]))
+        rows_cases.append({"rows": rows, "options": {
+            "tz": "UTC", "now": 1795000000, "all_time": True,
+            "me": odd.pick(["Me", EVIL_ME, 5, None, ""]),
+            "chat_name": odd.pick([None, 7, "\x1b[1mBold", "+1 555 010 0199", ["x"]]),
+            "participants": odd.pick([None, "+15550100002", ["+15550100002", 5, None, "", "x"], 5]),
+            "contacts": odd.pick([None, 5, "text", [["+15550100001", 5], [5, "Name"], None, "ab", ["solo"],
+                                                    [], ["+15550100002", "Bram\x07 Okoye", "extra"]]]),
+            "label": odd.pick([None, 5, "L\x1babel"]),
+            "source": odd.pick([None, 5, "so\x00urce"])}})
 
     objects = [EXPECTED["cases"][0]["stats"],
                {"a": [1, 0.5, 0.0001, 1.0, 0, None, True, "\u2028\n\x01", -0.0, 2.5e-5,
@@ -204,6 +297,7 @@ def build_job(fixture_dir, info):
     job = {
         "fixture": fixture_dir, "sources": sources, "stats": cases, "decode": decode, "texts": texts,
         "identifiers": identifiers, "names": names, "round4": round4, "dates": dates,
+        "labels": labels, "shorts": shorts, "short_stats": [],
         # Zones whose rules have been stable for years. Each engine asks its
         # platform's tz database (zoneinfo here, ICU in JavaScript); a zone with
         # a very recent rule change (Africa/Casablanca on the macOS runner) can
@@ -228,6 +322,11 @@ class Conformance(unittest.TestCase):
         cls.fixture_dir, cls.info = support.fixture()
         cls.job = build_job(cls.fixture_dir, cls.info)
         cls.py_stats = cls.python_stats()
+        cls.job["short_stats"] = [
+            {"id": "%s|%s" % (cid, me), "stats": cid, "me": me}
+            for cid in sorted(cls.py_stats)
+            if cid.startswith(("evil/", "me/", "mac/lively/UTC", "mac/unnamed/UTC", "legacy"))
+            for me in (None, "Me", "Zo\xeb M\xfcller", S._owner_name(EVIL_ME), "Sam Rivera")]
         # link ladder cases need the stats first: every budget sits between the
         # lengths of two neighbouring steps, so the engines cannot disagree by
         # a few bytes of compressor output
@@ -242,6 +341,8 @@ class Conformance(unittest.TestCase):
                       first["links"][item["stats"]]["lengths_no_quotes"]]
             for quotes, a, b in ((True, mine[0], theirs[0]), (False, mine[1], theirs[1])):
                 item["budgets"].append({"quotes": quotes, "max_length": 4800})
+                if not quotes:        # not saying anything about quotes means "no message text"
+                    item["budgets"].append({"quotes": None, "max_length": 4800})
                 item["budgets"].append({"quotes": quotes, "max_length": 100000})
                 for step in range(7):
                     high = min(a[step - 1], b[step - 1]) - 1 if step else max(a[0], b[0]) + 50
@@ -370,6 +471,63 @@ class Conformance(unittest.TestCase):
         self.assertEqual(self.js["diagnostics"]["mac"]["messages"],
                          self.js["diagnostics"]["backup"]["messages"])
 
+    # ---- names -----------------------------------------------------------------
+
+    def test_clean_names_and_masks(self):
+        labels = self.job["labels"]
+        self.assertGreater(len(labels), 350)
+        self.assertEqual(self.js["cleans"], [S.clean_name(label) for label in labels])
+        self.assertEqual(self.js["masks"], [S.mask_handle(S.clean_name(label)) for label in labels])
+        self.assertEqual(self.js["chat_labels"], [S._chat_label(label) for label in labels])
+        masked = sum(1 for label, out in zip(labels, self.js["masks"]) if out.startswith("\u2026"))
+        self.assertGreater(masked, 85)          # every block of digits, and the phone-like labels
+        for out in self.js["masks"]:
+            self.assertEqual(support.leaks({"chat": {"name": out}}), [], out)
+
+    def test_short_forms(self):
+        self.assertGreater(len(self.job["shorts"]), 45)
+        changed = 0
+        for (names, me), theirs in zip(self.job["shorts"], self.js["shorts"]):
+            mine = S.short_forms(names, me) if me is not None else S.short_forms(names)
+            self.assertEqual(theirs, [list(pair) for pair in mine.items()], (names, me))
+            self.assertEqual(len(set(mine.values())), len(mine), (names, me))   # nobody is merged
+            changed += sum(1 for full, short in mine.items() if full != short)
+        self.assertGreater(changed, 60)
+
+    def test_short_names_of_whole_recaps(self):
+        self.assertGreater(len(self.job["short_stats"]), 100)
+        shortened = 0
+        for item in self.job["short_stats"]:
+            stats = json.loads(self.py_stats[item["stats"]])
+            mine = S.short_names(stats) if item["me"] is None else S.short_names(stats, item["me"])
+            text = payload.canonical_json(mine)
+            self.assertEqual(self.js["short_stats"][item["id"]], text, item["id"])
+            shortened += text != self.py_stats[item["stats"]]
+        self.assertGreater(shortened, 40)
+
+    def test_evil_names_never_reach_a_recap(self):
+        evil = self.info["evil"]
+        seen = set()
+        for cid, text in self.js["stats"].items():
+            if not cid.startswith("evil/"):
+                continue
+            stats = json.loads(text)
+            self.assertEqual(support.leaks(stats), [], cid)
+            seen.update(sender["name"] for sender in stats["senders"])
+        for entry in evil["handles"]:
+            self.assertIn(entry["label"], seen)
+        for entry in evil["contacts"]:
+            self.assertIn(entry["name"], seen)
+        self.assertIn("Unknown", seen)
+        self.assertIn(S._owner_name(EVIL_ME), seen)
+        for key, chat in evil["chats"].items():
+            if chat["name"] is not None:
+                stats = json.loads(self.js["stats"]["evil/%s/True" % key])
+                self.assertEqual(stats["chat"]["name"], chat["name"], key)
+        odd = json.loads(self.js["stats"]["evil/control_name/True"])
+        self.assertGreater(odd["totals"]["messages"], 30)
+        self.assertGreater(odd["totals"]["reactions"], 5)
+
     # ---- pure functions -------------------------------------------------------
 
     def test_attributed_body_decoding(self):
@@ -410,7 +568,8 @@ class Conformance(unittest.TestCase):
         previous = os.environ.get("TZ")
         for case in self.job["rows"]:
             rows = [dict(r, attributedBody=bytes.fromhex(r["attributedBody"]))
-                    if r.get("attributedBody") else r for r in case["rows"]]
+                    if isinstance(r, dict) and HEX.match(str(r.get("attributedBody"))) else r
+                    for r in case["rows"]]
             if "tz" not in case["options"]:
                 if not hasattr(time, "tzset"):
                     results.append(None)
@@ -431,7 +590,8 @@ class Conformance(unittest.TestCase):
                 self.assertEqual(json.loads(theirs), json.loads(mine), index)
                 self.assertEqual(theirs, mine, index)
         counted = [json.loads(r)["totals"]["messages"] for r in self.js["rows"]]
-        self.assertGreater(sum(1 for c in counted if c > 20), 12)
+        self.assertGreater(sum(1 for c in counted if c > 20), 24)
+        self.assertEqual(len(counted), 41)
         self.assertGreater(sum(json.loads(r)["totals"]["reactions"] for r in self.js["rows"]), 100)
 
     # ---- payload ---------------------------------------------------------------
@@ -458,7 +618,14 @@ class Conformance(unittest.TestCase):
                     with self.assertRaises(payload.LinkTooLongError):
                         payload.fit_link(stats, quotes=budget["quotes"], max_length=budget["max_length"])
                     continue
-                mine = payload.fit_link(stats, quotes=budget["quotes"], max_length=budget["max_length"])
+                if budget["quotes"] is None:
+                    mine = payload.fit_link(stats, max_length=budget["max_length"])
+                    self.assertEqual({q["text"] for q in mine["stats"]["most_reacted"]}, {""}, where)
+                    self.assertEqual(mine, payload.fit_link(stats, quotes=False,
+                                                            max_length=budget["max_length"]))
+                else:
+                    mine = payload.fit_link(stats, quotes=budget["quotes"],
+                                            max_length=budget["max_length"])
                 self.assertEqual(theirs["steps"], mine["steps"], where)
                 self.assertEqual(theirs["stats"], payload.canonical_json(mine["stats"]), where)
                 self.assertLessEqual(theirs["length"], budget["max_length"], where)
@@ -474,7 +641,7 @@ class Conformance(unittest.TestCase):
         stats = json.loads(self.py_stats[stress["stats"]])
         self.assertGreater(len(payload.BASE_URL + "#w1=" + payload.encode_payload(stats)), 4800)
         theirs = self.js["links"][stress["stats"]]["fits"][0]            # quotes, 4800
-        mine = payload.fit_link(stats)
+        mine = payload.fit_link(stats, quotes=True)
         self.assertGreater(mine["steps"], 0)
         self.assertEqual(theirs["steps"], mine["steps"])
         self.assertEqual(theirs["stats"], payload.canonical_json(mine["stats"]))

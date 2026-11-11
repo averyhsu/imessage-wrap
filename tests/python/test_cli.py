@@ -57,6 +57,8 @@ class CommandLine(unittest.TestCase):
         self.assertIn("Bram, Sam, \u20260007 & 1 more", out)
         self.assertIn("Book Club \U0001F4DA", out)
         self.assertNotIn("+15550100001", out)             # 1:1 chats are not listed
+        self.assertEqual(len(lines), 1 + 2 + 4 + 2)       # summary, heading, four chats, hint
+        self.assertEqual(support.text_leaks(out.replace("\n", " ")), [])
 
     def test_chats_json_and_backup(self):
         status, out, err = run("chats", "--backup", support.path("backup"), "--json")
@@ -67,12 +69,20 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(data["diagnostics"]["group_chats"], 4)
         self.assertEqual(data["chats"][3]["name"], "Book Club \U0001F4DA")
         self.assertEqual(data["chats"][0]["members"], 7)   # names came from the backup
+        # the listing for other programs: everything, the members' handle ids included
+        self.assertEqual(sorted(data), ["chats", "diagnostics", "source"])
+        self.assertEqual(sorted(data["chats"][0]),
+                         ["chat_identifier", "chat_ids", "display_name", "first_unix", "guid", "id",
+                          "last_unix", "members", "messages", "name", "participants"])
+        self.assertIn("+15550100001", data["chats"][0]["participants"])
+        for chat in data["chats"]:                          # what is meant to be shown is clean
+            self.assertEqual(support.text_leaks(chat["name"]), [])
 
     def test_stats_matches_the_hand_computed_tiny_chat(self):
         # --year 2026 while "today" is later: the whole year is in range, and
         # the fixture has one message after the pinned test clock (Nov 20)
-        status, out, err = run("stats", "Book Club", "--start", "2026-01-01", "--end", "2026-11-11",
-                               "--tz", LA, *source_args())
+        period = ["--start", "2026-01-01", "--end", "2026-11-11", "--tz", LA]
+        status, out, err = run("stats", "Book Club", "--full-names", *period, *source_args())
         self.assertEqual((status, err), (0, ""))
         got = json.loads(out)
         expected = json.loads(json.dumps(TINY))
@@ -80,6 +90,14 @@ class CommandLine(unittest.TestCase):
         got["meta"]["generated"] = expected["meta"]["generated"]
         # tapbacks are bounded by the period end exactly like messages
         self.assertEqual(got, expected)
+        # without the flag people are called by their first names, everywhere
+        status, out, err = run("stats", "Book Club", *period, *source_args())
+        self.assertEqual((status, err), (0, ""))
+        short = json.loads(out)
+        short["meta"]["generated"] = expected["meta"]["generated"]
+        self.assertEqual(short, wrapped.short_names(expected))
+        self.assertEqual([s["name"] for s in short["senders"]], ["Nora", "Me", "\u20260012"])
+        self.assertNotIn("Quill", out)
 
     def test_stats_options(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -132,13 +150,21 @@ class CommandLine(unittest.TestCase):
 
     def test_link_over_budget_is_trimmed_and_says_so(self):
         status, out, err = run("link", "Extremely", "--year", "2026", "--tz", LA, "--quotes",
-                               *source_args())
+                               "--full-names", *source_args())
         self.assertEqual(status, 0)
         url = out.strip()
         self.assertLessEqual(len(url), 4800)
         self.assertIn("shortened", err)
         stats = wrapped.stats_from_url(url)
         self.assertTrue(all("detail" not in a for a in stats["awards"]))
+        # first names and no message text: the same chat fits without trimming
+        status, out, err = run("link", "Extremely", "--year", "2026", "--tz", LA, *source_args())
+        self.assertEqual((status, err), (0, ""))
+        short = wrapped.stats_from_url(out.strip())
+        self.assertTrue(all("detail" in a for a in short["awards"]))
+        self.assertTrue(all(q["text"] == "" for q in short["most_reacted"]))
+        self.assertTrue(all(len(s["name"].split()) == 1 or s["name"].endswith(".")
+                            for s in short["senders"]), [s["name"] for s in short["senders"]])
 
     def test_errors_are_friendly(self):
         cases = [
@@ -170,6 +196,22 @@ class CommandLine(unittest.TestCase):
         self.assertTrue(callable(args.func))
         args = parser.parse_args(["chats", "--backup"])
         self.assertEqual(args.backup, "")
+        self.assertFalse(parser.parse_args(["link", "x"]).full_names)
+        self.assertTrue(parser.parse_args(["stats", "x", "--full-names"]).full_names)
+        self.assertFalse(parser.parse_args(["link", "x"]).quotes)
+
+    def test_printed_json_cannot_garble_a_terminal(self):
+        value = {"name": "a\u202eb\x7f\x9b\u2028c\u2066d\x1b[0m", "emoji": "\U0001F32E\u200d"}
+        text = cli._pretty(value)
+        self.assertEqual(json.loads(text), value)
+        self.assertEqual([f for f in support.text_leaks(text.replace("\n", " ")) if "control" in f], [])
+        self.assertIn("\U0001F32E", text)                   # ordinary characters stay readable
+        self.assertIn("\\u202e", text)
+        # a quoted message with a direction override, through the real command
+        status, out, err = run("stats", "Taco", "--all-time", "--tz", LA, *source_args())
+        self.assertEqual((status, err), (0, ""))
+        self.assertEqual([f for f in support.text_leaks(out.replace("\n", " ")) if "control" in f], [])
+        self.assertGreater(json.loads(out)["totals"]["messages"], 3000)
 
 
 class PublicApi(unittest.TestCase):
@@ -190,10 +232,11 @@ class PublicApi(unittest.TestCase):
         self.assertEqual(wrapped.decode_text(None, memoryview(body)), "/wrapped 2026")
 
     def test_build_link(self):
-        url = wrapped.build_link(TINY)
+        url = wrapped.build_link(TINY, quotes=True)
         self.assertEqual(wrapped.stats_from_url(url), TINY)
-        quiet = wrapped.stats_from_url(wrapped.build_link(TINY, quotes=False))
+        quiet = wrapped.stats_from_url(wrapped.build_link(TINY))      # no message text by default
         self.assertEqual([q["text"] for q in quiet["most_reacted"]], ["", "", ""])
+        self.assertEqual(wrapped.build_link(TINY), wrapped.build_link(TINY, quotes=False))
         self.assertEqual(TINY["most_reacted"][0]["text"], "Just under the wire")
         with self.assertRaises(wrapped.LinkTooLongError):
             wrapped.build_link(TINY, max_length=200)

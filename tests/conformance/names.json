@@ -1,0 +1,572 @@
+{
+ "about": "Hand-written expectations for docs/SCHEMA.md section 2 (clean names, masking, short names). Both engines' unit tests read this file. clean: [input, clean name]. mask: [label, masked label after cleaning]. chat_names: [display name, the name shown for a chat without members]. short: the short form of each of the people of one recap. Every number is inside +1 555 01xx xxxx and every address is at example.com, apart from the two localhost cases the specification itself names.",
+ "clean": [
+  [
+   "Maya",
+   "Maya"
+  ],
+  [
+   "",
+   ""
+  ],
+  [
+   null,
+   ""
+  ],
+  [
+   42,
+   ""
+  ],
+  [
+   "  many   spaces  ",
+   "many spaces"
+  ],
+  [
+   "tab\there",
+   "tab here"
+  ],
+  [
+   "line\nbreak",
+   "line break"
+  ],
+  [
+   "cr\r\nlf",
+   "cr lf"
+  ],
+  [
+   "nul\u0000inside",
+   "nulinside"
+  ],
+  [
+   "a\u0000 \u0000b",
+   "a b"
+  ],
+  [
+   "bell\u0007",
+   "bell"
+  ],
+  [
+   "esc\u001b[31mred\u001b[0m",
+   "esc[31mred[0m"
+  ],
+  [
+   "title\u001b]0;owned\u0007",
+   "title]0;owned"
+  ],
+  [
+   "del\u007f",
+   "del"
+  ],
+  [
+   "c1\u0085\u009b",
+   "c1"
+  ],
+  [
+   "\u202eevil\u202c",
+   "evil"
+  ],
+  [
+   "\u202a+15550100123\u202c",
+   "+15550100123"
+  ],
+  [
+   "\u2066iso\u2069",
+   "iso"
+  ],
+  [
+   "obj\ufffc\ufffd",
+   "obj"
+  ],
+  [
+   "\u2028line\u2029para",
+   "line para"
+  ],
+  [
+   "\u0000",
+   ""
+  ],
+  [
+   "\t\n\r",
+   ""
+  ],
+  [
+   "\u001b\u0007\u202e\u2069\ufffd",
+   ""
+  ],
+  [
+   "Evil\u001b[31m\u0007 name\r\nline two\ttab\u202e\u2066 \u0000end\u009b",
+   "Evil[31m name line two tab end"
+  ],
+  [
+   "zwj \ud83d\udc69\u200d\ud83d\udcbb stays",
+   "zwj \ud83d\udc69\u200d\ud83d\udcbb stays"
+  ],
+  [
+   "caf\u00e9 \ud83c\udf2e",
+   "caf\u00e9 \ud83c\udf2e"
+  ],
+  [
+   "\u738b \u5c0f\u660e",
+   "\u738b \u5c0f\u660e"
+  ]
+ ],
+ "mask": [
+  [
+   "+15550100001",
+   "\u20260001"
+  ],
+  [
+   "(555) 010-0001",
+   "\u20260001"
+  ],
+  [
+   "  +1 555 010 0001 ",
+   "\u20260001"
+  ],
+  [
+   "555.010.0001",
+   "\u20260001"
+  ],
+  [
+   "001 555 010 0002",
+   "\u20260002"
+  ],
+  [
+   "ines.calloway@example.com",
+   "ines.calloway"
+  ],
+  [
+   "a.very.long.local.part.indeed@example.com",
+   "a.very.long.loca\u2026"
+  ],
+  [
+   "sixteen.chars.xx@example.com",
+   "sixteen.chars.xx"
+  ],
+  [
+   "seventeen.chars.x@example.com",
+   "seventeen.chars.\u2026"
+  ],
+  [
+   "\u00e9@example.com",
+   "\u00e9"
+  ],
+  [
+   "tel:+15550100123",
+   "\u20260123"
+  ],
+  [
+   "+1 555-010-0123 (mobile)",
+   "\u20260123"
+  ],
+  [
+   "tel:+1 555-010-0123 (mobile)",
+   "\u20260123"
+  ],
+  [
+   "+1 555 010 0123 x12",
+   "\u20262312"
+  ],
+  [
+   "+15550100123(smsft)",
+   "\u20260123"
+  ],
+  [
+   "Maya +15550100123",
+   "\u20260123"
+  ],
+  [
+   "+1\u00a0555\u00a0010\u00a00123",
+   "\u20260123"
+  ],
+  [
+   "+1\u2011555\u2011010\u20110123",
+   "\u20260123"
+  ],
+  [
+   "555\u2013010\u20130123",
+   "\u20260123"
+  ],
+  [
+   "\u202a+15550100123\u202c",
+   "\u20260123"
+  ],
+  [
+   "\uff0b\uff11\uff15\uff15\uff15\uff10\uff11\uff10\uff10\uff11\uff12\uff13",
+   "\u2026\uff10\uff11\uff12\uff13"
+  ],
+  [
+   "+1555010\uff10\uff11\uff12\uff13",
+   "\u2026\uff10\uff11\uff12\uff13"
+  ],
+  [
+   "\u0661\u0665\u0665\u0665\u0660\u0661\u0660\u0660\u0661\u0662\u0663",
+   "\u2026\u0660\u0661\u0662\u0663"
+  ],
+  [
+   "Jane Doe <jane.doe@example.com>",
+   "jane.doe"
+  ],
+  [
+   "jane@localhost",
+   "jane"
+  ],
+  [
+   "mailto:jane@localhost",
+   "jane"
+  ],
+  [
+   "\u001b[2J+1555\u00000100136\r\n",
+   "\u20260136"
+  ],
+  [
+   "\"Jane\" <jane@example.com>, Bram",
+   "jane"
+  ],
+  [
+   "a@example.com b@example.com",
+   "a"
+  ],
+  [
+   "@ jane@example.com",
+   "jane"
+  ],
+  [
+   "5550100133@example.com",
+   "\u20260133"
+  ],
+  [
+   "jane.5550100133@example.com",
+   "\u20260133"
+  ],
+  [
+   "555-0100",
+   "\u20260100"
+  ],
+  [
+   "1 2 3 4 5 6 7",
+   "\u20264567"
+  ],
+  [
+   "room 1234567",
+   "\u20264567"
+  ],
+  [
+   "Class of 2026-2027",
+   "\u20262027"
+  ],
+  [
+   "Maya",
+   "Maya"
+  ],
+  [
+   "Agent 47",
+   "Agent 47"
+  ],
+  [
+   "22000",
+   "22000"
+  ],
+  [
+   "Maya @ work",
+   "Maya @ work"
+  ],
+  [
+   "urn:biz:abc",
+   "urn:biz:abc"
+  ],
+  [
+   "55-0100",
+   "55-0100"
+  ],
+  [
+   "Book Club 2026",
+   "Book Club 2026"
+  ],
+  [
+   "Room 101 \ud83d\udcda",
+   "Room 101 \ud83d\udcda"
+  ],
+  [
+   "jane@",
+   "jane@"
+  ],
+  [
+   "@example.com",
+   "@example.com"
+  ],
+  [
+   "@",
+   "@"
+  ],
+  [
+   "\u00b2\u00b3\u00b9\u2460\u2461\u2462\u2463",
+   "\u00b2\u00b3\u00b9\u2460\u2461\u2462\u2463"
+  ],
+  [
+   "",
+   ""
+  ]
+ ],
+ "chat_names": [
+  [
+   "Taco Tuesday Crew \ud83c\udf2e",
+   "Taco Tuesday Crew \ud83c\udf2e"
+  ],
+  [
+   "+1 (555) 010-0142",
+   "\u20260142"
+  ],
+  [
+   "15550100142",
+   "\u20260142"
+  ],
+  [
+   "Party Planning <party.planning@example.com>",
+   "party.planning"
+  ],
+  [
+   "party.planning@example.com",
+   "party.planning"
+  ],
+  [
+   "Evil\u001b[31m\u0007 name\r\nline two\ttab\u202e\u2066 \u0000end\u009b",
+   "Evil[31m name line two tab end"
+  ],
+  [
+   "\u001b\u0007\u202e\u2069\ufffd",
+   "Unnamed group"
+  ],
+  [
+   "   ",
+   "Unnamed group"
+  ],
+  [
+   "",
+   "Unnamed group"
+  ],
+  [
+   null,
+   "Unnamed group"
+  ],
+  [
+   "Book Club 2026",
+   "Book Club 2026"
+  ]
+ ],
+ "short": [
+  {
+   "names": [
+    "Sam Rivera",
+    "Sam Chen"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam Rivera": "Sam R.",
+    "Sam Chen": "Sam C."
+   }
+  },
+  {
+   "names": [
+    "Sam Rivera",
+    "Sam Reed"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam Rivera": "Sam Rivera",
+    "Sam Reed": "Sam Reed"
+   }
+  },
+  {
+   "names": [
+    "Sam Rivera",
+    "Sam Reed",
+    "Sam Chen",
+    "Ines Calloway"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam Rivera": "Sam Rivera",
+    "Sam Reed": "Sam Reed",
+    "Sam Chen": "Sam C.",
+    "Ines Calloway": "Ines"
+   }
+  },
+  {
+   "names": [
+    "Me",
+    "Dave plumber",
+    "Ines Calloway",
+    "\u20260123",
+    "jane.doe",
+    "Unknown"
+   ],
+   "me": "Me",
+   "expected": {
+    "Me": "Me",
+    "Dave plumber": "Dave",
+    "Ines Calloway": "Ines",
+    "\u20260123": "\u20260123",
+    "jane.doe": "jane.doe",
+    "Unknown": "Unknown"
+   }
+  },
+  {
+   "names": [
+    "Ana",
+    "Ana Lima"
+   ],
+   "me": "Me",
+   "expected": {
+    "Ana": "Ana A.",
+    "Ana Lima": "Ana L."
+   }
+  },
+  {
+   "names": [
+    "Sam",
+    "Sam Smith"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam": "Sam",
+    "Sam Smith": "Sam Smith"
+   }
+  },
+  {
+   "names": [
+    "Sam",
+    "Sam Smith",
+    "Sam Chen"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam": "Sam",
+    "Sam Smith": "Sam Smith",
+    "Sam Chen": "Sam C."
+   }
+  },
+  {
+   "names": [
+    "Maya",
+    "Dev",
+    "Agent 47",
+    "22000",
+    "Maya @ work"
+   ],
+   "me": "Me",
+   "expected": {
+    "Maya": "Maya M.",
+    "Dev": "Dev",
+    "Agent 47": "Agent",
+    "22000": "22000",
+    "Maya @ work": "Maya w."
+   }
+  },
+  {
+   "names": [
+    "Avery Quinn",
+    "Avery Stone",
+    "Bram Okoye"
+   ],
+   "me": "Avery Quinn",
+   "expected": {
+    "Avery Quinn": "Avery Quinn",
+    "Avery Stone": "Avery",
+    "Bram Okoye": "Bram"
+   }
+  },
+  {
+   "names": [
+    "Avery",
+    "Avery Stone"
+   ],
+   "me": "Avery",
+   "expected": {
+    "Avery": "Avery",
+    "Avery Stone": "Avery S."
+   }
+  },
+  {
+   "names": [
+    "Zo\u00eb M\u00fcller",
+    "\u738b \u5c0f\u660e",
+    "\u0645\u062d\u0645\u062f \u0639\u0644\u064a",
+    "\u5c71\u7530\u592a\u90ce",
+    "\ud83d\udd25 Jake"
+   ],
+   "me": "Me",
+   "expected": {
+    "Zo\u00eb M\u00fcller": "Zo\u00eb",
+    "\u738b \u5c0f\u660e": "\u738b",
+    "\u0645\u062d\u0645\u062f \u0639\u0644\u064a": "\u0645\u062d\u0645\u062f",
+    "\u5c71\u7530\u592a\u90ce": "\u5c71\u7530\u592a\u90ce",
+    "\ud83d\udd25 Jake": "\ud83d\udd25"
+   }
+  },
+  {
+   "names": [
+    "\u738b \u5c0f\u660e",
+    "\u738b \u5927\u660e",
+    "\u738b \u5c0f\u7ea2"
+   ],
+   "me": "Me",
+   "expected": {
+    "\u738b \u5c0f\u660e": "\u738b \u5c0f\u660e",
+    "\u738b \u5927\u660e": "\u738b \u5927.",
+    "\u738b \u5c0f\u7ea2": "\u738b \u5c0f\u7ea2"
+   }
+  },
+  {
+   "names": [
+    "Kai \ud83c\udf0a",
+    "Kai \ud83d\udd25"
+   ],
+   "me": "Me",
+   "expected": {
+    "Kai \ud83c\udf0a": "Kai \ud83c\udf0a.",
+    "Kai \ud83d\udd25": "Kai \ud83d\udd25."
+   }
+  },
+  {
+   "names": [
+    "Sam R.",
+    "Sam Rivera",
+    "Sam Chen"
+   ],
+   "me": "Me",
+   "expected": {
+    "Sam R.": "Sam R.",
+    "Sam Rivera": "Sam Rivera",
+    "Sam Chen": "Sam C."
+   }
+  },
+  {
+   "names": [
+    "Mary Jane Watson",
+    "Mary Ann Wu"
+   ],
+   "me": "Me",
+   "expected": {
+    "Mary Jane Watson": "Mary Jane Watson",
+    "Mary Ann Wu": "Mary Ann Wu"
+   }
+  },
+  {
+   "names": [
+    "Mary Jane Watson",
+    "Mary Ann Lee"
+   ],
+   "me": "Me",
+   "expected": {
+    "Mary Jane Watson": "Mary W.",
+    "Mary Ann Lee": "Mary L."
+   }
+  },
+  {
+   "names": [],
+   "me": "Me",
+   "expected": {}
+  }
+ ]
+}
