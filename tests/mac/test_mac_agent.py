@@ -341,6 +341,14 @@ class AgentCase(unittest.TestCase):
         self.assertTrue(all(r.status == DRY_RUN for r in agent.outcomes[0].results.values()))
         self.assertTrue(any("card=dry-run" in ln and "link=dry-run" in ln for ln in self.logs))
 
+    def test_no_link_sends_only_card_and_text(self):
+        agent = self.started(link=False)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 1)
+        self.assertEqual(self.kinds(), ["file", "text"])
+        self.assertEqual(self.engine.link_calls, [])
+        self.assertNotIn("link below", self.sender.sent[1]["text"])
+
     def test_no_quotes_is_passed_to_the_link_builder(self):
         agent = self.started(quotes=False)
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
@@ -509,6 +517,9 @@ class Scope(unittest.TestCase):
         )
         self.assertIn("EVERY group chat on this Mac (3 right now", everything)
         self.assertIn("numbers and first names only", everything)
+        no_link = consent_text(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], link=False), self.CHATS[:1], 3)
+        self.assertIn("two messages", no_link)
+        self.assertNotIn("a link", no_link)
 
     def test_scope_signature_changes_with_scope(self):
         cfg = AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"])

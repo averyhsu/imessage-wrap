@@ -49,6 +49,7 @@ class AgentConfig:
     dry_run: bool = False
     out_dir: Optional[Path] = None  # where a dry run writes card + text + link
     quotes: bool = True  # False keeps message text out of the link
+    link: bool = True  # False sends the card and text only
     join_attempts: int = 10  # a message row can appear before its chat join row
     join_delay: float = 0.3
     batch: int = 500
@@ -297,10 +298,11 @@ class Agent:
                 self._log(f"AI awards skipped ({type(exc).__name__}: {exc}); using the built-in ones")
 
         link = ""
-        try:
-            link = self.engine.build_link(stats, self.config.quotes)
-        except Exception as exc:
-            self._log(f"no link this time ({type(exc).__name__}: {exc}); sending the card and text only")
+        if self.config.link:
+            try:
+                link = self.engine.build_link(stats, self.config.quotes)
+            except Exception as exc:
+                self._log(f"no link this time ({type(exc).__name__}: {exc}); sending the card and text only")
         text = "\n".join(recap_lines(stats, with_link=bool(link)))
         assert_safe(text)
         if link:
@@ -385,11 +387,16 @@ def consent_text(config: AgentConfig, allowed: Sequence[ChatRef], total_groups: 
         for chat in sorted(allowed, key=lambda c: c.name.casefold()):
             members = f" ({chat.members} members)" if chat.members else ""
             lines.append(f"  - {chat.name}{members}")
+    lines.append("")
+    if config.link:
+        lines += [
+            "Each reply is three messages that everyone in the chat will see: a recap image,",
+            "a short text recap, and a link that carries the recap"
+            + (" (including the most-reacted messages)." if config.quotes else " (numbers and first names only)."),
+        ]
+    else:
+        lines.append("Each reply is two messages that everyone in the chat will see: a recap image and a short text recap.")
     lines += [
-        "",
-        "Each reply is three messages that everyone in the chat will see: a recap image,",
-        "a short text recap, and a link that carries the recap"
-        + (" (including the most-reacted messages)." if config.quotes else " (numbers and first names only)."),
         f"At most one reply per chat every {int(config.cooldown)} seconds. Anyone in the chat can trigger it.",
         "Your messages are read on this Mac only; nothing is uploaded.",
     ]

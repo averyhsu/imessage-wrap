@@ -433,10 +433,10 @@ class DryRunSender:
 
     def send_text(self, chat: ChatRef, text: str) -> SendResult:
         self.sent.append({"kind": "text", "chat": chat.key, "chat_name": chat.name, "guid": chat.guid, "text": text})
-        return SendResult(DRY_RUN, "not sent (dry run)", "text", chat.guid)
+        return SendResult(DRY_RUN, "", "text", chat.guid)
 
     def send_file(self, chat: ChatRef, path: os.PathLike) -> SendResult:
         self.sent.append(
             {"kind": "file", "chat": chat.key, "chat_name": chat.name, "guid": chat.guid, "path": str(path)}
         )
-        return SendResult(DRY_RUN, "not sent (dry run)", "file", chat.guid)
+        return SendResult(DRY_RUN, "", "file", chat.guid)

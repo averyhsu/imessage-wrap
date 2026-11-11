@@ -263,6 +263,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
         dry_run=bool(args.dry_run),
         out_dir=Path(args.out).expanduser() if args.out else None,
         quotes=not args.no_quotes,
+        link=not args.no_link,
     )
     if config.dry_run:
         sender: Any = send.DryRunSender()
@@ -361,7 +362,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
     out_dir = Path(args.out).expanduser() if args.out else Path.cwd() / "threadback-preview"
     config = AgentConfig(
         db_path=db_path, state_path=Path(os.devnull), me=args.me, dry_run=True, out_dir=out_dir,
-        quotes=not args.no_quotes,
+        quotes=not args.no_quotes, link=not args.no_link,
     )
     logs: List[str] = []
     agent = Agent(config, engine, send.DryRunSender(), log=logs.append)
@@ -612,6 +613,7 @@ def register(subparsers: Any) -> None:
                        help="minimum time between replies in one chat (default: 120)")
     agent.add_argument("--poll", type=float, default=2.0, metavar="SECONDS", help="how often to look (default: 2)")
     agent.add_argument("--no-quotes", action="store_true", help="keep message text out of the link")
+    agent.add_argument("--no-link", action="store_true", help="send the image and the text only, no link")
     agent.add_argument("--keep-awake", action="store_true",
                        help="stop this Mac from idle-sleeping while the helper runs (caffeinate -i)")
     agent.add_argument("--state", metavar="FILE", help="state file (default: ~/.threadback/state.json)")
@@ -633,6 +635,7 @@ def register(subparsers: Any) -> None:
     preview.add_argument("--all-time", action="store_true", help="everything, not just one year")
     preview.add_argument("--out", metavar="DIR", help="where to write (default: ./threadback-preview)")
     preview.add_argument("--no-quotes", action="store_true", help="keep message text out of the link")
+    preview.add_argument("--no-link", action="store_true", help="leave the link out")
     preview.add_argument("--open", action="store_true", help="open the folder afterwards (macOS)")
     _add_ai_options(preview)
     _add_source_options(preview)
