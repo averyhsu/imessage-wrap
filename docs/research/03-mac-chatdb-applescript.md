@@ -110,15 +110,15 @@ end run
 
 ### 8. Distribution
 
-- **No paid account:** ad-hoc signing only. Since Sequoia "users will no longer be able to Control-click to override Gatekeeper" ([Apple, 2024-08-06](https://developer.apple.com/news/?id=saqachfa)). The user must attempt to open it, then use System Settings → Privacy & Security → **Open Anyway** (shown for about an hour, per Apple Support via search snippet) and authenticate. No macOS 27 change found (**UNVERIFIED**).
+- **No paid account:** ad-hoc signing only. Since Sequoia "users will no longer be able to Control-click to override Gatekeeper" ([Apple, 2024-08-06](https://developer.apple.com/news/?id=saqachfa)). The user must attempt to open it, then use System Settings → Privacy & Security → **Open Anyway** (shown for about an hour, per Apple Support via search snippet) and authenticate. No macOS 27 change found (**UNVERIFIED**; test: download an ad-hoc-signed app with a browser on 27 and open it).
 - **Paid ($99/yr, from memory):** Developer ID certificate, hardened runtime, `notarytool`, `stapler` ([Apple](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)). Notarization is automated, not App Review.
-- **Homebrew official taps:** casks must pass Gatekeeper ([Acceptable Casks](https://github.com/Homebrew/brew/blob/main/docs/Acceptable-Casks.md)); failing casks were deprecated in [5.0.0](https://brew.sh/2025/11/12/homebrew-5.0.0/) with disabling set for September 2026, and `--no-quarantine` was deprecated. New packages need 75 stars, 225 if self-submitted ([policy](https://github.com/Homebrew/brew/blob/main/docs/Package-Acceptance-Policy.md)).
+- **Homebrew official taps:** casks must pass Gatekeeper ([Acceptable Casks](https://github.com/Homebrew/brew/blob/main/docs/Acceptable-Casks.md)); failing casks were deprecated in [5.0.0](https://brew.sh/2025/11/12/homebrew-5.0.0/) with disabling set for September 2026, and `--no-quarantine` was deprecated. New packages need 75 stars or 30 forks, tripled if self-submitted ([policy](https://github.com/Homebrew/brew/blob/main/docs/Package-Acceptance-Policy.md)).
 - **Personal tap:** allowed; since 6.0.0 it needs explicit trust, and `brew install user/tap/formula` trusts just that item ([Tap Trust](https://github.com/Homebrew/brew/blob/main/docs/Tap-Trust.md)). Homebrew quarantines cask downloads ([security doc](https://github.com/Homebrew/brew/blob/main/docs/Homebrew-Security-and-Supply-Chain.md)), so a formula should avoid Gatekeeper (inference). imsg ships a notarized binary this way.
 - **`curl | bash` Python CLI:** `/usr/bin/python3` belongs to "Xcode or the Command Line Tools" ([CPython docs](https://github.com/python/cpython/blob/main/Doc/using/mac.rst)); without them the first run opens the tools-install dialog (**UNVERIFIED**; test on a clean Mac). Bundle an interpreter.
 
 ### 9. Awake-only
 
-- `caffeinate -i` blocks idle sleep; `-s` is "valid only when system is running on AC power" ([man page](https://github.com/apple-oss-distributions/PowerManagement/blob/main/caffeinate/caffeinate.8)). A closed lid still sleeps (**UNVERIFIED**).
+- `caffeinate -i` blocks idle sleep; `-s` is "valid only when system is running on AC power" ([man page](https://github.com/apple-oss-distributions/PowerManagement/blob/main/caffeinate/caffeinate.8)). I found no source that a closed lid or Power Nap keeps a user agent running; assume not (**UNVERIFIED**; test: sleep the Mac, send `/wrapped` from a phone, see when the reply lands).
 - After wake, catch up from the ROWID cursor and ignore stale commands.
 - Replies come from the owner's Apple ID: AppleScript `send` "has no `from` or account selector" (imsg).
 
@@ -140,13 +140,22 @@ end run
 
 ## Implications for the build
 
-- Decode `attributedBody` for every new row; `WHERE text = '/wrapped'` will miss commands.
+- Decode `attributedBody` for every new row; `WHERE text = '/wrapped'` can miss commands.
 - Pass `chat.guid` verbatim to `chat id`; on `-1728` try the `;+;`/`;-;` swap; then require a joined outgoing row before reporting success. Never blind-retry.
 - Stage the card under `~/Pictures` before sending.
-- Count tapbacks from 2000–2007 rows; exclude `item_type != 0` and `associated_message_type != 0` from message totals.
+- Count tapbacks from 2000–2007 rows; exclude `item_type != 0` and `associated_message_type >= 1000` from message totals (0, 2 and 3 are ordinary or app messages).
 - Ignore the bot's own rows, or it answers itself.
 - First real-Mac test: the group send on macOS 26 and 27. If it fails, this path is read-only.
 
 ## Sources
 
-Linked inline. Unreachable from this session, so quoted from search snippets or GitHub mirrors: support.apple.com, brew.sh, docs.brew.sh, sqlite.org, docs.bluebubbles.app, sentinelone.com. The shared web-search budget ran out before I could look for group-send reports on macOS 27.
+All links are inline. The ones the answers lean on most:
+
+- [ReagentX/imessage-exporter](https://github.com/ReagentX/imessage-exporter) — schema, tapback codes, typedstream parser and fixtures, AddressBook queries.
+- [dgelessus/python-typedstream](https://github.com/dgelessus/python-typedstream) — typedstream constants.
+- [steipete/imsg](https://github.com/steipete/imsg) docs and issues #90, #311 — AppleScript sending, permissions, watching, macOS 26/27 breakage.
+- [photon-hq/imessage-kit](https://github.com/photon-hq/imessage-kit) — `any;` prefix, attachment directories.
+- Apple: developer news, documentation and DTS forum threads 114452, 124121, 678819, 799832.
+- [Homebrew/brew docs](https://github.com/Homebrew/brew/tree/main/docs) and the 5.0.0 / [6.0.0](https://brew.sh/2026/06/11/homebrew-6.0.0/) release posts.
+
+Unreachable from this session, so quoted from search snippets or GitHub mirrors: support.apple.com, brew.sh, docs.brew.sh, sqlite.org, docs.bluebubbles.app, sentinelone.com. The shared web-search budget ran out before I could look for group-send reports on macOS 27.
