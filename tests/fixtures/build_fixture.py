@@ -26,7 +26,9 @@ Layout written to OUTDIR:
                                                associated_message_emoji column
     evil/chat.db, evil/AddressBook-v22.abcddb  names made of phone numbers,
                                                addresses, escape sequences and
-                                               direction overrides; cells of
+                                               direction overrides, names of a
+                                               million characters, contacts
+                                               saved under a number; cells of
                                                the wrong type (see EVIL_*)
     nojoin/chat.db                             no chat_handle_join table
     nocolumn/chat.db                           message.is_from_me is missing
@@ -330,14 +332,39 @@ def gibberish_word(rng, capital=False):
     return word
 
 
+def densify(text, salt=0):
+    """Replace every character that is not white space (or an attachment
+    placeholder) by an ideograph from planes 2 and 3, chosen by its position:
+    text that DEFLATE cannot shrink. White space stays where it is, so word
+    counts and first words do not change. No random numbers are drawn."""
+    out = []
+    state = (salt * 2654435761 + len(text) + 1) & M64
+    for ch in text:
+        if ch.isspace() or ch == OBJ:
+            out.append(ch)
+            continue
+        state = (state * 6364136223846793005 + 1442695040888963407) & M64
+        code = 0x20000 + (state >> 33) % 0x1FFFE
+        if code & 0xFFFE == 0xFFFE:                 # U+2FFFE and U+2FFFF are not characters
+            code -= 2
+        out.append(chr(code))
+    return "".join(out)
+
+
 def stress_people(rng):
-    """14 invented people with enormous names, for the link-length ladder."""
+    """14 invented people for the link-length ladder. A name is capped at 40
+    characters (docs/SCHEMA.md 2), so what makes these heavy is not their
+    length (though they are long as well) but their density: one short first
+    word, then ideographs that do not compress."""
     people = {}
     for i in range(14):
         first = " ".join(gibberish_word(rng, True) for _ in range(9 + rng.below(4)))
         last = " ".join(gibberish_word(rng, True) for _ in range(12 + rng.below(5)))
         key = "long%02d" % i
         phone = "+155501%05d" % (20000 + i)
+        words = first.split(" ")
+        first = words[0] + " " + densify("".join(words[1:]), i)
+        last = densify(last.replace(" ", ""), 100 + i)
         people[key] = (first, last + " \u2116%d" % (i + 1), [phone], [("phone", phone)])
     return people
 
@@ -699,13 +726,17 @@ def build_specs():
     s.add("unnamed", utc(2026, 3, 3, 3, 3, 3), h("pat")[0], None, body="none",
           raw_text=b"bad \xff\xfe bytes in a text column")
 
-    # 14 people with enormous names and long messages: over the link budget
+    # 14 people with dense names and long, dense messages: with full names and
+    # quotes this is over the link budget (and only then)
     longs = sorted(k for k in people if k.startswith("long"))
     generated_chat(
         s, rng, "stress",
         ["me"] + [h(k) for k in longs],
         [10] + [12 - (i % 5) for i in range(len(longs))],
         day_number(2026, 2, 1), day_number(2026, 9, 30), (55, 96, 100), long_text=True)
+    for spec in s.rows:
+        if spec["chat"] == "stress" and spec["assoc_type"] == 0 and spec["text"]:
+            spec["text"] = densify(spec["text"], spec["seq"])
 
     # two 1:1 chats that must never show up
     generated_chat(s, rng, "dm_ines", ["me", h("ines")], [50, 50],
@@ -1160,6 +1191,8 @@ EVIL_HANDLES = [
     (b"+15550100134", "\u20260134"),                             # BLOB
     (15550100135, "\u20260135"),                                 # INTEGER
     (555.5, "555.5"),                                            # REAL: too few digits to be a number
+    ("\u200e+1 555 010 0407\u200f", "\u20260407"),                # direction marks around it
+    ("x" * 100000 + " +15550100406", "x" * 40 + "\u2026"),      # 100,000 characters: capped at 40
     ("Maya", "Maya"),                                            # these four are kept as they are
     ("Agent 47", "Agent 47"),
     ("22000", "22000"),
@@ -1182,6 +1215,27 @@ EVIL_CONTACTS = [
 ]
 EVIL_STRANGER = ("+15550100160", "\u20260160")     # in the chats, not in the address book
 
+# People do save contacts under a number or an address, and a name can be any
+# length: a contact name is masked and capped like every other sender label.
+# Same shape as EVIL_CONTACTS; without the address book the handles show masked.
+_LONG_NAME = "Wolfeschlegelsteinhausenbergerdorff the Elder of Tacoma"
+EVIL_NUMBERED = [
+    ("jane.doe@example.com", None, None, None, [("phone", "+15550100401")], "jane.doe",
+     "+15550100401"),
+    ("+1 (555) 010-0402", None, None, None, [("phone", "+15550100402")], "\u20260402",
+     "+15550100402"),
+    ("Dr. Okafor", "555-010-0403", None, None, [("phone", "+15550100403")], "\u20260403",
+     "+15550100403"),
+    (None, None, None, "Okafor Plumbing 555 010 0404", [("email", "okafor@example.com")],
+     "\u20260404", "okafor@example.com"),
+    ("N" * 1000000, "Long", None, None, [("phone", "+15550100405")], "N" * 40 + "\u2026",
+     "+15550100405"),
+    ("Wolfeschlegelsteinhausenbergerdorff", "the Elder of Tacoma", None, None,
+     [("phone", "+15550100408")], _LONG_NAME[:40] + "\u2026", "+15550100408"),
+    ("\u200eLe\u200fa\ufeff", "Marks", None, None, [("phone", "+15550100409")], "Lea Marks",
+     "+15550100409"),
+]
+
 # key: (display_name cell, style cell, the name that must be shown or None for
 # "made from the members", who is in it: a third of EVIL_HANDLES, the contacts
 # or nobody). No chat has more than 11 other people: the recap lists 12 senders.
@@ -1196,6 +1250,8 @@ EVIL_CHATS = [
     ("blob_name", b"\xffGr\xfeoup \xe2\x80\xae7", 43, "Group 7", "contacts"),
     ("nobody", "\x00", 43, "Unnamed group", "nobody"),
     ("text_style", "Style As Text", "43", "Style As Text", "contacts"),
+    ("long_name", "A name of a million characters " + "n" * 1000000, 43,
+     ("A name of a million characters " + "n" * 49) + "\u2026", "numbered"),
 ]
 EVIL_WORDS = ("tacos tonight who is in count me running late save a seat be right back "
               "sounds good see you there").split()
@@ -1226,6 +1282,7 @@ def write_evil_db(path):
     groups = {
         "handles1": everyone[:8], "handles2": everyone[8:16], "handles3": everyone[16:],
         "contacts": [handle(card[6]) for card in EVIL_CONTACTS] + [handle(EVIL_STRANGER[0])],
+        "numbered": [handle(card[6]) for card in EVIL_NUMBERED],
         "nobody": [],
     }
     count = [0]
@@ -1323,7 +1380,7 @@ def write_evil_db(path):
 
 
 def write_evil_address_book(path):
-    write_mac_address_book(path, [card[:5] for card in EVIL_CONTACTS])
+    write_mac_address_book(path, [card[:5] for card in EVIL_CONTACTS + EVIL_NUMBERED])
 
 
 def write_noemoji_db(path, specs, people):
@@ -1450,6 +1507,7 @@ def build(out_dir):
             "handles": [{"id": ident if isinstance(ident, str) else None, "label": label}
                         for ident, label in EVIL_HANDLES],
             "contacts": [{"handle": card[6], "name": card[5]} for card in EVIL_CONTACTS],
+            "numbered": [{"handle": card[6], "name": card[5]} for card in EVIL_NUMBERED],
             "stranger": {"handle": EVIL_STRANGER[0], "label": EVIL_STRANGER[1]},
             "chats": {key: {"rowid": evil_ids[key], "name": shown, "members": who}
                       for key, _display, _style, shown, who in EVIL_CHATS},
