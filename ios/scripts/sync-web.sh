@@ -2,7 +2,8 @@
 # Prepares ios/WebBundle (gitignored) before `xcodegen generate`:
 #
 #   WebBundle/web/                 the story both targets bundle as a folder reference.
-#                                  The real one (../web, minus web/make/) when it has an
+#                                  The real one (../web, minus the browser-only maker in
+#                                  web/make/ and the link-preview art) when it has an
 #                                  index.html, otherwise ios/PlaceholderWeb.
 #   WebBundle/fixtures/            the cross-language payload vector for the unit tests.
 #   WebBundle/source.txt           "real" or "placeholder" (read by CI for its summary).
@@ -22,8 +23,11 @@ mkdir -p "$DEST" "$BUNDLE_DIR/fixtures"
 
 if [ -f "$REAL/index.html" ] && [ "${WRAPPED_WEB:-auto}" != "placeholder" ]; then
   cp -R "$REAL/." "$DEST/"
-  # web/make/ is the in-browser analyzer's build area; the app only needs the story.
+  # The app only needs the story player. Left out:
+  #   make/                  the browser-only recap maker (with its SQLite WebAssembly)
+  #   assets/og.*            link-preview art for web crawlers
   rm -rf "$DEST/make" "$DEST/node_modules"
+  rm -f "$DEST/assets/og.png" "$DEST/assets/og-video.mp4"
   SOURCE="real"
 else
   cp -R "$PLACEHOLDER/." "$DEST/"

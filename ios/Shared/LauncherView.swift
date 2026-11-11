@@ -10,6 +10,9 @@ final class LauncherModel: ObservableObject {
     @Published var isRoomy = false
 
     var onSendDemo: () -> Void = {}
+    /// Debug builds only: stage the demo with the template layout alone, so a UI test can
+    /// capture the card that people without the app see.
+    var onSendDemoAsTemplate: () -> Void = {}
     var onPasteLink: () -> Void = {}
     var onPlay: (Recap) -> Void = { _ in }
     var onSend: (Recap) -> Void = { _ in }
@@ -38,6 +41,8 @@ struct LauncherView: View {
                     recentsSection
                     if model.isRoomy {
                         footer
+                    } else if model.recents.isEmpty && model.notice == nil {
+                        hint
                     }
                 }
                 .padding(.horizontal, 16)
@@ -71,6 +76,17 @@ struct LauncherView: View {
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("launcher.headline")
             Spacer(minLength: 0)
+            #if DEBUG
+            // Test hook, debug builds only (see `onSendDemoAsTemplate`).
+            Button(action: { model.onSendDemoAsTemplate() }) {
+                Color.white.opacity(0.001)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("launcher.sendDemoAsTemplate")
+            .accessibilityLabel("Send the demo as a template card (debug)")
+            #endif
             BrandMark(size: model.isRoomy ? 44 : 34)
         }
     }
@@ -149,6 +165,23 @@ struct LauncherView: View {
             onPlay: { model.onPlay(recap) },
             onSend: { model.onSend(recap) }
         )
+    }
+
+    /// Fills the compact style when there is nothing else to show yet.
+    private var hint: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(WrappedTheme.popBlue)
+                .padding(.top, 1)
+            Text("It lands in the chat as a card everyone can tap. With the app it plays as a story; without it, the link opens the same story on the web.")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 4)
+        .padding(.horizontal, 4)
     }
 
     private var footer: some View {

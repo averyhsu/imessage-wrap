@@ -195,21 +195,33 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         hideLoadingIndicator()
         setStatus("error: \(text)")
         if failureLabel == nil {
+            // A native notice that covers the page; tapping it leaves the story.
+            let cover = UIView(frame: view.bounds)
+            cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            cover.backgroundColor = WrappedTheme.nightUI
+            cover.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleFailureTap)))
+            view.addSubview(cover)
+
             let label = UILabel()
             label.translatesAutoresizingMaskIntoConstraints = false
-            label.textColor = UIColor.white.withAlphaComponent(0.8)
-            label.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+            label.textColor = UIColor.white.withAlphaComponent(0.86)
+            label.font = UIFont.systemFont(ofSize: 17, weight: .semibold)
             label.numberOfLines = 0
             label.textAlignment = .center
-            view.addSubview(label)
+            label.accessibilityIdentifier = "story.failure"
+            cover.addSubview(label)
             NSLayoutConstraint.activate([
-                label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                label.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
-                label.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32)
+                label.centerYAnchor.constraint(equalTo: cover.centerYAnchor),
+                label.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: 32),
+                label.trailingAnchor.constraint(equalTo: cover.trailingAnchor, constant: -32)
             ])
             failureLabel = label
         }
-        failureLabel?.text = text
+        failureLabel?.text = text + "\n\nTap to close."
+    }
+
+    @objc private func handleFailureTap() {
+        delegate?.storyDidRequestClose(self)
     }
 
     private func setStatus(_ text: String) {
@@ -287,10 +299,18 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             setStatus("close")
             delegate?.storyDidRequestClose(self)
         case "error":
+            // The page could not read or show the recap; the contract leaves the notice
+            // to the native side.
             let text = (body["message"] as? String) ?? "unknown"
-            NSLog("[story] page error: %@", text)
+            NSLog("[story] the page reported an error: %@", text)
+            showFailure("This recap could not be played.")
+            setStatus("error: page: \(text)")
+        case "jserror":
+            // An uncaught script error, forwarded by the script this class injects.
+            let text = (body["message"] as? String) ?? "unknown"
+            NSLog("[story] uncaught page error: %@", text)
             if !isReady {
-                setStatus("error: \(text)")
+                setStatus("loading: script error: \(text)")
             }
         default:
             break
@@ -541,10 +561,10 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         try { window.webkit.messageHandlers.wrapped.postMessage(o); } catch (e) {}
       }
       window.addEventListener('error', function (e) {
-        post({ type: 'error', message: String((e && e.message) || e) + ' @' + String((e && e.filename) || '') + ':' + String((e && e.lineno) || 0) });
+        post({ type: 'jserror', message: String((e && e.message) || e) + ' @' + String((e && e.filename) || '') + ':' + String((e && e.lineno) || 0) });
       });
       window.addEventListener('unhandledrejection', function (e) {
-        post({ type: 'error', message: 'unhandledrejection: ' + String(e && e.reason) });
+        post({ type: 'jserror', message: 'unhandledrejection: ' + String(e && e.reason) });
       });
     })();
     """

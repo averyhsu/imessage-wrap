@@ -50,6 +50,9 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         launcherModel.onSendDemo = { [weak self] in
             self?.compose(DemoRecap.recap)
         }
+        launcherModel.onSendDemoAsTemplate = { [weak self] in
+            self?.compose(DemoRecap.recap, live: false)
+        }
         launcherModel.onPasteLink = { [weak self] in
             self?.pasteLink()
         }
@@ -198,9 +201,10 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         }
         let story = StoryViewController(recap: recap)
         story.delegate = self
-        // In the expanded style Messages draws its own header over the top of this view;
-        // the safe area tells us where it ends.
-        install(story, belowTopSafeArea: true)
+        // Full bleed: in the expanded style Messages draws its grabber (and on older
+        // systems a header) over the top of this view. The page pads its own controls by
+        // the safe-area inset, so its background can run all the way to the top edge.
+        install(story, belowTopSafeArea: false)
     }
 
     /// The recap a live bubble should show: the one its message carries. If Messages gave
@@ -328,14 +332,14 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
     // MARK: Actions
 
     /// Stages a recap bubble in the conversation's input field. The user taps send.
-    private func compose(_ recap: Recap) {
+    private func compose(_ recap: Recap, live: Bool = WrappedConfig.useLiveLayout) {
         guard let conversation = activeConversation else {
             launcherModel.notice = "Open a conversation to send a recap."
             return
         }
         let message: MSMessage
         do {
-            message = try RecapMessageComposer.message(for: recap)
+            message = try RecapMessageComposer.message(for: recap, live: live)
         } catch {
             let reason = (error as? LocalizedError)?.errorDescription
             launcherModel.notice = reason ?? "This recap could not be sent."

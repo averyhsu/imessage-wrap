@@ -30,7 +30,7 @@ jobs:
   simulator:
     name: Build, test and screenshot (Simulator)
     runs-on: macos-26
-    timeout-minutes: 55
+    timeout-minutes: 60
     env:
       DERIVED: ${{ github.workspace }}/build/DerivedData
       OUT: ${{ github.workspace }}/build/out
@@ -179,7 +179,7 @@ jobs:
       - name: "Stage 3 (stretch): the extension inside Messages"
         id: messages
         continue-on-error: true
-        timeout-minutes: 12
+        timeout-minutes: 18
         env:
           UDID: ${{ steps.sim.outputs.udid }}
           TEST_RUNNER_WRAPPED_ARTIFACTS_DIR: ${{ github.workspace }}/build/out/screenshots
@@ -244,17 +244,17 @@ jobs:
         run: |
           brew install ffmpeg
           mkdir -p "$OUT/recordings"
-          NAMES="app-demo-story"
-          if [ "$MESSAGES_OUTCOME" = "success" ]; then
-            NAMES="$NAMES messages-extension"
+          if [ -f "$OUT/video/app-demo-story.mp4" ]; then
+            ffmpeg -loglevel error -y -i "$OUT/video/app-demo-story.mp4" \
+              -vf "scale=420:-2,fps=24" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p \
+              -an -movflags +faststart "$OUT/recordings/app-demo-story.mp4" || true
           fi
-          for name in $NAMES; do
-            if [ -f "$OUT/video/$name.mp4" ]; then
-              ffmpeg -loglevel error -y -i "$OUT/video/$name.mp4" \
-                -vf "scale=420:-2,fps=24" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p \
-                -an -movflags +faststart "$OUT/recordings/$name.mp4" || true
-            fi
-          done
+          # The Messages walkthrough is minutes of mostly waiting: play it back at 3x.
+          if [ "$MESSAGES_OUTCOME" = "success" ] && [ -f "$OUT/video/messages-extension.mp4" ]; then
+            ffmpeg -loglevel error -y -i "$OUT/video/messages-extension.mp4" \
+              -vf "setpts=PTS/3,scale=420:-2,fps=20" -c:v libx264 -crf 33 -preset slow -pix_fmt yuv420p \
+              -an -movflags +faststart "$OUT/recordings/messages-extension-3x.mp4" || true
+          fi
           ls -la "$OUT/recordings"
 
       # Only runs for native ("iOS …") commits publish, so a web-only push cannot overwrite
