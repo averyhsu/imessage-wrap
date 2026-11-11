@@ -1081,11 +1081,21 @@ input[type="date"].mk-input { color-scheme: dark; }
 
 .mk-recap__facts { margin-top: 10px; font: 600 15.5px/1.4 var(--font-text); color: rgba(255, 255, 255, 0.7); }
 
-.mk-thread { display: flex; flex-direction: column; align-items: flex-end; margin-top: 22px; }
+/* What to do with the link, next to how it will look in the chat (a sent message, so on
+   the right). */
+.mk-thread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 270px);
+  align-items: center;
+  gap: clamp(16px, 3vw, 30px);
+  margin-top: 24px;
+}
+
+.mk-thread__say { min-width: 0; }
 
 .mk-card {
   display: block;
-  width: min(100%, 300px);
+  width: 100%;
   border-radius: 20px;
   overflow: hidden;
   background: #2c2c2e;
@@ -1103,7 +1113,7 @@ input[type="date"].mk-input { color-scheme: dark; }
 .mk-card__meta > span { display: block; margin-top: 2px; font: 500 12.5px/1.2 var(--font-text); color: rgba(255, 255, 255, 0.55); }
 .mk-thread.is-sent .mk-card { animation: mk-send 0.55s var(--ease-back) both; }
 
-.mk-thread__meta { margin-top: 7px; padding-right: 4px; text-align: right; font: 600 12.5px/1.35 var(--font-text); color: rgba(255, 255, 255, 0.52); }
+.mk-thread__meta { margin-top: 10px; font: 600 13.5px/1.4 var(--font-text); color: rgba(255, 255, 255, 0.56); }
 .mk-thread__meta b { color: #fff; font-weight: 700; }
 
 .mk-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
@@ -1126,7 +1136,7 @@ input[type="date"].mk-input { color-scheme: dark; }
 
 .mk-linkfield:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--blue); color: #fff; }
 
-.mk-guide { margin-top: 12px; font: 600 15px/1.45 var(--font-text); color: rgba(255, 255, 255, 0.86); }
+.mk-guide { font: 700 clamp(17px, 2vw, 20px) / 1.3 var(--font-display); letter-spacing: -0.01em; color: #fff; text-wrap: balance; }
 
 .mk-trim {
   margin-top: 12px;
@@ -1211,12 +1221,13 @@ input[type="date"].mk-input { color-scheme: dark; }
 .mk-quote__who { margin: 0 0 4px 14px; font: 600 12px/1.2 var(--font-text); color: rgba(255, 255, 255, 0.5); }
 
 .mk-quote__text {
+  --bubble: #3a3a3f;
   position: relative;
   max-width: 100%;
   padding: 9px 15px 10px;
   border-radius: 19px;
-  background: var(--grey-dark);
-  color: rgba(255, 255, 255, 0.92);
+  background: var(--bubble);
+  color: rgba(255, 255, 255, 0.9);
   font: 500 15px/1.35 var(--font-text);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -1230,7 +1241,7 @@ input[type="date"].mk-input { color-scheme: dark; }
   bottom: 0;
   width: 22.17px;
   height: 23.22px;
-  background: var(--grey-dark);
+  background: var(--bubble);
   transform: scaleX(-1);
   -webkit-mask: var(--tail) no-repeat 0 0 / 100% 100%;
   mask: var(--tail) no-repeat 0 0 / 100% 100%;
@@ -1238,9 +1249,7 @@ input[type="date"].mk-input { color-scheme: dark; }
 }
 
 .mk-quote__text.is-empty { font-style: italic; color: rgba(255, 255, 255, 0.6); }
-.mk-quotes.is-on .mk-quote__text { background: var(--blue); color: #fff; }
-.mk-quotes.is-on .mk-quote__text::after { background: var(--blue); }
-.mk-quotes:not(.is-on) .mk-quote__text { opacity: 0.62; }
+.mk-quotes.is-on .mk-quote__text { --bubble: var(--blue); color: #fff; }
 
 .mk-raw {
   max-height: 320px;
@@ -1318,6 +1327,8 @@ input[type="date"].mk-input { color-scheme: dark; }
 @media (max-width: 560px) {
   .mk-person { grid-template-columns: 40px minmax(0, 1fr); }
   .mk-person__meta { grid-column: 2; }
+  .mk-thread { grid-template-columns: minmax(0, 1fr); }
+  .mk-card { justify-self: end; width: min(100%, 290px); }
 }
 
 @media (max-width: 700px) {

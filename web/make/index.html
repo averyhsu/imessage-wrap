@@ -193,7 +193,7 @@
             <textarea class="mk-textarea" id="paste-text" rows="7" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="#dates&#10;2026-03-14T21:41:07-07:00&#10;2026-03-14T21:41:30-07:00&#10;#senders&#10;Maya&#10;Dev"></textarea>
             <p class="mk-paste__note" id="paste-note" hidden></p>
             <div class="mk-paste__foot">
-              <button type="button" class="mk-btn" id="paste-go" disabled>Read these messages</button>
+              <button type="button" class="mk-btn mk-btn--primary" id="paste-go" disabled>Read these messages</button>
             </div>
           </div>
           <div class="mk-how">
@@ -330,11 +330,14 @@
             <p class="mk-recap__facts" id="recap-facts"></p>
 
             <div class="mk-thread" id="thread">
+              <div class="mk-thread__say">
+                <p class="mk-guide">Paste the link on its own line in the group chat. Everyone can open it, no app needed.</p>
+                <p class="mk-thread__meta" id="link-meta"></p>
+              </div>
               <a class="mk-card" id="open-card" target="_blank" rel="noopener" aria-label="Open the story in a new tab">
                 <img src="../assets/og.png" alt="" width="1200" height="630">
                 <span class="mk-card__meta"><b>Your group chat, in review</b><span data-host></span></span>
               </a>
-              <p class="mk-thread__meta" id="link-meta"></p>
             </div>
 
             <div class="mk-actions">
@@ -344,7 +347,6 @@
             </div>
             <label class="sr-only" for="link">The link to send</label>
             <input class="mk-linkfield" type="text" id="link" readonly spellcheck="false">
-            <p class="mk-guide">Paste the link on its own line in the group chat. Everyone can open it, no app needed.</p>
             <p class="mk-trim" id="trim" hidden></p>
 
             <section class="mk-inside" aria-labelledby="inside-title">

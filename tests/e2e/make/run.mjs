@@ -3,7 +3,7 @@
 //   npm run test:make                       everything; exits non-zero on any failure
 //   node tests/e2e/make/run.mjs --only=mac,paste
 //
-// Sections: mac, nowal, backup, paste, sample, rename, guards, keyboard, matrix, shots.
+// Sections: mac, nowal, search, backup, paste, sample, rename, guards, keyboard, matrix, shots.
 //
 // The invented Messages databases are built into a temporary folder with
 // tests/fixtures/build_fixture.py and deleted afterwards; nothing is read from a real device
@@ -506,6 +506,32 @@ await section('nowal', 'Mac: chat.db alone warns, adding chat.db-wal fixes it', 
   await t.close();
 
   s.clean('nowal');
+  await s.close();
+});
+
+// ── many chats: search ─────────────────────────────────────────────────────────────────
+await section('search', 'Many group chats: the list can be searched', async () => {
+  const many = path.join(EXTRA, 'many/chat.db');
+  const expected = cliChats(['--db', many, '--no-contacts']).chats.map(brief);
+  const s = await open({ viewport: VIEWPORTS['phone-390'] });
+  const { page } = s;
+  await addMac(page, [many]);
+  eq(await listed(page), expected, 'twelve chats, busiest first, as the CLI lists them');
+  ok(await visible(page, '#chat-search-wrap'), 'with this many chats there is a search box');
+  await page.fill('#chat-search', 'pickle');
+  eq((await listed(page)).map((c) => c.name), ['Pickleball Sundays'], 'typing part of a name filters the list');
+  await page.fill('#chat-search', '0107003');
+  eq((await listed(page)).length, 9, 'part of a member\'s number finds the chats that person is in');
+  await page.fill('#chat-search', 'no such chat');
+  ok((await listed(page)).length === 0 && await visible(page, '#chats-empty'), 'nothing found: the page says so');
+  await page.fill('#chat-search', '');
+  eq((await listed(page)).length, 12, 'clearing the search brings every chat back');
+  await page.focus('.mk-chat[data-chat-id="1"]');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('#step-tune.is-active', { timeout: 30000 });
+  ok((await text(page, '#chat-summary')).includes('Pickleball Sundays'), 'a chat can be chosen from the keyboard');
+  eq(await overflow(page), [], 'no sideways overflow');
+  s.clean('search');
   await s.close();
 });
 

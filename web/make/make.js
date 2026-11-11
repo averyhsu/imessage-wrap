@@ -529,6 +529,8 @@
     clearTimeout(computeTimer);
     computeRun += 1;
     computePending = false;
+    computeBusy = false;
+    computeAgain = false;
     ['source', 'chat', 'tune', 'recap'].forEach(clearError);
     ['source', 'chat', 'recap'].forEach(idle);
   }
@@ -1301,6 +1303,8 @@
   var computeTimer = 0;
   var computeRun = 0;
   var computePending = false;     // a recount is scheduled or running
+  var computeBusy = false;        // the worker is counting right now
+  var computeAgain = false;       // ... and something changed since it started
 
   /** Something in step 3 changed. */
   function changed() {
@@ -1334,20 +1338,32 @@
     focusStep('recap');
   }
 
+  /**
+   * Count again with what step 3 says now. One count at a time: on a very large chat a
+   * count takes a moment, and changes made meanwhile are picked up by one more run at the
+   * end instead of queueing a run per keystroke.
+   */
   function compute() {
     clearTimeout(computeTimer);
-    var run = ++computeRun;
     computePending = true;
+    if (computeBusy) { computeAgain = true; return; }
+    computeBusy = true;
+    computeAgain = false;
+    var run = ++computeRun;
     if (!S.stats) working('recap', 'Counting\u2026');
     ask('compute', { options: computeOptions() }, function (stage, detail) {
       if (run === computeRun && !S.stats) progressFor('recap')(stage, detail);
     }).then(function (result) {
       if (run !== computeRun) return;
+      computeBusy = false;
+      if (computeAgain) { compute(); return; }
       computePending = false;
       idle('recap');
       onStats(result.stats);
     }, function (error) {
       if (run !== computeRun) return;
+      computeBusy = false;
+      if (computeAgain) { compute(); return; }
       computePending = false;
       idle('recap');
       $('recap').hidden = true;
@@ -1563,7 +1579,7 @@
     meta.textContent = '';
     if (text) { meta.textContent = text; return; }
     if (!link) return;
-    rich(meta, ['This is the message you send \u00B7 ', { b: num(link.length) }, ' of ' + num(MAX_LINK) + ' characters']);
+    rich(meta, ['The link is ', { b: num(link.length) }, ' of the ' + num(MAX_LINK) + ' characters a message link can be.']);
     meta.setAttribute('data-length', link.length);
   }
 
