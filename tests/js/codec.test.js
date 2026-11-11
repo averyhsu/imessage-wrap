@@ -64,8 +64,8 @@ test('decode rejects garbage with a WrappedCodecError', () => {
 
 test('parseLocation: fragment, query, demo and embed forms', () => {
   const base = 'https://example.test/app/';
-  assert.deepStrictEqual(Codec.parseLocation(base), { payload: null, source: null, demo: false, embed: null });
-  assert.deepStrictEqual(Codec.parseLocation(base + '?demo=1'), { payload: null, source: null, demo: true, embed: null });
+  assert.deepStrictEqual(Codec.parseLocation(base), { payload: null, source: null, demo: false, embed: null, damaged: false });
+  assert.deepStrictEqual(Codec.parseLocation(base + '?demo=1'), { payload: null, source: null, demo: true, embed: null, damaged: false });
   assert.equal(Codec.parseLocation(base + '?w1=abc_-DEF').payload, 'abc_-DEF');
   assert.equal(Codec.parseLocation(base + '?w1=abc_-DEF').source, 'query');
   assert.equal(Codec.parseLocation(base + '#w1=abc').source, 'fragment');
@@ -78,6 +78,32 @@ test('parseLocation: fragment, query, demo and embed forms', () => {
   assert.equal(Codec.parseLocation({ hash: '', search: '?utm=1&w1=xyz&x=2' }).payload, 'xyz');
 });
 
+test('parseLocation: a w1 parameter with nothing usable in it is reported as damaged', () => {
+  const base = 'https://example.test/app/';
+  for (const bad of ['#w1=!!!', '#w1=', '#w1', '?w1=***', '?w1=', '#w1=%20%20', '?embed=ios#w1=!!!']) {
+    const got = Codec.parseLocation(base + bad);
+    assert.equal(got.payload, null, bad);
+    assert.equal(got.source, null, bad);
+    assert.equal(got.damaged, true, bad + ' is a broken link, not "no link"');
+  }
+  assert.equal(Codec.parseLocation(base + '?embed=ios#w1=!!!').embed, 'ios');
+  // A usable payload anywhere rescues the link.
+  assert.deepStrictEqual(Codec.parseLocation(base + '?w1=GOOD#w1=!!!'), { payload: 'GOOD', source: 'query', demo: false, embed: null, damaged: false });
+  // No w1 at all is simply not a recap link.
+  for (const none of ['', '#', '?', '#about', '?demo=1', '#w2=abc', '?xw1=abc']) {
+    assert.equal(Codec.parseLocation(base + none).damaged, false, none);
+  }
+});
+
+test('parseLocation: parameter names cannot reach Object.prototype', () => {
+  const base = 'https://example.test/app/';
+  for (const odd of ['?__proto__=1&constructor=2', '#toString=x&hasOwnProperty=y', '?__proto__[embed]=ios', '#constructor.prototype.demo=1']) {
+    assert.deepStrictEqual(Codec.parseLocation(base + odd), { payload: null, source: null, demo: false, embed: null, damaged: false }, odd);
+  }
+  assert.equal({}.embed, undefined, 'nothing leaked onto Object.prototype');
+  assert.equal({}.demo, undefined);
+});
+
 test('buildLink: the demo recap fits without trimming', () => {
   const plan = Codec.planLink(vector.stats, { quotes: true });
   assert.deepStrictEqual(plan.steps, []);
@@ -85,7 +111,19 @@ test('buildLink: the demo recap fits without trimming', () => {
   assert.ok(plan.length <= 4800);
   assert.equal(plan.url, Codec.buildLink(vector.stats, { quotes: true }));
   assert.deepStrictEqual(Codec.decode(Codec.parseLocation(plan.url).payload), vector.stats);
-  assert.ok(Codec.buildLink(vector.stats, { form: 'query' }).startsWith(Config.BASE_URL + '?w1='));
+});
+
+test('buildLink: a recap only ever goes in the #fragment, never in the query string', () => {
+  // The query form would put the recap in the request line of whoever serves the page.
+  const variants = [undefined, { quotes: true }, { form: 'query' }, { form: 'query', quotes: true }, { base: 'https://example.test/x/' }, { base: 'https://example.test/x/?utm=1' }, { base: 'https://example.test/x/#old' }];
+  for (const opts of variants) {
+    const url = new URL(Codec.buildLink(vector.stats, opts));
+    assert.ok(!url.searchParams.has('w1'), JSON.stringify(opts) + ': no w1 in the query string');
+    assert.match(url.hash, /^#w1=[A-Za-z0-9_-]+$/, JSON.stringify(opts) + ': payload is the whole fragment');
+    assert.ok(!(url.origin + url.pathname + url.search).includes(url.hash.slice(4, 40)), 'the payload appears nowhere before the #');
+  }
+  assert.equal(new URL(Codec.buildLink(vector.stats)).search, '', 'the default link has no query string at all');
+  assert.equal(Codec.buildLink(vector.stats, { base: 'https://example.test/x/#old' }).split('#').length, 2, 'an old fragment on the base is replaced, not appended to');
 });
 
 test('buildLink: message text is opt-in (no quotes unless asked)', () => {

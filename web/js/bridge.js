@@ -18,7 +18,7 @@
   }
 
   var Bridge = {
-    /** Turned on by the app when the page is loaded with ?embed=ios. */
+    /** Turned on by the app when the page is loaded with ?embed=ios inside the native shell. */
     enable: function (on) { enabled = on !== false; },
     isEnabled: function () { return enabled; },
     /** True when a native handler is actually listening. */

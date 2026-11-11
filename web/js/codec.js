@@ -132,9 +132,16 @@
     } }
   ];
 
-  function linkFor(base, payload, form) {
+  /**
+   * The recap always rides in the #fragment, which browsers never send to a server. There
+   * is deliberately no way to build the ?w1= form here: the page still reads it (some
+   * transports drop fragments), but nothing this site produces may put a recap in a
+   * request line.
+   */
+  function linkFor(base, payload) {
     var b = String(base);
-    if (form === 'query') return b + (b.indexOf('?') === -1 ? '?' : '&') + Config.PAYLOAD_KEY + '=' + payload;
+    var hash = b.indexOf('#');
+    if (hash !== -1) b = b.slice(0, hash);
     return b + '#' + Config.PAYLOAD_KEY + '=' + payload;
   }
 
@@ -144,7 +151,6 @@
    *                  DECISIONS D12): by default every quote is replaced with "".
    *   opts.base      base URL. Default WrappedConfig.BASE_URL.
    *   opts.maxLength whole-URL budget. Default 4,800.
-   *   opts.form      'fragment' (default) or 'query'.
    * Returns { url, payload, length, steps, stats } where `steps` lists the trim steps that
    * had to be applied and `stats` is exactly what the link carries.
    * Throws a WrappedCodecError with code 'too_long' when nothing fits.
@@ -153,7 +159,6 @@
     opts = opts || {};
     var base = opts.base || Config.BASE_URL;
     var max = opts.maxLength || Config.MAX_URL_LENGTH;
-    var form = opts.form === 'query' ? 'query' : 'fragment';
 
     var working = clone(stats);
     if (opts.quotes !== true && Array.isArray(working.most_reacted)) {
@@ -162,12 +167,12 @@
 
     var applied = [];
     var payload = encode(working);
-    var url = linkFor(base, payload, form);
+    var url = linkFor(base, payload);
     for (var i = 0; url.length > max && i < TRIM_STEPS.length; i++) {
       TRIM_STEPS[i].apply(working);
       applied.push(TRIM_STEPS[i].id);
       payload = encode(working);
-      url = linkFor(base, payload, form);
+      url = linkFor(base, payload);
     }
     if (url.length > max) {
       throw CodecError(
@@ -182,8 +187,9 @@
 
   // ── reading a location ─────────────────────────────────────────────────────
 
+  /** "a=1&b=2" → a map with no prototype, so a parameter name can never shadow anything. */
   function parseParams(text) {
-    var out = {};
+    var out = Object.create(null);
     String(text || '').replace(/^[#?]/, '').split('&').forEach(function (pair) {
       if (!pair) return;
       var eq = pair.indexOf('=');
@@ -195,8 +201,11 @@
 
   /**
    * Read what a URL asks for. Accepts a Location, a URL or a string.
-   * Returns { payload, source, demo, embed } where payload is null when absent and
-   * source is 'fragment' | 'query' | null. The fragment wins over the query string.
+   * Returns { payload, source, demo, embed, damaged }:
+   *   payload  the cleaned payload, or null
+   *   source   'fragment' | 'query' | null (the fragment wins over the query string)
+   *   damaged  true when the URL has a w1 parameter but nothing usable in it, so the page
+   *            can say "this link is broken" instead of pretending there was no link
    */
   function parseLocation(loc) {
     var hash = '';
@@ -213,16 +222,17 @@
     var hp = parseParams(hash);
     var qp = parseParams(search);
     var key = Config.PAYLOAD_KEY;
-    var payload = null;
-    var source = null;
-    if (hp[key]) { payload = cleanPayload(hp[key]); source = 'fragment'; }
-    else if (qp[key]) { payload = cleanPayload(qp[key]); source = 'query'; }
-    var demo = qp.demo || hp.demo;
+    var fromHash = hp[key] === undefined ? '' : cleanPayload(hp[key]);
+    var fromQuery = qp[key] === undefined ? '' : cleanPayload(qp[key]);
+    var payload = fromHash || fromQuery || null;
+    var demo = qp.demo === undefined ? hp.demo : qp.demo;
+    var embed = qp.embed === undefined ? hp.embed : qp.embed;
     return {
-      payload: payload || null,
-      source: payload ? source : null,
+      payload: payload,
+      source: fromHash ? 'fragment' : (fromQuery ? 'query' : null),
       demo: demo === '1' || demo === 'true',
-      embed: qp.embed || hp.embed || null
+      embed: embed ? String(embed) : null,
+      damaged: !payload && (hp[key] !== undefined || qp[key] !== undefined)
     };
   }
 

@@ -5,7 +5,9 @@
  *   #w1=<payload>        the recap carried in the fragment      (docs/SCHEMA.md §5)
  *   ?w1=<payload>        the same, for transports that drop fragments
  *   ?demo=1              the built-in invented demo
- *   ?embed=ios           inside the iOS shell: no landing page, bridge on (docs/SCHEMA.md §6)
+ *   ?embed=ios           inside the iOS shell: no landing page, bridge on (docs/SCHEMA.md §6).
+ *                        Only when window.webkit.messageHandlers.wrapped exists; in a plain
+ *                        browser the same URL plays as an ordinary web story.
  *
  * Also exposes window.WrappedApp for hosts:
  *   WrappedApp.load(statsOrJson)   play a recap handed over directly (native → web)
@@ -154,16 +156,41 @@
 
   // ── routing ────────────────────────────────────────────────────────────────
 
+  /**
+   * ?w1= puts the recap in the request line, so whoever served this page has seen it once.
+   * Keep it out of every later request, bookmark and browser share by moving it behind
+   * the # (which is never sent). Nothing this site produces uses the query form; this is
+   * for links that arrive that way from elsewhere.
+   */
+  function moveToFragment(payload) {
+    if (!/^https?:$/.test(root.location.protocol)) return;
+    try {
+      var rest = root.location.search.replace(/^\?/, '').split('&').filter(function (pair) {
+        return pair && pair.split('=')[0] !== Config.PAYLOAD_KEY;
+      });
+      var url = root.location.pathname + (rest.length ? '?' + rest.join('&') : '') + '#' + Config.PAYLOAD_KEY + '=' + payload;
+      history.replaceState(history.state, '', url);
+    } catch (e) { /* leave the address as it is */ }
+  }
+
   function route() {
     var loc = Codec.parseLocation(root.location);
-    Bridge.enable(!!loc.embed);
+    // Embed mode needs the native shell on the other end of the bridge. A plain browser
+    // that opens an ?embed= link gets the ordinary web story, with its way out.
+    Bridge.enable(!!loc.embed && Bridge.isConnected());
     current = null;
 
     if (loc.payload) {
+      if (loc.source === 'query') moveToFragment(loc.payload);
       var stats;
       try { stats = Data.normalize(Codec.decode(loc.payload)); } catch (e) { showError(e); return; }
       current = { stats: stats, payload: loc.payload, demo: false };
       play(stats, current);
+      return;
+    }
+    if (loc.damaged) {
+      // There was a w1= but nothing readable in it: say so, rather than act as if no link came.
+      showError(new Error('The recap link is damaged (nothing readable in it).'));
       return;
     }
     if (loc.demo && root.WRAPPED_DEMO) {
@@ -171,7 +198,7 @@
       play(current.stats, current);
       return;
     }
-    if (loc.embed) {
+    if (Bridge.isEnabled()) {
       // The shell may hand the recap over with WrappedApp.load(); until then, stay quiet.
       Story.destroy();
       setMode('is-embed');
