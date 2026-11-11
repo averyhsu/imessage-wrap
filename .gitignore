@@ -50,3 +50,6 @@ xcuserdata/
 *.xcresult/
 *.ipa
 *.dSYM/
+
+# Local agent worktrees / tool state
+.claude/
