@@ -14,8 +14,12 @@ on:
       - ".github/workflows/ios.yml"
   workflow_dispatch:
 
+# A newer push cancels the run it supersedes. Several authors push to the same branch, so
+# there are two lanes per branch: commits whose subject starts with "iOS" (native changes)
+# and everything else (web changes that only need re-bundling). Without the lanes, frequent
+# web pushes would cancel every native run before it could finish.
 concurrency:
-  group: ios-${{ github.ref }}
+  group: ios-${{ github.ref }}-${{ startsWith(github.event.head_commit.message, 'iOS') && 'native' || 'other' }}
   cancel-in-progress: true
 
 permissions:
