@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Recap (placeholder story)</title>
+  <link rel="stylesheet" href="placeholder.css">
+</head>
+<body>
+  <!--
+    Placeholder story used by the iOS shell until the real web story (../../web/) exists.
+    It implements the embed bridge of docs/SCHEMA.md §6 (ready / slide / haptic / share /
+    send / close) so the native side can be exercised end to end. Classic scripts only,
+    no network requests. ios/scripts/sync-web.sh bundles the real story instead as soon
+    as web/index.html exists.
+  -->
+  <div id="progress" aria-hidden="true"></div>
+  <main id="stage" aria-live="polite"></main>
+  <div id="tag">placeholder story</div>
+  <script src="placeholder.js"></script>
+</body>
+</html>
