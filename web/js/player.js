@@ -131,6 +131,7 @@
 
     layout();
     goTo(0, 'start');
+    hold('hidden', !!document.hidden); // opened in a background tab: wait until it is looked at
     S.last = now();
     S.raf = root.requestAnimationFrame(tick);
 
