@@ -477,6 +477,18 @@ class OtherCommands(EngineCase):
         self.assertIn("Text: DELIVERED", out)
         self.assertIn("Verified", out)
 
+    def test_send_test_with_image_sends_the_text_then_one_staged_picture(self):
+        (code, out, err), runs = self.send_test("--chat", "taco", "--with-image", stdin_tty=True, answers=["send"])
+        self.assertEqual(code, 0, err + out)
+        self.assertEqual(len(runs), 2)
+        self.assertEqual(runs[0][2], "")
+        self.assertEqual(runs[1][1], "")
+        staged = Path(runs[1][2])
+        self.assertEqual(staged.parent, self.home / "Pictures" / "Threadback")  # where Messages may read from
+        self.assertTrue(staged.is_file())
+        self.assertIn("Text: DELIVERED", out)
+        self.assertIn("Image: DELIVERED", out)
+
     def test_send_test_refuses_commands_and_ambiguous_chats(self):
         (code, _, err), runs = self.send_test("--chat", "taco", "--text", "/wrapped", stdin_tty=True, answers=["send"])
         self.assertEqual(code, 2)

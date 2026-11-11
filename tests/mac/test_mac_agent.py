@@ -216,6 +216,19 @@ class AgentCase(unittest.TestCase):
         again = self.make()
         self.assertEqual(again.run_once(), 1)
 
+    def test_idle_passes_do_not_rewrite_the_state_file(self):
+        agent = self.started()
+        path = self.dir / "home" / "state.json"
+        self.assertEqual(oct(path.stat().st_mode & 0o777), "0o600")
+        before = path.stat().st_mtime_ns
+        inode = path.stat().st_ino
+        for _ in range(3):
+            self.assertEqual(agent.run_once(), 0)
+        self.assertEqual((path.stat().st_mtime_ns, path.stat().st_ino), (before, inode))
+        self.db.add_message("hello", chat=self.group, handle=self.maya, when=self.now)
+        agent.run_once()
+        self.assertEqual(State.load(path).cursor, self.db.max_rowid())  # real changes are still written
+
     def test_cursor_ahead_of_database_resets_to_now(self):
         path = self.dir / "home" / "state.json"
         path.parent.mkdir(parents=True)

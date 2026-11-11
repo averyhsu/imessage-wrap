@@ -35,6 +35,7 @@ class State:
     cooldowns: Dict[str, float] = field(default_factory=dict)  # chat key -> unix time of last reply
     own_rowids: List[int] = field(default_factory=list)  # message rows the helper sent
     consent: Dict[str, object] = field(default_factory=dict)  # {"send": scope, "ai": scope}
+    _saved: Optional[str] = field(default=None, repr=False, compare=False)  # what is on disk
 
     @classmethod
     def load(cls, path: os.PathLike) -> "State":
@@ -62,23 +63,32 @@ class State:
             state.consent = dict(consent)
         return state
 
+    def _payload(self) -> str:
+        return json.dumps(
+            {
+                "v": 1,
+                "cursor": self.cursor,
+                "cooldowns": self.cooldowns,
+                "own_rowids": self.own_rowids[-MAX_OWN_ROWIDS:],
+                "consent": self.consent,
+            },
+            indent=1,
+            sort_keys=True,
+        )
+
     def save(self) -> None:
-        """Atomic write (temp file + rename), private to the user."""
+        """Atomic write (temp file + rename), private to the user. Does nothing when
+        the file already holds exactly this state (the loop calls it every pass)."""
         if self.path is None:
             return
+        text = self._payload()
+        if text == self._saved and self.path.exists():
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "v": 1,
-            "cursor": self.cursor,
-            "cooldowns": self.cooldowns,
-            "own_rowids": self.own_rowids[-MAX_OWN_ROWIDS:],
-            "consent": self.consent,
-        }
         fd, tmp = tempfile.mkstemp(prefix=".state-", suffix=".json", dir=str(self.path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, indent=1, sort_keys=True)
-                fh.write("\n")
+                fh.write(text + "\n")
             os.chmod(tmp, 0o600)
             os.replace(tmp, self.path)
         except BaseException:
@@ -87,6 +97,7 @@ class State:
             except OSError:
                 pass
             raise
+        self._saved = text
 
     def remember_own(self, rowid: Optional[int]) -> None:
         if rowid is None:
