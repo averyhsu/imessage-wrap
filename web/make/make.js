@@ -10,6 +10,10 @@
  * Privacy rules this file keeps:
  *  - nothing is requested from any other origin, and nothing is stored;
  *  - message text goes into the link only after the person switches it on (default off);
+ *  - the preview frame is given exactly the payload of the link, never more: the story in
+ *    it can copy and share its own link, so what it holds is what could be sent;
+ *  - people go by first names unless the person asks for the full ones (a full name in an
+ *    address book is the owner's own label);
  *  - raw phone numbers and e-mail addresses are shown on this device as a hint for naming
  *    people and telling chats apart, and never enter the stats, the link or the preview.
  *
@@ -33,7 +37,6 @@
   var Glyphs = root.WrappedGlyphs;
 
   var MAX_LINK = Config.MAX_URL_LENGTH;
-  var PREVIEW_MAX = 20000;          // the story refuses payloads much longer than this
   var HELP_URL = 'https://github.com/averyhsu/imessage-wrap/blob/main/docs/MAC.md';
   var DEVICE_TZ = (function () {
     try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (error) { return ''; }
@@ -47,7 +50,8 @@
     chats: [],
     chat: null,         // {id, name, named, members, messages, last_unix, single}
     people: [],         // from the worker: [{key, name, named, handles, messages, me}]
-    names: {},          // person key -> the name typed for them
+    names: {},          // person key -> the name to show for them (typed, or a first name)
+    shortened: null,    // person key -> {short, before}: who was switched to a first name
     me: 'Me',
     chatName: '',       // typed chat name ("" = the chat's own)
     period: 'year',
@@ -533,6 +537,7 @@
       S.chat = null;
       S.people = [];
       S.names = {};
+      S.shortened = null;
       S.me = 'Me';
       S.chatName = '';
     }
@@ -1124,6 +1129,10 @@
   /** Open step 3 for S.chat. `year` (optional): the calendar year the chat is known to cover. */
   function startTune(year) {
     S.names = {};
+    S.shortened = null;
+    // First names to begin with. A full name from an address book ("Dave plumber") is the
+    // owner's private label for someone, not something to hand to the whole chat.
+    useFirstNames();
     S.me = 'Me';
     S.chatName = S.chat.named ? S.chat.name : '';
     S.start = '';
@@ -1217,9 +1226,15 @@
         input.setAttribute('aria-label', 'Name for ' + (person.handles[0] || person.name));
       }
       input.addEventListener('input', function () {
+        var typed = input.value.trim();
+        var first = S.shortened && S.shortened[person.key] ? S.shortened[person.key].short : '';
         if (person.me) S.me = input.value;
-        else if (input.value.trim() && input.value.trim() !== person.name) S.names[person.key] = input.value;
-        else delete S.names[person.key];
+        else if (typed && typed !== person.name) S.names[person.key] = input.value;
+        else if (!typed && first && person.named) S.names[person.key] = first;   // emptied: back to the first name
+        else {
+          delete S.names[person.key];
+          if (S.shortened) delete S.shortened[person.key];
+        }
         peopleTags();
         changed();
       });
@@ -1235,7 +1250,7 @@
     if (unnamed) {
       hint.textContent = (unnamed === 1 ? 'One person has' : unnamed + ' people have') +
         ' no name yet, so they would show as the last four digits of their number, like \u201C\u20261234\u201D. Type a name to replace it. ' +
-        'The full numbers below are only here to help you: they never go into the recap.';
+        'The full numbers shown next to each field are only there to help you: they never go into the recap.';
     }
     peopleTags();
   }
@@ -1253,23 +1268,56 @@
       var item = items[index];
       var name = shownName(person);
       item.querySelector('.mk-av').textContent = initial(name);
+      if (!person.me && person.named) {
+        item.querySelector('input').placeholder = S.shortened && S.shortened[person.key] ? S.shortened[person.key].short : person.name;
+      }
       var meta = item.querySelector('.mk-person__meta');
       meta.textContent = '';
       if (person.me) meta.appendChild(el('span', 'mk-tag mk-tag--you', 'You'));
       if (!person.me && !person.named && !(S.names[person.key] || '').trim()) meta.appendChild(el('span', 'mk-tag mk-tag--new', 'No name yet'));
       if (counts[name] > 1) meta.appendChild(el('span', 'mk-tag mk-tag--merge', 'Counted together'));
+      // Hints for the person at the keyboard only: the name as their address book has it,
+      // and the raw number or address. Neither goes into the recap.
+      if (!person.me && person.named && name !== person.name) meta.appendChild(el('span', 'mk-raw-handle', person.name));
       if (person.handles.length) meta.appendChild(el('span', 'mk-raw-handle', person.handles.join(', ')));
       meta.appendChild(el('span', '', plural(person.messages, 'message')));
       if (!person.me && /\s/.test(name)) spaced = true;
     });
-    $('first-names').hidden = !spaced;
+    var shortened = S.shortened && Object.keys(S.shortened).length > 0;
+    $('names-row').hidden = !(spaced || shortened);
+    $('names-note').textContent = shortened
+      ? 'First names to start with: the names in your address book are your own labels for people.'
+      : 'Full names are your own labels for people. The recap can use first names instead.';
+    $('first-names').textContent = shortened ? 'Use the full names' : 'Use first names only';
   }
 
   /**
-   * Shorten "Sam Rivera" to "Sam", or to "Sam R." when someone else is a Sam too. Works on
-   * the distinct names, so people who are counted together stay together and nobody is
-   * merged by accident.
+   * "Sam Rivera" -> "Sam", or "Sam R." when someone else is a Sam too, for every name in
+   * `names` that has more than one word. `taken` holds the names that stay as they are.
+   * Works on distinct names, so people who are counted together stay together and nobody
+   * is merged by accident. Returns {full name: short name}.
    */
+  function shortNames(names, taken) {
+    var used = {};
+    Object.keys(taken).forEach(function (name) { used[name] = true; });
+    var firsts = {};
+    names.forEach(function (name) {
+      var first = name.split(/\s+/)[0];
+      firsts[first] = (firsts[first] || 0) + 1;
+    });
+    var short = {};
+    names.forEach(function (name) {
+      var tokens = name.split(/\s+/);
+      var candidate = tokens[0];
+      if (firsts[candidate] > 1 || used[candidate]) candidate = tokens[0] + ' ' + Array.from(tokens[tokens.length - 1])[0] + '.';
+      if (used[candidate]) return;              // still a clash: this name stays as it is
+      used[candidate] = true;
+      short[name] = candidate;
+    });
+    return short;
+  }
+
+  /** Switch everyone with a longer name to a first name. Remembers what it replaced. */
   function useFirstNames() {
     var taken = {};
     var long = [];
@@ -1278,27 +1326,34 @@
       if (person.me || !/\s/.test(name)) taken[name] = true;
       else if (long.indexOf(name) === -1) long.push(name);
     });
-    var firsts = {};
-    long.forEach(function (name) {
-      var first = name.split(/\s+/)[0];
-      firsts[first] = (firsts[first] || 0) + 1;
-    });
-    var short = {};
-    long.forEach(function (name) {
-      var tokens = name.split(/\s+/);
-      var candidate = tokens[0];
-      if (firsts[candidate] > 1 || taken[candidate]) candidate = tokens[0] + ' ' + Array.from(tokens[tokens.length - 1])[0] + '.';
-      if (taken[candidate]) return;             // still a clash: this name stays as it is
-      taken[candidate] = true;
-      short[name] = candidate;
-    });
+    var short = shortNames(long, taken);
+    S.shortened = {};
     S.people.forEach(function (person, index) {
       if (person.me) return;
       var to = short[shownName(person)];
       if (!to) return;
+      S.shortened[person.key] = { short: to, before: S.names[person.key] };
       S.names[person.key] = to;
-      $('person-' + index).value = to;
+      var input = $('person-' + index);
+      if (input) input.value = to;
     });
+  }
+
+  /** Undo useFirstNames for every name that has not been changed by hand since. */
+  function useFullNames() {
+    var record = S.shortened || {};
+    S.people.forEach(function (person, index) {
+      var was = record[person.key];
+      if (!was || S.names[person.key] !== was.short) return;
+      if (was.before === undefined) delete S.names[person.key]; else S.names[person.key] = was.before;
+      var input = $('person-' + index);
+      if (input) input.value = S.names[person.key] || person.name;
+    });
+    S.shortened = null;
+  }
+
+  function toggleFirstNames() {
+    if (S.shortened && Object.keys(S.shortened).length) useFullNames(); else useFirstNames();
     peopleTags();
     changed();
   }
@@ -1402,13 +1457,15 @@
     }
   }
 
-  function previewLink(stats) {
+  /**
+   * The address the preview frame plays: this site's own story page with EXACTLY the
+   * payload of the link being shared. What you see is what you send. The story can copy
+   * and share its own link, so it must never be handed more than the link holds: with the
+   * quotes switch off there is no message text in the frame at all.
+   */
+  function previewAddress(link) {
     var base = new URL('../index.html', root.location.href).href.split('#')[0];
-    try {
-      return Engine.fitLink(stats, { quotes: true, base_url: base, max_length: PREVIEW_MAX }).url;
-    } catch (error) {
-      return S.fits && S.fits.off ? base + '#' + S.fits.off.url.split('#')[1] : base;
-    }
+    return base + '#' + link.url.slice(link.url.indexOf('#') + 1);
   }
 
   function onStats(stats) {
@@ -1446,7 +1503,6 @@
     clearError('recap');
     $('recap').hidden = false;
     renderRecap();
-    showPreview(previewLink(stats));
     say('Your recap is ready: ' + plural(stats.totals.messages, 'message') + '.');
   }
 
@@ -1474,12 +1530,9 @@
   function replayPreview() {
     var frame = $('preview');
     try {
-      frame.contentWindow.WrappedApp.route();
+      frame.contentWindow.WrappedApp.route();   // the story page: start over
     } catch (error) {
-      var url = S.previewUrl;
-      S.previewUrl = '';
-      frame.removeAttribute('src');
-      showPreview(url);
+      if (S.previewUrl) frame.src = S.previewUrl;   // anything else in the frame: load the story
     }
   }
 
@@ -1487,11 +1540,8 @@
   function onPreviewLoad() {
     var frame = $('preview');
     try {
-      if (/\/make\/(index\.html)?$/.test(frame.contentWindow.location.pathname)) {
-        var url = S.previewUrl;
-        S.previewUrl = '';
-        frame.removeAttribute('src');
-        if (url) showPreview(url);
+      if (S.previewUrl && /\/make\/(index\.html)?$/.test(frame.contentWindow.location.pathname)) {
+        frame.src = S.previewUrl;
       }
     } catch (error) { /* not ours to look at */ }
   }
@@ -1589,6 +1639,9 @@
 
     renderQuotes(quotesOn);
     $('raw-json').textContent = JSON.stringify(link.stats, null, 2);
+
+    // The frame plays the very link shown here: flipping the switch rebuilds both.
+    showPreview(previewAddress(link));
 
     $('share').hidden = typeof navigator.share !== 'function';
   }
@@ -1815,7 +1868,7 @@
       fillPeriod();
       changed();
     });
-    $('first-names').addEventListener('click', useFirstNames);
+    $('first-names').addEventListener('click', toggleFirstNames);
     $('create').addEventListener('click', createRecap);
 
     $('copy').addEventListener('click', copyLink);

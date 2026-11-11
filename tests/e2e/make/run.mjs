@@ -2,6 +2,7 @@
 //
 //   npm run test:make                       everything; exits non-zero on any failure
 //   node tests/e2e/make/run.mjs --only=mac,paste
+//   npm run shots:make                      rewrite docs/screenshots/web/make-*.png
 //
 // Sections: mac, nowal, progress, search, backup, paste, sample, rename, guards, keyboard,
 // matrix, shots.
@@ -10,7 +11,10 @@
 // tests/fixtures/build_fixture.py and deleted afterwards; nothing is read from a real device
 // and no database is ever written inside the repository. What the page computes is compared
 // with the Python command-line tool (`python3 -m wrapped ...`) on the same files.
-// Screenshots go to docs/screenshots/web/make-*.png.
+//
+// A plain run leaves the repository as it found it: its screenshots go to
+// test-results/make-screenshots/ (ignored by git). Only --update-screenshots rewrites the
+// committed pictures in docs/screenshots/web/.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,7 +32,8 @@ Engine.useCodec(require(path.join(WEB, 'js/vendor/fflate.min.js')));
 
 const PYTHON = process.env.PYTHON || 'python3';
 const LA = 'America/Los_Angeles';
-const SHOTS = path.join(ROOT, 'docs/screenshots/web');
+const UPDATE_SHOTS = process.argv.includes('--update-screenshots');
+const SHOTS = path.join(ROOT, UPDATE_SHOTS ? 'docs/screenshots/web' : 'test-results/make-screenshots');
 const VIEWPORTS = {
   'phone-360': { width: 360, height: 740, mobile: true },
   'phone-390': { width: 390, height: 844, mobile: true },
@@ -161,7 +166,15 @@ async function open(opts = {}) {
   const page = await context.newPage();
   context.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
-  context.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
+  context.on('requestfailed', (r) => {
+    const why = r.failure() ? r.failure().errorText : '';
+    // A load inside the preview frame that was cut short because the frame was sent
+    // somewhere else (a test does that on purpose) is not a failure of the page.
+    let inPreview = false;
+    try { inPreview = r.frame() !== page.mainFrame(); } catch { inPreview = false; }
+    if (why === 'net::ERR_ABORTED' && inPreview) return;
+    problems.push('requestfailed: ' + r.url() + ' ' + why);
+  });
   if (opts.goto !== false) {
     await page.goto(MAKE + (opts.hash || ''));
     await page.evaluate(() => document.fonts.ready);
@@ -240,7 +253,30 @@ async function matchesCli(page, args, tz, message) {
 }
 
 const decode = (url) => Engine.statsFromUrl(url);
-const localStory = (url) => server.url + '#w1=' + url.split('#w1=')[1];
+const payloadOf = (url) => url.split('#w1=')[1];
+const localStory = (url) => server.url + '#w1=' + payloadOf(url);
+
+/**
+ * Inside the preview frame, go to the story's last slide and press ITS "Copy link".
+ * Returns what lands on the clipboard. (Needs the clipboard permissions.)
+ */
+async function copyFromStory(page) {
+  await page.evaluate(() => navigator.clipboard.writeText('nothing copied yet'));
+  const frame = await previewFrame(page);
+  await frame.evaluate(() => Promise.all([document.fonts.ready, window.WrappedCard.ready()]));
+  await frame.evaluate(() => {
+    const S = window.WrappedStory;
+    S.pause();
+    S.goTo(S.total - 1);
+    S.layout();
+    S.settle();
+    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  });
+  await page.evaluate(() => document.getElementById('preview').scrollIntoView({ block: 'center' }));
+  await frame.locator('.slide.is-active [data-action="copy"]').click();     // a real click, on the story's own button
+  await page.waitForFunction(() => navigator.clipboard.readText().then((value) => value !== 'nothing copied yet'), null, { timeout: 10000 });
+  return page.evaluate(() => navigator.clipboard.readText());
+}
 
 /** Open a recap link on the story page and read the big total from its second slide. */
 async function storyTotal(url) {
@@ -412,6 +448,9 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   ok(!(await visible(page, '#source-notes [data-note="wal_missing"]')), 'no "recent messages may be missing" warning when the -wal is there');
   ok(s.requests.some((u) => u.endsWith('/make/vendor/sql-wasm.wasm')), 'the worker\'s own request (SQLite) is seen by the test, so a foreign one would be too');
   ok(s.requests.some((u) => u.endsWith('/make/worker.js')), 'the work happens in worker.js');
+  eq(page.workers().length, 1, 'one background worker');
+  eq(await page.workers()[0].evaluate(() => ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts'].map((name) => typeof self[name])),
+    ['undefined', 'undefined', 'undefined', 'undefined', 'undefined'], 'which has removed its own network functions before reading the files');
   ok(!(await visible(page, '#chat-search-wrap')), 'no search box for four chats');
 
   // Add the address books afterwards: the same database is read again, now with names.
@@ -432,7 +471,19 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await page.fill('#period-end', '2026-11-10');
   let state = await create(page);
   ok(await visible(page, '#recap'), 'the recap appears');
-  await matchesCli(page, [...base, '--tz', LA, '--start', '2026-01-01', '--end', '2026-11-10'], LA, 'custom range: stats are byte-identical to `wrapped stats`');
+
+  // People go by first names to begin with: a full name in an address book is the owner's
+  // own label for someone. The full name stays in the list as a hint, on this device only.
+  eq(state.stats.senders.map((x) => x.name).sort(), ['Bram', 'Ines', 'Me', 'Sam C.', 'Sam R.', 'Zoë', '…0006'].sort(),
+    'by default people go by first names, with an initial where two share one');
+  ok(!/Calloway|Okoye|Rivera|Chen|Müller/.test(JSON.stringify(decode(state.link.url))), 'so no surname from the address book is in the link');
+  ok((await text(page, '.mk-person[data-person="n:Ines Calloway"]')).includes('Ines Calloway'), 'the full name stays in the list as a hint');
+  eq(await page.inputValue('.mk-person[data-person="n:Sam Rivera"] input'), 'Sam R.', 'and the short name is what the field holds, ready to edit');
+  eq(await text(page, '#first-names'), 'Use the full names', 'full names are one click away');
+  await page.click('#first-names');
+  eq(await page.inputValue('.mk-person[data-person="n:Sam Rivera"] input'), 'Sam Rivera', 'the fields then show the full names');
+
+  await matchesCli(page, [...base, '--tz', LA, '--start', '2026-01-01', '--end', '2026-11-10'], LA, 'custom range, full names: stats are byte-identical to `wrapped stats`');
   state = await snap(page);
   eq(state.stats.totals.messages, 2869, 'the fixture\'s known total for 2026 so far');
 
@@ -450,13 +501,14 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   eq(story.total, state.stats.totals.messages, 'the story opened with the link shows the same total');
   ok(story.title.includes('Taco Tuesday Crew'), 'and the chat\'s name');
 
-  // The preview is the full recap, on this device.
+  // The preview plays the link itself: what you see is what you send.
   const frame = await previewFrame(page);
   ok(await frame.evaluate(() => window.WrappedStory.isActive()), 'the preview plays the real story');
-  const preview = decode(state.preview);
-  eq(preview, state.stats, 'the preview is built from the full stats');
-  ok(new URL(state.preview).origin === origin, 'the preview is loaded from this site');
-  eq(leaks(JSON.stringify(preview)), [], 'no phone number or e-mail address in the preview either');
+  eq(payloadOf(state.preview), payloadOf(link), 'the preview frame is given exactly the payload of the link, nothing more');
+  ok(new URL(state.preview).origin === origin, 'and is loaded from this site');
+  const inFrame = decode(await frame.evaluate(() => location.href));
+  ok(inFrame.most_reacted.every((m) => m.text === ''), 'so with the quotes switch off there is no message text inside the frame');
+  eq(leaks(JSON.stringify(inFrame)), [], 'and no phone number or e-mail address');
 
   // Other periods, the owner's name, another time zone.
   await period(page, 'all');
@@ -480,7 +532,9 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await pick(page, STRESS);
   await period(page, 'all');
   state = await create(page);
-  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'largest chat: byte-identical');
+  ok(state.link.steps === 0 && state.link.length < 3000, `largest chat, first names: the link is short (${state.link.length} characters) and nothing is trimmed`);
+  await page.click('#first-names');                 // full names: fourteen enormous ones
+  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'largest chat, full names: byte-identical');
   state = await snap(page);
   ok(state.link.length <= 4800, `largest chat: the link fits (${state.link.length} characters, quotes off)`);
   ok(await page.locator('#quotes').isEnabled(), 'largest chat: quotes can still be switched on');
@@ -499,7 +553,8 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await pick(page, UNNAMED);
   await period(page, 'all');
   await create(page);
-  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'unnamed chat: byte-identical');
+  await page.click('#first-names');
+  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'unnamed chat, full names: byte-identical');
   state = await snap(page);
   ok(state.stats.chat.name.includes('…') && (await page.getAttribute('#chat-name', 'placeholder')) === state.stats.chat.name, 'unnamed chat: its name is built from the members, masked');
   eq(leaks(JSON.stringify(decode(state.link.url))), [], 'unnamed chat: nothing raw in the link');
@@ -624,6 +679,7 @@ await section('backup', 'iPhone backup: folder, two files, -wal, several backups
   await pick(page, TACO);
   await period(page, 'all');
   await create(page);
+  await page.click('#first-names');                 // the CLI uses the address book's full names
   await matchesCli(page, [String(TACO), '--backup', BACKUP, '--tz', LA, '--all-time'], LA, 'folder pick: stats are byte-identical to `wrapped stats --backup`');
   eq((await snap(page)).stats.meta.source, 'sms.db', 'the source is recorded as sms.db');
   s.clean('backup folder');
@@ -824,6 +880,22 @@ await section('paste', 'Paste / export file: every accepted format, #paste, the 
   ok(await page.locator('#panel-paste details').evaluate((d) => d.open), 'and the list of accepted shapes opens');
   s.clean('export file');
   await s.close();
+
+  // Two lists of different lengths: whatever the importer says about it, the page shows
+  // it word for word, whether the importer goes on with what it could read or refuses.
+  const uneven = '#dates\n2026-03-01T10:00:00-07:00\n2026-03-01T10:05:00-07:00\n2026-03-01T10:09:00-07:00\n2026-03-01T10:12:00-07:00\n#senders\nMaya\nDev\n';
+  const verdict = Import.parseExport(uneven, { tz: LA });
+  ok(verdict.warnings.length > 0, `the importer objects to uneven lists ("${verdict.warnings[0].slice(0, 70)}…")`);
+  s = await open();
+  page = s.page;
+  await page.click('#tab-paste');
+  await page.fill('#paste-text', uneven);
+  await page.click('#paste-go');
+  await page.waitForFunction(() => !document.getElementById('error-source').hidden || document.getElementById('step-tune').classList.contains('is-active'), null, { timeout: 30000 });
+  const where = verdict.rows.length ? '#source-notes' : '#error-source';
+  ok(await visible(page, where) && (await text(page, where)).includes(verdict.warnings[0]), `uneven lists: the importer's message is shown as it is (${verdict.rows.length ? 'as a warning' : 'as an error'})`);
+  s.clean('uneven lists');
+  await s.close();
 });
 
 // ── 5. sample data ─────────────────────────────────────────────────────────────────────
@@ -845,8 +917,7 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   ok((await text(page, '#recap-facts')).includes(state.stats.totals.messages.toLocaleString('en-US') + ' messages'), 'with the headline numbers');
   const frame = await previewFrame(page);
   ok(await frame.evaluate(() => window.WrappedStory.isActive() && window.WrappedStory.total >= 10), 'the preview plays the story');
-  eq(decode(state.preview), state.stats, 'the preview carries the full stats');
-  ok(state.stats.most_reacted.length === 3 && state.stats.most_reacted.every((m) => m.text), 'the full stats have three quotable messages');
+  ok(state.stats.most_reacted.length === 3 && state.stats.most_reacted.every((m) => m.text), 'the stats on this device have three quotable messages');
 
   // Quotes: off by default.
   ok(!(await page.locator('#quotes').isChecked()), 'the quotes switch starts off');
@@ -858,10 +929,26 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   eq(offered, state.stats.most_reacted.map((m) => m.text), 'the three messages are shown word for word before anything is switched on');
   ok(!(await visible(page, '#trim')), 'no "left out" note when nothing was trimmed');
 
+  // The preview frame holds the link and nothing else, so the story's OWN "Copy link"
+  // (on its last slide) cannot give away message text while the switch is off.
+  eq(payloadOf(state.preview), payloadOf(state.link.url), 'switch off: the preview frame is given exactly the link\'s payload');
+  eq(payloadOf(await frame.evaluate(() => location.href)), payloadOf(state.link.url), 'and that is what is loaded in it');
+  const texts = state.stats.most_reacted.map((m) => m.text);
+  const frameText = await frame.evaluate(() => document.body.textContent);
+  ok(texts.every((quote) => !frameText.includes(quote)), 'switch off: none of the message text is anywhere in the preview');
+  let copied = await copyFromStory(page);
+  eq(copied, state.link.url, 'switch off: the story\'s own Copy link gives the very same link');
+  ok(decode(copied).most_reacted.length === 3 && decode(copied).most_reacted.every((m) => m.text === ''), 'switch off: the link copied from inside the story has blank most_reacted text');
+
   // Switch them on.
   await page.locator('#quotes').check({ force: true });
   const on = await snap(page);
   ok(on.quotes && on.link.url !== state.link.url, 'switching on changes the link');
+  eq(payloadOf(on.preview), payloadOf(on.link.url), 'switch on: the preview is rebuilt from the new link');
+  await page.waitForFunction((payload) => document.getElementById('preview').contentWindow.location.hash === '#w1=' + payload, payloadOf(on.link.url));
+  copied = await copyFromStory(page);
+  eq(copied, on.link.url, 'switch on: the story\'s own Copy link gives the link with the text');
+  eq(decode(copied).most_reacted.map((m) => m.text), texts, 'switch on: and it carries the three messages');
   decoded = decode(on.link.url);
   eq(decoded.most_reacted.map((m) => m.text), state.stats.most_reacted.map((m) => m.text), 'now the link carries the three texts');
   eq(decoded, state.stats, 'and is otherwise the full stats');
@@ -900,15 +987,32 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   // The story's last slide links to this page. Followed inside the frame, it must not
   // start a second maker in there: the frame goes back to the story.
   const workersBefore = s.requests.filter((u) => u.endsWith('/make/worker.js')).length;
+  await page.evaluate(() => {
+    const preview = document.getElementById('preview');
+    window.__frameLoads = [];
+    preview.addEventListener('load', () => window.__frameLoads.push(preview.contentWindow.location.pathname));
+    preview.contentWindow.location.href = new URL('./', location.href).href;
+  });
+  await page.waitForFunction(() => {
+    const inner = document.getElementById('preview').contentWindow;
+    return window.__frameLoads.length >= 2 && /index\.html$/.test(inner.location.pathname) && inner.WrappedStory && inner.WrappedStory.isActive();
+  }, null, { timeout: 20000 });
+  ok(/\/make\/$/.test((await page.evaluate(() => window.__frameLoads))[0]), 'the maker did open inside the preview frame');
+  ok(true, 'and was replaced by the story again');
+  eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workersBefore, 'it never started working in there');
+  await (await previewFrame(page)).evaluate(() => window.WrappedStory.goTo(3));
+  await page.locator('#replay').click();
+  ok(await (await previewFrame(page)).evaluate(() => window.WrappedStory.index === 0), '"Play again" restarts the story from the cover');
+  // "Play again" pressed while the frame is on its way somewhere else must not leave it empty.
   await page.evaluate(() => { document.getElementById('preview').contentWindow.location.href = new URL('./', location.href).href; });
+  await page.locator('#replay').click();
   await page.waitForFunction(() => {
     const inner = document.getElementById('preview').contentWindow;
     return /index\.html$/.test(inner.location.pathname) && inner.WrappedStory && inner.WrappedStory.isActive();
   }, null, { timeout: 20000 });
-  ok(true, 'a maker opened inside the preview is replaced by the story again');
-  eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workersBefore, 'and it never started working in there');
-  await page.locator('#replay').click();
-  ok(await (await previewFrame(page)).evaluate(() => window.WrappedStory.index === 0), '"Play again" restarts the story from the cover');
+  await page.waitForTimeout(1500);
+  ok(await page.evaluate(() => { const inner = document.getElementById('preview').contentWindow; return /index\.html$/.test(inner.location.pathname) && inner.WrappedStory.isActive(); }),
+    'even when pressed mid-way, the frame ends up playing the story');
   await page.click('#restart');
   ok(await visible(page, '#step-source.is-active') && await page.locator('.mk-step.is-locked').count() === 3, 'start over: back to step 1, later steps locked');
   eq((await snap(page)).stats, null, 'and nothing is kept');
@@ -1232,7 +1336,10 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     await s.close();
   }
   const written = fs.readdirSync(SHOTS).filter((f) => /^make-.*\.png$/.test(f));
-  ok(written.length >= 18, `${written.length} screenshots written to docs/screenshots/web/`);
+  ok(written.length >= 18, `${written.length} screenshots written to ${path.relative(ROOT, SHOTS)}/`);
+  // The committed set is the same list of pictures (their pixels are checked by eye, not here).
+  const committed = fs.readdirSync(path.join(ROOT, 'docs/screenshots/web')).filter((f) => /^make-.*\.png$/.test(f)).sort();
+  eq(committed, written.sort(), 'docs/screenshots/web/ holds one committed picture for each of them');
 });
 
 await browser.close();

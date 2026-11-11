@@ -298,7 +298,7 @@
               <p class="mk-field__hint" id="people-hint">Names appear in the recap exactly as written here. Give two people the same name to count them as one.</p>
               <p class="mk-field__hint mk-field__hint--note" id="unnamed-hint" hidden></p>
               <ul class="mk-people" id="people" aria-labelledby="people-label"></ul>
-              <button type="button" class="mk-linkbtn" id="first-names" hidden>Use first names only</button>
+              <p class="mk-names" id="names-row" hidden><span id="names-note"></span> <button type="button" class="mk-linkbtn" id="first-names">Use first names only</button></p>
             </div>
           </div>
         </div>
@@ -327,7 +327,7 @@
         <div class="mk-recap" id="recap" hidden>
           <div class="mk-recap__preview">
             <div class="mk-phone"><iframe id="preview" title="Preview of your recap"></iframe></div>
-            <p class="mk-recap__cap">The full recap, playing on your device. Tap it to skip ahead.</p>
+            <p class="mk-recap__cap">Exactly what the link shows: this is what everyone in the chat will see. Tap it to skip ahead.</p>
             <button type="button" class="mk-btn mk-btn--small" id="replay"><span class="mk-ico" data-icon="replay"></span>Play again</button>
           </div>
 
@@ -387,7 +387,7 @@
   </main>
 
   <footer class="mk-foot">
-    <p><span data-brand></span> is an independent, open-source project. It is not affiliated with or endorsed by Apple. iMessage is a trademark of Apple Inc.</p>
+    <p><span data-brand></span> is an independent project; the source is public on GitHub. It is not affiliated with or endorsed by Apple. iMessage is a trademark of Apple Inc.</p>
     <p><a href="https://github.com/averyhsu/imessage-wrap" rel="noopener">Source on GitHub</a></p>
   </footer>
 </div>

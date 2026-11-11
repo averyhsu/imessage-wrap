@@ -75,9 +75,11 @@ jobs:
       - name: End-to-end tests
         run: npm run test:make
 
-      - name: No database was left in the repository
+      - name: The test run left the repository as it found it
         if: always()
         run: |
+          dirty="$(git status --porcelain)"
+          if [ -n "$dirty" ]; then echo "$dirty"; echo "::error::the tests changed tracked files or left new ones behind"; exit 1; fi
           leftovers="$(git status --porcelain --untracked-files=all --ignored | grep -E '\.(db|sqlite|sqlite3|db-wal|db-shm)$' || true)"
           if [ -n "$leftovers" ]; then echo "$leftovers"; echo "::error::test databases were written inside the repository"; exit 1; fi
 
@@ -86,5 +88,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: make-screenshots
-          path: docs/screenshots/web/make-*.png
+          path: test-results/make-screenshots/
           if-no-files-found: warn
