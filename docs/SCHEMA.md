@@ -183,6 +183,20 @@ payload = base64url( raw-DEFLATE( UTF-8( JSON.stringify(stats) ) ) )   // no pad
 - The story also accepts `?w1=<payload>` (query form) as a fallback for transports that drop
   fragments, and `?demo=1` for the built-in invented demo.
 - The base URL is a single configurable constant in each component.
+- **Length budget.** The whole URL must be at most **4,800 characters** (`MSMessage.url`
+  rejects anything over 5,000). If a link would be longer, the builder re-encodes a trimmed
+  copy of the stats, applying these steps in order and stopping as soon as it fits:
+  1. delete `awards[].detail`;
+  2. truncate every `most_reacted[].text` to 60 characters (plus `…`);
+  3. keep only the first 8 `senders`;
+  4. keep only the first `most_reacted` entry;
+  5. delete `awards`;
+  6. keep only the first 5 `senders`.
+  If it still does not fit, building the link fails with a clear error.
+- **Quotes are optional.** Builders offer a "no quotes" switch (`--no-quotes` in the CLI, a
+  checkbox on the web) that replaces every `most_reacted[].text` with `""` before encoding,
+  for people who do not want message text inside the link. The story shows the tapback
+  counts without the bubble text in that case.
 
 ## 6. Embed bridge (web story inside the iOS app / iMessage extension)
 
@@ -202,3 +216,13 @@ native through `window.webkit.messageHandlers.wrapped.postMessage(obj)`:
 | `{type: "close"}` | story dismissed |
 
 Native may call `window.WrappedStory.pause()`, `.resume()` and `.goTo(i)`.
+
+## 7. Naming
+
+Code, file names and the typed command stay `wrapped` (`/wrapped`, with `/recap` accepted as
+an alias). The **public product name is a single constant, currently `Threadback`**, with
+the descriptor "your group chat's year in review". User-visible copy must not use
+"iMessage" or "Wrapped" as part of the product name: both are other companies' trademarks
+(see `docs/research/06-distribution-and-links.md` §3). Describing compatibility ("works with
+iMessage") and comparing ("like Spotify Wrapped, for your group chat") in prose is fine.
+Story copy uses "<label> in review" (e.g. "2026 in review") rather than "Wrapped <label>".
