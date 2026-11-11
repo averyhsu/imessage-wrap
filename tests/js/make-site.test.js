@@ -71,7 +71,9 @@ test('hardening: strict CSP, no referrer, nothing inline', () => {
     'img-src': "'self' data: blob:",
     'font-src': "'self'",
     'connect-src': "'self'",
-    'worker-src': "'self'",
+    // Workers only from blob: addresses: such a worker inherits this policy, one started
+    // from a file's address would not be bound by it at all.
+    'worker-src': 'blob:',
     'frame-src': "'self'",
     'object-src': "'none'",
     'base-uri': "'none'",
@@ -104,8 +106,9 @@ test('every file the page references is relative, exists and is same-origin', ()
   const scripts = [...body.matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
   assert.deepStrictEqual(scripts, ['../js/vendor/fflate.min.js', '../js/config.js', '../js/glyphs.js', 'engine.js', 'db.js', 'make.js']);
   // The worker loads the rest; those files must exist too.
-  const imported = /importScripts\(([^)]+)\)/.exec(fs.readFileSync(path.join(MAKE, 'worker.js'), 'utf8'))[1]
-    .split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
+  const imports = /scope\.importScripts\(([^)]+)\)/.exec(code('worker.js'))[1].split(',').map((s) => s.trim());
+  assert.ok(imports.every((s) => /^BASE \+ '[^']+'$/.test(s)), `every import is relative to the page's folder: ${imports}`);
+  const imported = imports.map((s) => s.replace(/^BASE \+ '|'$/g, ''));
   assert.deepStrictEqual(imported, ['engine.js', 'vendor/sql-wasm.js', 'db.js', 'import-rows.js', 'sample.js']);
   for (const file of imported.concat(['vendor/sql-wasm.wasm', 'vendor/LICENSE-sql.js.txt'])) {
     assert.ok(fs.existsSync(path.join(MAKE, file)), `${file} exists`);
@@ -113,8 +116,16 @@ test('every file the page references is relative, exists and is same-origin', ()
 });
 
 test('the page\'s own scripts make no network calls and do not eval', () => {
+  // The one place the page names importScripts: the two-line program it starts the worker
+  // from, which loads worker.js from the page's own folder and nothing else.
+  const bootstrap = `'self.MAKE_BASE = ' + JSON.stringify(folder) + ';\\nimportScripts(self.MAKE_BASE + "worker.js");\\n'`;
+  assert.equal(code('make.js').split(bootstrap).length, 2, 'make.js builds the worker\'s bootstrap exactly once');
+  assert.match(code('make.js'), /var folder = new URL\('\.', root\.location\.href\)\.href;/, 'and the folder is the page\'s own');
+  assert.equal((code('make.js').match(/new Worker\(/g) || []).length, 1, 'one place starts a worker');
+  assert.match(code('make.js'), /URL\.createObjectURL\(new Blob\(\[source\]/, 'and it starts it from a blob');
+  assert.doesNotMatch(code('make.js'), /new Worker\(\s*['"]/, 'never from a file address, which the page\'s policy would not bind');
   for (const file of ['make.js', 'sample.js']) {
-    const src = code(file);
+    const src = code(file).replace(bootstrap, '');
     assert.doesNotMatch(src, /^\s*(import|export)\s/m, `${file}: no ES module syntax`);
     assert.doesNotMatch(src, /\bfetch\s*\(|XMLHttpRequest|sendBeacon|WebSocket|EventSource|importScripts/, `${file}: no network APIs`);
     assert.doesNotMatch(src, /\beval\s*\(|new Function\s*\(|document\.write|localStorage|sessionStorage|indexedDB|document\.cookie/, `${file}: no eval, no storage`);
@@ -122,10 +133,18 @@ test('the page\'s own scripts make no network calls and do not eval', () => {
   }
   // The worker names the network functions only to remove them.
   const worker = code('worker.js');
-  assert.match(worker, /function lockDown\(\)/);
-  const withoutLockDown = worker.replace(/function lockDown\(\) \{[\s\S]*?\n\}/, '');
+  assert.match(worker, /\n {2}function lockDown\(\) \{/);
+  const gone = /\n {2}var GONE = \[([^\]]+)\];/.exec(worker);
+  assert.ok(gone, 'worker.js lists what it removes');
+  const removed = gone[1].split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
+  for (const name of ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'Worker']) {
+    assert.ok(removed.includes(name), `lockDown() removes ${name}`);
+  }
+  const withoutLockDown = worker.replace(gone[0], '').replace(/\n {2}function lockDown\(\) \{[\s\S]*?\n {2}\}/, '');
+  assert.doesNotMatch(withoutLockDown, /function lockDown/, 'the whole of lockDown() was set aside');
   assert.doesNotMatch(withoutLockDown, /\bfetch\b|XMLHttpRequest|WebSocket|EventSource|sendBeacon/, 'worker.js: no network APIs outside lockDown()');
   assert.equal((worker.match(/importScripts\(/g) || []).length, 1, 'worker.js: one importScripts call, at the top');
+  assert.match(worker, /getPrototypeOf\(target\)/, 'lockDown() walks the prototypes too');
   assert.doesNotMatch(worker, /https?:\/\//, 'worker.js: no URLs');
   // Recap strings never reach innerHTML: only the constant icon markup does.
   const uses = code('make.js').match(/[^\n]*innerHTML[^\n]*/g) || [];

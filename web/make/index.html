@@ -6,9 +6,12 @@
 
 <!-- Locked down: same-origin files only, no inline code, no outbound requests of any kind.
      'wasm-unsafe-eval' lets the bundled SQLite (WebAssembly) run; connect-src 'self' is for
-     fetching that one .wasm file; worker-src and frame-src are for the background worker
-     that reads the database and for the preview of the story, both from this site. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+     fetching that one .wasm file; frame-src 'self' is for the preview of the story.
+     worker-src is blob: and nothing else, on purpose: a worker started from a file's own
+     address would not be bound by this policy (a <meta> policy does not reach it), while a
+     worker started from a blob: inherits it. The worker that reads the database is
+     therefore held to these same rules. See make.js and worker.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 
 <!-- ════════════════════════════════════════════════════════════════════════════════════

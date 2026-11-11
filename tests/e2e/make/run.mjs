@@ -133,7 +133,7 @@ async function open(opts = {}) {
     locale: 'en-US',
     reducedMotion: opts.still ? 'reduce' : (opts.reducedMotion || 'no-preference'),
     permissions: opts.permissions || [],
-    bypassCSP: !!opts.still,
+    bypassCSP: !!(opts.still || opts.bypassCSP),
   });
   const problems = [];
   const foreign = [];
@@ -646,6 +646,165 @@ await section('progress', 'While files are read: progress sits by the drop zone,
   const d = await open();
   ok(!(await visible(d.page, '.mk-touch')), 'with a mouse there is no such note');
   await d.close();
+});
+
+// ── the reader cannot talk to anyone ───────────────────────────────────────────────────
+/**
+ * Runs inside the reader's worker (Playwright puts it there through the debugger; the
+ * product has no hook for it). Tries every way a worker has of reaching `target`, a second
+ * server on this machine, looking for each function on the global object and on its
+ * prototypes, and says what it found. What the worker saw is only a hint: the proof is the
+ * second server's own log of what arrived.
+ */
+async function reach({ target, tag, modules }) {
+  const chain = [];
+  for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) chain.push(o);
+  const find = (name) => {
+    for (const o of chain) {
+      let value;
+      try { value = Object.getOwnPropertyDescriptor(o, name) ? Reflect.get(o, name, self) : undefined; } catch { value = undefined; }
+      if (typeof value === 'function') return value;
+    }
+    return null;
+  };
+  const names = ['fetch', 'XMLHttpRequest', 'importScripts', 'WebSocket', 'EventSource', 'Worker', 'FontFace'];
+  const out = { url: self.location.href, found: names.filter((name) => find(name)), saw: {}, refused: [] };
+  const note = (event) => out.refused.push(event.effectiveDirective || event.violatedDirective);
+  self.addEventListener('securitypolicyviolation', note);
+  const attempt = async (name, fn) => {
+    try { out.saw[name] = await fn(find(name)); } catch (error) { out.saw[name] = 'failed: ' + ((error && error.name) || 'error'); }
+  };
+  const gone = () => { throw new ReferenceError('not there'); };
+  await attempt('fetch', async (f) => {
+    if (!f) gone();
+    await f.call(self, target + tag + '-fetch', { mode: 'no-cors', cache: 'no-store' });
+    return 'answered';
+  });
+  await attempt('XMLHttpRequest', (X) => new Promise((resolve, reject) => {
+    if (!X) gone();
+    const x = new X();
+    x.open('GET', target + tag + '-xhr');
+    x.onload = () => resolve('answered');
+    x.onerror = () => reject(new Error('no answer'));
+    x.send();
+  }));
+  await attempt('importScripts', (load) => {
+    if (!load) gone();
+    load.call(self, target + tag + '-script.js');
+    return 'answered';
+  });
+  await attempt('WebSocket', (W) => new Promise((resolve, reject) => {
+    if (!W) gone();
+    const socket = new W(target.replace(/^http/, 'ws') + tag + '-socket');
+    socket.onopen = () => resolve('answered');
+    socket.onerror = () => reject(new Error('no answer'));
+    setTimeout(() => reject(new Error('no answer')), 1500);
+  }));
+  await attempt('EventSource', (E) => new Promise((resolve, reject) => {
+    if (!E) gone();
+    const source = new E(target + tag + '-events');
+    source.onopen = () => { source.close(); resolve('answered'); };
+    source.onerror = () => { source.close(); reject(new Error('no answer')); };
+    setTimeout(() => { source.close(); reject(new Error('no answer')); }, 1500);
+  }));
+  if (modules) {
+    // No function to take away here: import() is part of the language, so only the policy stops it.
+    await attempt('import()', async () => { await import(target + tag + '-module.js'); return 'answered'; });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  self.removeEventListener('securitypolicyviolation', note);
+  return out;
+}
+
+await section('contain', 'The reader cannot talk to anyone: bound by the page\'s policy, then stripped of the means', async () => {
+  // A second origin on this machine. Anything that arrives here left the page's origin.
+  const other = await startServer();
+  const arrived = (tag) => other.hits.filter((hit) => hit.includes(tag));
+  const WAYS = ['fetch', 'XMLHttpRequest', 'importScripts', 'WebSocket', 'EventSource'];
+
+  /** Open the page, add the Mac files, and stop the reader just before it would cut itself off. */
+  async function held(opts) {
+    const s = await open({ ...opts, goto: false });
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    // SQLite's WebAssembly file is the reader's last legitimate download; it removes its
+    // own network functions right after. Holding it back leaves time to look inside first.
+    await s.context.route('**/make/vendor/sql-wasm.wasm', async (route) => { await gate; await route.continue(); });
+    await s.page.goto(MAKE);
+    await s.page.setInputFiles('#input-mac', [CHAT_DB, CHAT_WAL]);
+    await s.page.waitForFunction(() => /database reader/.test(document.getElementById('work-source').textContent));
+    return { ...s, release, worker: s.page.workers()[0] };
+  }
+
+  // 1. The page as it ships.
+  const s = await held();
+  eq(s.page.workers().length, 1, 'the page runs one worker');
+  ok(s.worker.url().startsWith('blob:' + origin + '/'), `started from a blob: address, so the page's policy binds it (${s.worker.url().slice(0, 40)}…)`);
+  const before = await s.worker.evaluate(reach, { target: other.url, tag: 'before', modules: true });
+  eq(before.found.filter((name) => WAYS.includes(name)), WAYS, 'before it cuts itself off the worker still has its network functions');
+  ok(Object.values(before.saw).every((saw) => saw.startsWith('failed')), `yet every attempt to reach another origin fails: ${JSON.stringify(before.saw)}`);
+  eq(arrived('before'), [], 'and nothing arrives at the other origin (fetch, XMLHttpRequest, importScripts, WebSocket, EventSource, import())');
+  s.release();
+  await s.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  eq((await listed(s.page)).length, cliChats(['--db', CHAT_DB, '--no-contacts']).chats.length, 'the reader itself still works: the chats are listed');
+  const after = await s.worker.evaluate(reach, { target: other.url, tag: 'after', modules: true });
+  eq(after.found, [], 'after that the functions are gone, from the global object and from every prototype behind it');
+  ok(Object.values(after.saw).every((saw) => saw.startsWith('failed')), `every attempt fails: ${JSON.stringify(after.saw)}`);
+  eq(arrived('after'), [], 'and nothing arrives at the other origin');
+  const pinned = await s.worker.evaluate(() => {
+    const tries = [];
+    const real = () => 'put back';
+    for (const name of ['fetch', 'XMLHttpRequest', 'importScripts', 'WebSocket']) {
+      try { self[name] = real; } catch { /* strict code throws; either way it must not stick */ }
+      try { Object.defineProperty(self, name, { value: real, configurable: true }); } catch { /* refused */ }
+      if (typeof self[name] === 'function') tries.push(name);
+    }
+    return { tries, beacon: typeof (self.navigator && self.navigator.sendBeacon) };
+  });
+  eq(pinned.tries, [], 'they cannot be put back either');
+  eq(pinned.beacon, 'undefined', 'and there is no navigator.sendBeacon');
+  // (The browser's own request log is no use here: it lists a request the moment one is
+  // asked for, including those the policy then refuses. The other origin's log is the proof.)
+  const by = [...new Set(before.refused)].sort();
+  ok(by.includes('connect-src') && by.some((d) => d.startsWith('script-src')), `the refusals come from the page's policy (${by.join(', ')})`);
+  await s.close();
+
+  // 2. Is the probe able to tell? The same worker with the page's policy switched off by
+  // the test browser: now the attempts do arrive, until the worker cuts itself off.
+  const c = await held({ bypassCSP: true });
+  const open1 = await c.worker.evaluate(reach, { target: other.url, tag: 'control', modules: false });
+  ok(['fetch', 'xhr', 'script'].every((way) => arrived('control-' + way).length > 0),
+    `without the policy the same attempts do arrive, so the check above can tell: ${JSON.stringify(arrived('control'))} ${JSON.stringify(open1.saw)}`);
+  c.release();
+  await c.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  const stripped = await c.worker.evaluate(reach, { target: other.url, tag: 'stripped', modules: false });
+  eq(stripped.found, [], 'even without the policy, the worker has removed the functions by the time it holds a file');
+  eq(arrived('stripped'), [], 'and nothing arrives');
+  await c.close();
+  await other.close();
+
+  // 3. A browser that will not start a worker from a blob: the reader runs on the page
+  // itself, under the same policy, rather than in a worker the policy does not reach.
+  const refusals = {
+    'the constructor throws': () => { window.Worker = function () { throw new Error('no workers from blobs here'); }; },
+    'the worker dies before it is ready': () => {
+      const make = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = () => make(new Blob(['throw new Error("refused")'], { type: 'text/javascript' }));
+    },
+  };
+  for (const [label, init] of Object.entries(refusals)) {
+    const f = await open({ init });
+    await addMac(f.page, [CHAT_DB, CHAT_WAL]);
+    eq((await snap(f.page)).runner, 'page', `${label}: the reader runs on the page`);
+    eq(f.page.workers().length, 0, `${label}: and no worker is left running`);
+    await pick(f.page, TACO);
+    await period(f.page, 'all');
+    await create(f.page);
+    await matchesCli(f.page, ['--db', CHAT_DB, '--no-contacts', String(TACO), '--all-time'], LA, `${label}: the numbers are the command-line tool's, byte for byte`);
+    eq(f.foreign, [], `${label}: no request left this origin`);
+    if (label === 'the constructor throws') f.clean('main-thread reader');
+    await f.close();
+  }
 });
 
 // ── many chats: search ─────────────────────────────────────────────────────────────────

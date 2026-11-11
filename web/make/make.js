@@ -196,56 +196,146 @@
 
   // -- the worker -----------------------------------------------------------------------
 
-  var worker = null;
+  // The reader (worker.js) holds the whole database, so it must be bound by the same rule
+  // as this page: no request to any other origin. A worker started from worker.js's own
+  // address would NOT be: this page's Content-Security-Policy is a <meta> tag, which does
+  // not reach a worker loaded from a URL, and a static site cannot send it as a header.
+  // A worker started from a blob: address inherits the policy of the page that made the
+  // blob, so that is the only kind this page starts. If a browser will not run one, the
+  // reader runs here on the main thread instead (same policy, a less smooth screen);
+  // never in an uncontained worker.
+
+  var reader = null;          // {kind: "worker" | "page", send(message), stop()} once it is up
+  var readerReady = null;     // a promise for it
+  var readerRun = 0;
   var nextId = 1;
-  var waiting = {};
+  var waiting = new Map();
+
+  function deliver(message) {
+    message = message || {};
+    var entry = waiting.get(message.id);
+    if (!entry) return;
+    if (message.type === 'progress') {
+      if (entry.progress) entry.progress(message.stage, message.detail || {});
+      return;
+    }
+    waiting.delete(message.id);
+    if (message.type === 'done') entry.resolve(message.result);
+    else entry.reject(problem(message.code, message.message, message.detail));
+  }
+
+  function failEveryone(text) {
+    var all = waiting;
+    waiting = new Map();
+    all.forEach(function (entry) { entry.reject(problem('worker', text || '')); });
+  }
 
   function stopWorker() {
-    if (worker) {
-      worker.onmessage = null;
-      worker.onerror = null;
-      worker.terminate();
-      worker = null;
+    readerRun += 1;
+    if (reader) reader.stop();
+    reader = null;
+    readerReady = null;
+    waiting = new Map();
+  }
+
+  /** A worker from a blob: address, which inherits this page's policy. Rejects if it will not start. */
+  function blobWorker() {
+    return new Promise(function (resolve, reject) {
+      var folder = new URL('.', root.location.href).href;
+      var source = 'self.MAKE_BASE = ' + JSON.stringify(folder) + ';\nimportScripts(self.MAKE_BASE + "worker.js");\n';
+      var address = '';
+      var worker;
+      try {
+        address = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+        worker = new Worker(address);
+      } catch (error) {
+        if (address) URL.revokeObjectURL(address);
+        reject(error);
+        return;
+      }
+      var settled = false;
+      var timer = setTimeout(function () { settle(false); }, 30000);
+      function settle(up) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        URL.revokeObjectURL(address);
+        if (!up) {
+          worker.onmessage = null;
+          worker.onerror = null;
+          worker.terminate();
+          reject(new Error('the worker did not start'));
+          return;
+        }
+        worker.onmessage = function (event) { deliver(event.data); };
+        worker.onerror = function (event) {
+          if (event && event.preventDefault) event.preventDefault();
+          failEveryone(event && event.message);
+        };
+        resolve({
+          kind: 'worker',
+          send: function (message) { worker.postMessage(message); },
+          stop: function () { worker.onmessage = null; worker.onerror = null; worker.terminate(); }
+        });
+      }
+      worker.onmessage = function (event) { if (event.data && event.data.type === 'hello') settle(true); };
+      worker.onerror = function (event) {
+        if (event && event.preventDefault) event.preventDefault();
+        settle(false);
+      };
+    });
+  }
+
+  var pageScripts = null;
+
+  function addScript(src) {
+    return new Promise(function (resolve, reject) {
+      var tag = doc.createElement('script');
+      tag.src = src;
+      tag.onload = resolve;
+      tag.onerror = function () { reject(new Error('could not load ' + src)); };
+      doc.head.appendChild(tag);
+    });
+  }
+
+  /** The same reader on the main thread, for a browser that will not start a blob worker. */
+  function pageReader() {
+    if (!pageScripts) {
+      pageScripts = ['vendor/sql-wasm.js', 'import-rows.js', 'sample.js', 'worker.js'].reduce(function (chain, src) {
+        return chain.then(function () { return addScript(src); });
+      }, Promise.resolve());
     }
-    waiting = {};
+    return pageScripts.then(function () {
+      var local = root.WrappedMakeLocal.open(deliver);
+      return { kind: 'page', send: local.send, stop: local.stop };
+    });
   }
 
   function startWorker() {
     stopWorker();
-    worker = new Worker('worker.js');
-    worker.onmessage = function (event) {
-      var message = event.data || {};
-      var entry = waiting[message.id];
-      if (!entry) return;
-      if (message.type === 'progress') {
-        if (entry.progress) entry.progress(message.stage, message.detail || {});
-        return;
-      }
-      delete waiting[message.id];
-      if (message.type === 'done') entry.resolve(message.result);
-      else entry.reject(problem(message.code, message.message, message.detail));
-    };
-    worker.onerror = function (event) {
-      if (event && event.preventDefault) event.preventDefault();
-      var all = waiting;
-      waiting = {};
-      Object.keys(all).forEach(function (id) { all[id].reject(problem('worker', (event && event.message) || '')); });
-    };
+    var run = readerRun;
+    readerReady = blobWorker().catch(pageReader).then(function (ready) {
+      if (run !== readerRun) { ready.stop(); throw problem('stale', ''); }
+      reader = ready;
+      return ready;
+    });
+    readerReady.catch(function () { /* reported to whoever asked */ });
+    return readerReady;
   }
 
-  /** Send a request to the worker. Resolves with its result, rejects with a coded Error. */
+  /** Send a request to the reader. Resolves with its result, rejects with a coded Error. */
   function ask(type, fields, progress) {
     return new Promise(function (resolve, reject) {
-      try {
-        if (!worker) startWorker();
-        var id = nextId++;
-        var message = { id: id, type: type };
-        Object.keys(fields || {}).forEach(function (key) { message[key] = fields[key]; });
-        waiting[id] = { resolve: resolve, reject: reject, progress: progress };
-        worker.postMessage(message);
-      } catch (error) {
-        reject(problem('worker', error && error.message));
-      }
+      var id = nextId++;
+      var message = { id: id, type: type };
+      Object.keys(fields || {}).forEach(function (key) { message[key] = fields[key]; });
+      var mine = waiting;
+      mine.set(id, { resolve: resolve, reject: reject, progress: progress });
+      (readerReady || startWorker()).then(function (ready) {
+        if (mine.has(id)) ready.send(message);
+      }, function (error) {
+        if (mine.delete(id) && !(error && error.code === 'stale')) reject(problem('worker', error && error.message));
+      });
     });
   }
 
@@ -1928,7 +2018,8 @@
         people: JSON.parse(JSON.stringify(S.people)),
         options: S.chat ? computeOptions() : null,
         created: S.created,
-        busy: computePending || Object.keys(waiting).length > 0,
+        busy: computePending || waiting.size > 0,
+        runner: reader ? reader.kind : null,
         stats: S.stats ? JSON.parse(S.statsJson) : null,
         statsJson: S.statsJson,
         quotes: S.quotes,

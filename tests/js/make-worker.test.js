@@ -16,7 +16,12 @@ const Import = require('../../web/make/import-rows.js');
 function startWorker() {
   const sent = [];
   const waiting = new Map();
-  const self = {
+  const network = () => { throw new Error('the worker tried to use the network'); };
+  const self = Object.assign({}, {
+    console, TextEncoder, TextDecoder, Intl, Date, Map, Set, Promise, Uint8Array, Float64Array, Int16Array, ArrayBuffer, setTimeout,
+    MAKE_BASE: 'https://example.invalid/make/',
+    fetch: network,
+    WebSocket: function WebSocket() { network(); },
     postMessage(message) {
       sent.push(message);
       const entry = waiting.get(message.id);
@@ -26,26 +31,29 @@ function startWorker() {
       if (message.type === 'done') entry.resolve(JSON.parse(JSON.stringify(message.result)));
       else entry.reject(Object.assign(new Error(message.message), { code: message.code, detail: message.detail }));
     },
-    fetch() { throw new Error('the worker tried to use the network'); },
-    XMLHttpRequest: function XMLHttpRequest() { throw new Error('the worker tried to use the network'); },
-    WebSocket: function WebSocket() { throw new Error('the worker tried to use the network'); },
-  };
-  const context = vm.createContext({
-    self, console, TextEncoder, TextDecoder, Intl, Date, Map, Set, Promise, Uint8Array, Float64Array, Int16Array, ArrayBuffer,
+    XMLHttpRequest: function XMLHttpRequest() { network(); },
+    EventSource: function EventSource() { network(); },
+    navigator: Object.create({ sendBeacon: network }),
   });
-  context.globalThis = context;
-  context.importScripts = (...files) => {
+  const context = vm.createContext(self);
+  self.self = self;
+  self.globalThis = self;
+  const imported = [];
+  self.importScripts = (...files) => {
     for (const file of files) {
-      if (file === 'vendor/sql-wasm.js') { context.initSqlJs = () => Promise.reject(new Error('no SQLite in this test')); continue; }
-      vm.runInContext(fs.readFileSync(path.join(MAKE, file), 'utf8'), context, { filename: file });
+      imported.push(file);
+      assert.ok(file.startsWith(self.MAKE_BASE), `${file} is loaded by its full address (a blob worker has none of its own)`);
+      const name = file.slice(self.MAKE_BASE.length);
+      if (name === 'vendor/sql-wasm.js') { self.initSqlJs = () => Promise.reject(new Error('no SQLite in this test')); continue; }
+      vm.runInContext(fs.readFileSync(path.join(MAKE, name), 'utf8'), context, { filename: name });
     }
   };
-  self.importScripts = context.importScripts;
   vm.runInContext(fs.readFileSync(path.join(MAKE, 'worker.js'), 'utf8'), context, { filename: 'worker.js' });
   let next = 1;
   return {
     self,
     sent,
+    imported,
     ask(type, fields) {
       return new Promise((resolve, reject) => {
         const id = next++;
@@ -191,15 +199,24 @@ test('errors are coded, and nothing unreadable is kept', async () => {
 
 test('the sample request, and the worker cutting its own network access', async () => {
   const worker = startWorker();
+  assert.deepStrictEqual(worker.imported.map((file) => file.replace(worker.self.MAKE_BASE, '')),
+    ['engine.js', 'vendor/sql-wasm.js', 'db.js', 'import-rows.js', 'sample.js'], 'the worker loads its parts by full address');
+  assert.equal(JSON.stringify(worker.sent[0]), '{"type":"hello"}', 'and says hello once it is ready');
   assert.equal(typeof worker.self.fetch, 'function');
   const result = await worker.ask('sample', {});
   assert.equal(result.named, true);
   assert.equal(result.people.length, 7);
   assert.ok(result.people.every((p) => p.named && p.handles.length === 0));
   assert.ok(result.rows > 2500);
-  for (const name of ['fetch', 'XMLHttpRequest', 'WebSocket', 'importScripts']) {
+  for (const name of ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts']) {
     assert.equal(worker.self[name], undefined, `${name} is gone before any data is touched`);
   }
+  // ... and for good. (That the prototypes behind a real worker's global are emptied too is
+  // checked in a real browser, in tests/e2e/make: a vm context has no such chain to walk.)
+  assert.equal(Object.getPrototypeOf(worker.self.navigator).sendBeacon, undefined, 'navigator.sendBeacon is gone');
+  assert.throws(() => { worker.self.fetch = () => 'back'; }, TypeError, 'and it cannot be put back');
+  assert.throws(() => { delete worker.self.fetch; }, TypeError, 'nor can the pin be removed');
+  assert.equal(worker.self.fetch, undefined);
   const { stats } = await worker.ask('compute', { options: { tz: 'UTC', year: result.year } });
   assert.equal(stats.meta.source, 'sample');
   assert.equal(stats.period.label, String(result.year));
