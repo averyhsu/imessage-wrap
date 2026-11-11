@@ -26,12 +26,13 @@ import copy
 import json
 import os
 import re
+import unicodedata
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Mapping, Optional, Tuple
 
-from .fmt import clean, display_names, safe_chat_name
+from .fmt import clean, display_names, first_name, is_emoji_base, mask_label, safe_chat_name, scrub
 from .triggers import starts_with_trigger
 
 API_URL = "https://api.anthropic.com/v1/messages"
@@ -73,8 +74,22 @@ SYSTEM_PROMPT = (
 Transport = Callable[[str, Dict[str, str], bytes, float], Tuple[int, bytes]]
 
 
+_KEY_LIKE = re.compile(r"sk-[A-Za-z0-9_\-]{4,}")
+
+
+def scrub_secrets(text: object) -> str:
+    """A message that is safe to log: one clean line with anything key-shaped removed."""
+    return _KEY_LIKE.sub("sk-[removed]", clean(text, 300))
+
+
 class AiError(RuntimeError):
-    """Why AI awards could not be used this time (the built-in ones are kept)."""
+    """Why AI awards could not be used this time (the built-in ones are kept).
+
+    The text is always safe to log: it is cleaned and anything that looks like
+    an API key is removed, whoever raised it."""
+
+    def __init__(self, message: object = "") -> None:
+        super().__init__(scrub_secrets(message))
 
 
 @dataclass
@@ -103,8 +118,10 @@ def build_payload(stats: dict, quotes: bool = False) -> Tuple[dict, Dict[str, st
         back.setdefault(shown[clean(real)], real)
 
     def short(name: object) -> str:
-        return shown.get(clean(name), "someone")
+        # the display name, masked once more whatever the name table says
+        return mask_label(shown.get(clean(name)) or first_name(name))
 
+    back = {mask_label(k): v for k, v in back.items()}
     payload: dict = {}
     chat = stats.get("chat") or {}
     payload["chat"] = {"name": clean(safe_chat_name(chat.get("name")), 80), "members": chat.get("members")}
@@ -140,11 +157,61 @@ def build_payload(stats: dict, quotes: bool = False) -> Tuple[dict, Dict[str, st
             "kinds": copy.deepcopy(m.get("kinds")),
         }
         if quotes:
-            entry["text"] = str(m.get("text") or "")
+            entry["text"] = redact_contacts(m.get("text"))
         most.append(entry)
     if most:
         payload["most_reacted"] = most
     return payload, back
+
+
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_DATE_KEYS = ("start", "end", "date")
+_ADDRESS = re.compile(r"[^\s<>()\[\]\"',;:]*@[^\s<>()\[\]\"',;:]*")
+# digits with nothing but phone punctuation between them
+_NUMBER_RUN = re.compile(r"[+(]?\d[\d\s().\-/]*\d")
+
+
+def _phone_runs(text: str) -> List[str]:
+    """Runs that read as a phone number: seven or more digits separated only by
+    spaces and phone punctuation (so "11,842 messages" and "24/7" are not)."""
+    folded = unicodedata.normalize("NFKC", text)
+    return [m.group(0) for m in _NUMBER_RUN.finditer(folded) if sum(ch.isdecimal() for ch in m.group(0)) >= 7]
+
+
+def contact_like(text: str) -> str:
+    """Why a string looks like it holds contact details, or "" if it does not."""
+    if "@" in unicodedata.normalize("NFKC", text):
+        return "an address or handle"
+    if _phone_runs(text):
+        return "a phone number"
+    return ""
+
+
+def redact_contacts(text: object) -> str:
+    """Message text with any phone number or address replaced (for ``--ai-quotes``)."""
+    value = unicodedata.normalize("NFKC", clean(text, 400))
+    value = _ADDRESS.sub("[address]", value)
+    for run in _phone_runs(value):
+        value = value.replace(run, "[number]")
+    return value
+
+
+def assert_no_contacts(payload: object, _key: str = "") -> None:
+    """Refuse to send a payload in which any string looks like a phone number or an
+    address. Calendar dates in the date fields are the one thing let through."""
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            if contact_like(str(key)):
+                raise AiError("refusing to send: the stats contain what looks like a phone number or address")
+            assert_no_contacts(value, str(key))
+    elif isinstance(payload, (list, tuple)):
+        for item in payload:
+            assert_no_contacts(item, _key)
+    elif isinstance(payload, str):
+        if _key in _DATE_KEYS and _DATE.match(payload):
+            return
+        if contact_like(payload):
+            raise AiError("refusing to send: the stats contain what looks like a phone number or address")
 
 
 def consent_text(model: str = DEFAULT_MODEL, quotes: bool = False) -> str:
@@ -239,24 +306,63 @@ def urllib_transport(url: str, headers: Dict[str, str], body: bytes, timeout: fl
 # -- validation ----------------------------------------------------------------------
 
 _URL = re.compile(r"(https?://|www\.)", re.IGNORECASE)
+# something.tld, with or without a path: bit.ly/x9, evil.example/login, pay.evil.example
+_DOMAIN = re.compile(r"[A-Za-z0-9\-]+\.[A-Za-z]{2,}")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+_BAD_CATEGORIES = ("Cc", "Cf", "Co", "Cs", "Cn", "Zl", "Zp")
+
+
+def _visible_only(value: str, what: str) -> None:
+    """No control, formatting, bidi, zero-width, filler, private-use or unassigned characters."""
+    if scrub(value) != value or any(unicodedata.category(ch) in _BAD_CATEGORIES for ch in value):
+        raise AiError(f"{what} contains an invisible, control or reordering character")
 
 
 def _one_line(value: object, what: str, limit: int) -> str:
     if not isinstance(value, str):
         raise AiError(f"{what} is not a string")
-    if _CONTROL.search(value):
-        raise AiError(f"{what} contains a line break or control character")
+    _visible_only(value, what)
     text = value.strip()
     if not text:
         raise AiError(f"{what} is empty")
     if len(text) > limit:
         raise AiError(f"{what} is longer than {limit} characters")
-    if _URL.search(text):
-        raise AiError(f"{what} contains a link")
+    folded = unicodedata.normalize("NFKC", text)
+    if _URL.search(folded) or _DOMAIN.search(folded):
+        raise AiError(f"{what} contains a link or a web address")
+    reason = contact_like(text)
+    if reason:
+        raise AiError(f"{what} contains {reason}")
     if starts_with_trigger(text) or text.startswith("/"):
         raise AiError(f"{what} looks like a command")
     return text
+
+
+def _emoji(value: object, what: str) -> str:
+    """Exactly an emoji: emoji code points, optionally joined by zero-width joiners
+    and followed by variation selectors or skin tones. Nothing else, so not a bidi
+    control, a filler, a letter or a word."""
+    if not isinstance(value, str) or not value:
+        raise AiError(f"{what} is empty")
+    cps = [ord(ch) for ch in value]
+    if len(cps) > MAX_EMOJI_CHARS:
+        raise AiError(f"{what} is longer than {MAX_EMOJI_CHARS} characters")
+    ok = is_emoji_base(cps[0])
+    after_joiner = False
+    for i, cp in enumerate(cps):
+        if not ok:
+            break
+        if is_emoji_base(cp):
+            after_joiner = False
+        elif cp == 0xFE0F and i > 0 and not after_joiner:
+            pass
+        elif cp == 0x200D and i > 0 and not after_joiner and i < len(cps) - 1:
+            after_joiner = True
+        else:
+            ok = False
+    if not ok or after_joiner:
+        raise AiError(f"{what} is not an emoji")
+    return value
 
 
 def validate_awards(data: object, names: Mapping[str, str]) -> List[dict]:
@@ -280,9 +386,7 @@ def validate_awards(data: object, names: Mapping[str, str]) -> List[dict]:
             raise AiError(f"{where} is not an object")
         if set(item.keys()) != {"emoji", "title", "winner", "detail"}:
             raise AiError(f"{where} does not have exactly emoji, title, winner, detail")
-        emoji = _one_line(item["emoji"], f"{where} emoji", MAX_EMOJI_CHARS)
-        if any(ch.isascii() and (ch.isalnum() or ch.isspace()) for ch in emoji) or not any(ord(ch) > 0x2000 for ch in emoji):
-            raise AiError(f"{where} emoji is not an emoji")
+        emoji = _emoji(item["emoji"], f"{where} emoji")
         title = _one_line(item["title"], f"{where} title", MAX_TITLE_CHARS)
         detail = _one_line(item["detail"], f"{where} detail", MAX_DETAIL_CHARS)
         winner = item["winner"]
@@ -308,20 +412,26 @@ def parse_response(status: int, body: bytes) -> dict:
     except (UnicodeDecodeError, ValueError):
         doc = None
     if status != 200:
-        message = ""
+        # Status and error type only. The body is never logged: it can echo the
+        # request, including the key.
+        kind = ""
         if isinstance(doc, dict) and isinstance(doc.get("error"), dict):
-            message = str(doc["error"].get("message") or doc["error"].get("type") or "")
-        raise AiError(f"the API returned HTTP {status}" + (f": {message[:200]}" if message else ""))
+            candidate = doc["error"].get("type")
+            if isinstance(candidate, str) and re.fullmatch(r"[a-z_]{1,40}", candidate):
+                kind = candidate
+        raise AiError(f"the API returned HTTP {int(status)}" + (f" ({kind})" if kind else ""))
     if not isinstance(doc, dict):
         raise AiError("the API response is not JSON")
     stop = doc.get("stop_reason")
     if stop == "refusal":
         category = (doc.get("stop_details") or {}).get("category") if isinstance(doc.get("stop_details"), dict) else None
+        if not (isinstance(category, str) and re.fullmatch(r"[a-z_]{1,40}", category)):
+            category = None
         raise AiError("the model declined the request" + (f" ({category})" if category else ""))
     if stop == "max_tokens":
         raise AiError("the reply was cut off (max_tokens)")
     if stop not in ("end_turn", "stop_sequence"):
-        raise AiError(f"unexpected stop_reason {stop!r}")
+        raise AiError("unexpected stop_reason")
     content = doc.get("content")
     if not isinstance(content, list):
         raise AiError("the API response has no content")
@@ -355,6 +465,7 @@ def ai_awards(
     payload, back = build_payload(stats, config.quotes)
     if len(back) < 2:
         raise AiError("not enough people in the chat for awards")
+    assert_no_contacts(payload)  # masked above; checked again before anything leaves
     send = transport or urllib_transport
 
     def call(with_fallback: Optional[bool]) -> Tuple[int, bytes]:
@@ -391,7 +502,7 @@ def apply_ai_awards(
         awards = ai_awards(stats, config, transport=transport, env=env)
     except AiError as exc:
         if log:
-            log(f"AI awards not used ({exc}); keeping the built-in awards")
+            log(f"AI awards not used ({scrub_secrets(exc)}); keeping the built-in awards")
         return stats
     except Exception as exc:  # defensive: a bug here must never block a recap
         if log:

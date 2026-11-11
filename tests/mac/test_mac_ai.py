@@ -90,6 +90,38 @@ class Payload(unittest.TestCase):
         # the caller's stats are not modified
         self.assertEqual(stats["senders"][0]["name"], "Maya Okafor-Lindqvist")
 
+    def test_payload_never_contains_a_phone_number_or_an_address(self):
+        stats = sample_stats(members=4, messages=5000, chat_name="Trip, +1 (555) 010-0123 & 1 more")
+        stats["senders"][0]["name"] = "Maya 5550100188"
+        stats["senders"][1]["name"] = "dev.invented@example.invalid"
+        stats["most_reacted"][0]["text"] = "ring me on +1 555 010 0199 or at lena@example.invalid, ok? 12 of us"
+        stats["most_reacted"][0]["sender"] = stats["senders"][1]["name"]
+        for quotes in (False, True):
+            payload, _ = build_payload(stats, quotes=quotes)
+            blob = json.dumps(payload, ensure_ascii=False)
+            for leaked in ("0100123", "010-0123", "5550100188", "010 0199", "@", "example.invalid"):
+                self.assertNotIn(leaked, blob, (quotes, leaked))
+            ai.assert_no_contacts(payload)  # does not raise; dates and counts are not mistaken for numbers
+        self.assertIn("12 of us", build_payload(stats, quotes=True)[0]["most_reacted"][0]["text"])
+
+    def test_a_contact_in_the_payload_stops_the_request(self):
+        for bad in ("+1 555 010 0123", "5550100123", "x@example.invalid", "tel:555-010-0123"):
+            with self.subTest(bad=bad):
+                payload, _ = build_payload(sample_stats())
+                payload["personality"]["blurb"] = f"Call {bad}"
+                with self.assertRaises(AiError):
+                    ai.assert_no_contacts(payload)
+        transport = FakeTransport(api_response(GOOD))
+        with mock.patch.object(ai, "mask_label", lambda label: str(label)), mock.patch.object(
+            ai, "first_name", lambda name: str(name)
+        ), mock.patch.object(ai, "display_names", lambda names: {str(n): str(n) for n in names}):
+            stats = sample_stats()
+            stats["senders"][0]["name"] = "+1 555 010 0123"  # the masking is switched off above
+            with self.assertRaises(AiError) as ctx:
+                ai_awards(stats, AiConfig(), transport=transport, env=ENV)
+        self.assertIn("phone number or address", str(ctx.exception))
+        self.assertEqual(transport.calls, [])  # nothing was sent
+
     def test_consent_text_says_what_leaves_and_where(self):
         text = ai.consent_text("claude-sonnet-5-5", quotes=False)
         for needle in ("api.anthropic.com", "claude-sonnet-5-5", "ANTHROPIC_API_KEY", "first name", "NO message text", "billed"):
@@ -182,6 +214,36 @@ class Request(unittest.TestCase):
             ai_awards(sample_stats(), AiConfig(), transport=transport, env=ENV)
         self.assertNotIn(KEY, str(ctx.exception))
 
+    def test_api_error_bodies_and_keys_never_reach_an_exception_or_a_log(self):
+        echo = {"type": "error", "error": {"type": "authentication_error",
+                                             "message": f"invalid x-api-key: {KEY} (INVENTED-BODY-TEXT)"}}
+        weird = {"type": "error", "error": {"type": f"bad {KEY}", "message": KEY}}
+        for body, expect in ((echo, "HTTP 401 (authentication_error)"), (weird, "HTTP 401")):
+            with self.subTest(expect=expect):
+                transport = FakeTransport((401, json.dumps(body).encode()))
+                with self.assertRaises(AiError) as ctx:
+                    ai_awards(sample_stats(), AiConfig(), transport=transport, env=ENV)
+                text = str(ctx.exception)
+                self.assertIn(expect, text)
+                self.assertNotIn(KEY, text)
+                self.assertNotIn("sk-ant", text)
+                self.assertNotIn("INVENTED-BODY-TEXT", text)
+                self.assertNotIn("invalid x-api-key", text)
+        logs = []
+        apply_ai_awards(sample_stats(), AiConfig(), transport=FakeTransport((401, json.dumps(echo).encode())),
+                        env=ENV, log=logs.append)
+        self.assertEqual(len(logs), 1)
+        self.assertNotIn("sk-", logs[0])
+        self.assertNotIn("INVENTED-BODY-TEXT", logs[0])
+        # a transport that fails with the key in its message (a proxy error, a URL in a traceback)
+        logs = []
+        apply_ai_awards(sample_stats(), AiConfig(), transport=FakeTransport(OSError(f"tunnel failed for {KEY}")),
+                        env=ENV, log=logs.append)
+        self.assertNotIn("sk-", logs[0])
+        # and anything key-shaped is scrubbed from every AiError, whoever raises it
+        self.assertNotIn("sk-ant-api03", str(AiError("boom sk-ant-api03-AbC_dEf-123456 boom")))
+        self.assertNotIn(chr(0x1B), str(AiError("x" + chr(0x1B) + "[2J")))
+
     def test_default_transport_is_https_only_and_this_suite_never_calls_it(self):
         with self.assertRaises(AiError):
             ai.urllib_transport("http://api.anthropic.com/v1/messages", {}, b"{}", 1)
@@ -239,10 +301,59 @@ class Validation(unittest.TestCase):
             "title not a string": lambda d: d["awards"][0].update(title=["The", "List"]),
             "duplicate titles": lambda d: d["awards"][1].update(title="the headliner"),
             "three awards for one person": lambda d: [a.update(winner="Maya") for a in d["awards"]],
+            # link-like
+            "bare short link": lambda d: d["awards"][0].update(detail="More at bit.ly/x9 tonight"),
+            "bare domain with a path": lambda d: d["awards"][0].update(detail="Log in at evil.example/login"),
+            "bare domain in the title": lambda d: d["awards"][0].update(title="The evil.example Fan"),
+            "domain with a subdomain": lambda d: d["awards"][0].update(detail="visit pay.evil.example now"),
+            "upper-case scheme": lambda d: d["awards"][0].update(detail="HTTPS://EXAMPLE.INVALID"),
+            # contact-like
+            "phone number": lambda d: d["awards"][0].update(detail="Call 555 010 0123 for more"),
+            "formatted phone number": lambda d: d["awards"][0].update(detail="Ring +1 (555) 010-0123"),
+            "run-together phone number": lambda d: d["awards"][0].update(detail="Text 5550100123"),
+            "full-width digits": lambda d: d["awards"][0].update(detail="Call " + "".join(chr(0xFF10 + int(c)) for c in "5550100123")),
+            "e-mail address": lambda d: d["awards"][0].update(detail="Write to maya@example.invalid"),
+            "handle": lambda d: d["awards"][0].update(detail="Follow @maya_invented"),
+            # invisible or reordering characters
+            "bidi override in the title": lambda d: d["awards"][0].update(title="The " + chr(0x202E) + "renniW"),
+            "bidi isolate in the detail": lambda d: d["awards"][0].update(detail="11,842" + chr(0x2066) + " messages"),
+            "zero-width space": lambda d: d["awards"][0].update(detail="bit" + chr(0x200B) + "ly"),
+            "escape character": lambda d: d["awards"][0].update(detail="x" + chr(0x1B) + "[2J"),
+            "left-to-right mark": lambda d: d["awards"][0].update(title="The Winner" + chr(0x200E)),
+            "hangul filler in the title": lambda d: d["awards"][0].update(title="The" + chr(0x3164) + "One"),
+            "private-use character": lambda d: d["awards"][0].update(detail="x" + chr(0xE000)),
+            # an "emoji" that is not one
+            "emoji is a bidi control": lambda d: d["awards"][0].update(emoji=chr(0x202E)),
+            "emoji is a hangul filler": lambda d: d["awards"][0].update(emoji=chr(0x3164)),
+            "emoji is a zero-width joiner": lambda d: d["awards"][0].update(emoji=chr(0x200D)),
+            "emoji is a variation selector": lambda d: d["awards"][0].update(emoji=chr(0xFE0F)),
+            "emoji is a letter dressed up": lambda d: d["awards"][0].update(emoji="A" + chr(0xFE0F)),
+            "emoji with trailing text": lambda d: d["awards"][0].update(emoji="🎤x"),
+            "emoji with a trailing joiner": lambda d: d["awards"][0].update(emoji="🎤" + chr(0x200D)),
+            "emoji with a bidi control inside": lambda d: d["awards"][0].update(emoji="🎤" + chr(0x202E) + "🎤"),
+            "emoji is punctuation": lambda d: d["awards"][0].update(emoji="…"),
         }
         for name, mutate in cases.items():
             with self.subTest(case=name):
                 self.check_rejected(mutate)
+
+    def test_real_emoji_and_ordinary_sentences_still_pass(self):
+        zwj, vs16 = chr(0x200D), chr(0xFE0F)
+        emoji = ["🎤", "🌙", "⭐", "☕", chr(0x2764) + vs16, chr(0x1F469) + zwj + chr(0x1F4BB),
+                 chr(0x1F44D) + chr(0x1F3FD), chr(0x1F1EF) + chr(0x1F1F5)]
+        details = [
+            "11,842 messages. The chat is her stage.",
+            "Sent 2,134 of the 6,277 late-night messages.",
+            "10.0 words per message, 24/7, at 3 a.m. and 11 p.m.",
+            "1,234,567 messages and counting!",
+            "Handed out 2,240 tapbacks (that's 25% of them).",
+        ]
+        for e in emoji:
+            for detail in details:
+                data = copy.deepcopy(GOOD)
+                data["awards"][0].update(emoji=e, detail=detail)
+                with self.subTest(emoji=e, detail=detail):
+                    self.assertEqual(validate_awards(data, self.names)[0]["emoji"], e)
 
     def test_six_awards_is_the_limit(self):
         people = list(self.names)
