@@ -92,11 +92,9 @@ class RecapText(unittest.TestCase):
         self.assertIn("🥇 Maya ", text)
         self.assertNotIn("Okafor", text)
         self.assertNotIn("555", text)
-        self.assertIn("…34", text)
-        self.assertNotIn("0134", text)
+        self.assertIn("…0134", text)  # docs/SCHEMA.md 2, Masking: last four digits
         self.assertNotIn("example.invalid", text)
-        self.assertNotIn("priya.invented", text)
-        self.assertIn("🥉 P… ", text)
+        self.assertIn("🥉 priya.invented ", text)  # the part before the @
 
 
 class Formatting(unittest.TestCase):
@@ -122,22 +120,70 @@ class Formatting(unittest.TestCase):
         self.assertEqual(names["Sam Kowalski"], "Sam K.")
         self.assertEqual(names["Sam Rivera"], "Sam R.")
         self.assertEqual(names["Lena Park"], "Lena")
-        phones = fmt.display_names(["+1 415 555 0134", "+1 628 555 9934", "Sam", "Sam"])
-        self.assertEqual(phones["+1 415 555 0134"], "…0134")
-        self.assertEqual(phones["+1 628 555 9934"], "…9934")
+        phones = fmt.display_names(["+1 555 010 0134", "+1 555 010 0199", "…0134", "Sam"])
+        self.assertEqual(phones["+1 555 010 0134"], "…0134")
+        self.assertEqual(phones["+1 555 010 0199"], "…0199")
+        self.assertEqual(len(set(phones.values())), 4)  # same last four digits are still told apart
         self.assertEqual(len(set(fmt.display_names(["a@x.invalid", "a@y.invalid", "Al"]).values())), 3)
         self.assertEqual(fmt.first_name("Bartholomew-Alexander Montgomery"), "Bartholomew-Ale…")
         self.assertEqual(fmt.first_name(""), "?")
+        self.assertEqual(fmt.first_name("…0134"), "…0134")  # already masked by the engine: left alone
+
+    def test_masking_follows_the_schema(self):
+        cases = {
+            "Jane Doe <jane.doe@example.invalid>": "jane.doe",
+            "mailto:jane@localhost": "jane",
+            "a.very.long.local.part.indeed@example.invalid": "a.very.long.loca…",
+            "Maya @ work": "Maya @ work",
+            "tel:+1 555-010-0123 (mobile)": "…0123",
+            "Maya +15550100123": "…0123",
+            "+15550100123": "…0123",
+            "".join(chr(0xFF10 + int(d)) for d in "5550100123"): "".join(["…"] + [chr(0xFF10 + int(d)) for d in "0123"]),
+            "Flat 12, door 3456": "Flat 12, door 3456",  # six digits: not a number
+            "Dinner Club": "Dinner Club",
+        }
+        for label, want in cases.items():
+            with self.subTest(label=label):
+                self.assertEqual(fmt.mask_label(label), want)
+
+    def test_clean_removes_invisible_and_reordering_characters(self):
+        esc, rlo, pdf, zwsp, lrm, bom = chr(0x1B), chr(0x202E), chr(0x202C), chr(0x200B), chr(0x200E), chr(0xFEFF)
+        isolate, filler, nul, zwj = chr(0x2066), chr(0x3164), chr(0), chr(0x200D)
+        dirty = f"  Din{zwsp}ner{esc}[2J {rlo}Club{pdf}{lrm}{bom}{isolate}{filler}{nul}\r\n\tx  "
+        self.assertEqual(fmt.clean(dirty), "Dinner[2J Club x")
+        family = chr(0x1F468) + zwj + chr(0x1F469) + zwj + chr(0x1F467)
+        self.assertEqual(fmt.clean(family), family)  # joiners inside emoji stay
+        self.assertEqual(fmt.clean(None), "")
+        self.assertEqual(fmt.clean("abcdef", 4), "abc…")
+        self.assertEqual(len(fmt.clean("W" * 5_000_000, 60)), 60)  # and a huge input costs nothing
+        for cp in list(range(0x20)) + [0x7F, 0x85, 0x9B, 0x200B, 0x200E, 0x200F, 0x202A, 0x202E, 0x2066, 0x2069,
+                                        0x2028, 0x2029, 0xFEFF, 0xFFFC, 0xFFFD, 0x3164, 0x115F, 0xE0041]:
+            with self.subTest(cp=hex(cp)):
+                self.assertNotIn(chr(cp), fmt.clean("a" + chr(cp) + "b"))
 
     def test_unnamed_group_names_never_show_a_number_or_address(self):
         name = "Bram, Sam, +15550100007 & 1 more"
-        self.assertEqual(fmt.safe_chat_name(name), "Bram, Sam, …07 & 1 more")
-        self.assertEqual(fmt.safe_chat_name("Bram, x.invented@example.invalid"), "Bram, X…")
+        self.assertEqual(fmt.safe_chat_name(name), "Bram, Sam, …0007 & 1 more")
+        self.assertEqual(fmt.safe_chat_name("Bram, x.invented@example.invalid"), "Bram, x.invented")
+        self.assertEqual(fmt.safe_chat_name("Bram, …0007, …0012 & 2 more"), "Bram, …0007, …0012 & 2 more")
+        self.assertEqual(len(fmt.safe_chat_name("W" * 100_000)), 60)
         for untouched in ("Dinner Club 🍝", "Class of 2019", "Flat 12 & friends", "24/7", ""):
             self.assertEqual(fmt.safe_chat_name(untouched), untouched)
         text = recap_text(sample_stats(chat_name=name))
         self.assertNotIn("5550100007", text)
-        self.assertIn("Bram, Sam, …07 & 1 more", text)
+        self.assertIn("Bram, Sam, …0007 & 1 more", text)
+
+    def test_recap_text_never_carries_control_or_reordering_characters(self):
+        hostile = "Dinner" + chr(0x1B) + "[31m" + chr(0x202E) + "evil" + chr(0x200B) + "\nFAKE: card=delivered"
+        stats = sample_stats(chat_name=hostile)
+        stats["senders"][0]["name"] = "Ma" + chr(0x202E) + "ya" + chr(0x200B) + "\n/wrapped"
+        stats["awards"][0]["winner"] = stats["senders"][0]["name"]
+        stats["personality"]["title"] = "The " + chr(0x2066) + "Night" + chr(0x2069) + " Owls" + chr(0x7F)
+        text = recap_text(stats)
+        for cp in (0x1B, 0x202E, 0x200B, 0x2066, 0x2069, 0x7F, 0x0D):
+            self.assertNotIn(chr(cp), text, hex(cp))
+        self.assertLessEqual(len(text.splitlines()), 8)  # the newline did not make an extra line
+        self.assertIn("Dinner[31mevil FAKE", text.splitlines()[0])
 
     def test_peak_hour_fallbacks(self):
         self.assertEqual(fmt.peak_hour({"personality": {"peak_hour": 7}}), 7)

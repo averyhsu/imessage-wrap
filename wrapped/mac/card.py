@@ -34,7 +34,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name
+from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, is_emoji_base, peak_hour, safe_chat_name
 
 DESIGN_W, DESIGN_H = 1080, 1350
 EMOJI_SCALE = 0.92  # emoji height relative to the type size
@@ -269,13 +269,11 @@ class FontBook:
 _JOINERS = (0x200D, 0xFE0F, 0x20E3)
 
 
-def _emoji_base(cp: int) -> bool:
-    return (
-        0x1F000 <= cp <= 0x1FAFF
-        or 0x2600 <= cp <= 0x27BF
-        or 0x231A <= cp <= 0x23FF
-        or cp in (0x2B50, 0x2B55, 0x2B1B, 0x2B1C, 0x2B05, 0x2B06, 0x2B07, 0x2934, 0x2935, 0x3030, 0x303D)
-    )
+_emoji_base = is_emoji_base
+
+# Never lay out more than this many characters of anything. Names are capped long
+# before they get here; this bounds the work for any caller.
+MAX_CLUSTER_INPUT = 200
 
 
 Cluster = Tuple[str, str, Optional[str]]  # (kind, text, font path): kind is "text" or "emoji"
@@ -287,7 +285,7 @@ def clusters(text: str, book: FontBook) -> List[Cluster]:
     Anything that cannot be drawn (emoji without an emoji font, characters no
     installed font has) is dropped rather than shown as a box."""
     out: List[Cluster] = []
-    chars = list(text)
+    chars = list(text[:MAX_CLUSTER_INPUT])
     i = 0
     n = len(chars)
     while i < n:
@@ -410,6 +408,7 @@ class Canvas:
         self.w, self.h, self.k, self.book = width, height, k, book
         self.img = Image.new("RGBA", (width, height), (0, 0, 0, 255))
         self._emoji_cache = {}
+        self._widths = {}
 
     def px(self, v: float) -> int:
         return int(round(v * self.k))
@@ -630,8 +629,12 @@ class Canvas:
         return result
 
     def measure(self, cl: Sequence[Cluster], role: str, size: float) -> float:
-        """Width of clusters in design units."""
+        """Width of clusters in design units (memoised: fitting asks repeatedly)."""
         px = self.px(size)
+        key = (tuple(cl), role, px)
+        cached = self._widths.get(key)
+        if cached is not None:
+            return cached
         total = 0.0
         for kind, text, path in _runs(cl):
             if kind == "emoji":
@@ -639,7 +642,25 @@ class Canvas:
                 total += (img.width if img else 0) + px * 0.08
             else:
                 total += self.book.face(role, px, path).getlength(text)
+        if len(self._widths) > 4096:
+            self._widths.clear()
+        self._widths[key] = total / self.k
         return total / self.k
+
+    def longest_prefix(
+        self, cl: Sequence[Cluster], role: str, size: float, width: float, suffix: Sequence[Cluster] = ()
+    ) -> int:
+        """The largest n for which ``cl[:n] + suffix`` fits ``width``, by bisection:
+        a handful of measurements however long the text is."""
+        lo, hi = 0, len(cl)
+        tail = list(suffix)
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if self.measure(list(cl[:mid]) + tail, role, size) <= width:
+                lo = mid
+            else:
+                hi = mid - 1
+        return lo
 
     def fit(
         self, text: str, role: str, size: float, max_width: float, min_size: Optional[float] = None
@@ -652,10 +673,9 @@ class Canvas:
             s = max(floor, s * 0.95)
         if self.measure(cl, role, s) > max_width:
             ell: List[Cluster] = [("text", "…", None)]
-            while cl and self.measure(cl + ell, role, s) > max_width:
+            cl = cl[: self.longest_prefix(cl, role, s, max_width, ell)]
+            while cl and cl[-1][1] == " ":
                 cl = cl[:-1]
-                while cl and cl[-1][1] == " ":
-                    cl = cl[:-1]
             cl = cl + ell
         return cl, s
 
@@ -674,8 +694,12 @@ class Canvas:
         cl, shrunk = self.fit(text, role, shrunk, max_width, shrunk)
         return cl, role, shrunk
 
-    def wrap(self, cl: Sequence[Cluster], role: str, size: float, width: float) -> List[List[Cluster]]:
-        """Greedy word wrap of clusters; a word wider than the line is broken."""
+    def wrap(
+        self, cl: Sequence[Cluster], role: str, size: float, width: float, max_lines: Optional[int] = None
+    ) -> List[List[Cluster]]:
+        """Greedy word wrap of clusters; a word wider than the line is broken.
+        With ``max_lines`` it stops as soon as that many lines exist (the caller
+        only wants to know whether the text fits in fewer)."""
         words: List[List[Cluster]] = [[]]
         for c in cl:
             if c[0] == "text" and c[1] == " ":
@@ -695,11 +719,13 @@ class Canvas:
                 lines.append(line)
             line = list(word)
             while len(line) > 1 and self.measure(line, role, size) > width:
-                cut = len(line) - 1
-                while cut > 1 and self.measure(line[:cut], role, size) > width:
-                    cut -= 1
+                if max_lines is not None and len(lines) >= max_lines:
+                    return lines
+                cut = max(1, self.longest_prefix(line, role, size, width))
                 lines.append(line[:cut])
                 line = line[cut:]
+            if max_lines is not None and len(lines) >= max_lines:
+                return lines
         if line:
             lines.append(line)
         return lines
@@ -872,9 +898,14 @@ def _tilted(c: Canvas, x: float, y: float, w: float, h: float, degrees: float, d
     c.stamp(layer, x - MARGIN, y - MARGIN, degrees)
 
 
+MAX_TITLE_CLUSTERS = 64  # the chat name is capped at 60 characters before it gets here
+
+
 def _fit_title(c: Canvas, text: str, width: float) -> Tuple[float, str, List[List[Cluster]]]:
-    """The chat name: one line if it can stay big, otherwise the biggest two-line setting."""
-    cl = clusters(text, c.book)
+    """The chat name: one line if it can stay big, otherwise the biggest two-line
+    setting, otherwise two lines with an ellipsis. Bounded: a fixed number of
+    sizes and cuts, each needing a handful of measurements."""
+    cl = clusters(text, c.book)[:MAX_TITLE_CLUSTERS]
     if not cl:
         cl = clusters("Group chat", c.book)
     for size in range(116, 87, -4):
@@ -883,19 +914,22 @@ def _fit_title(c: Canvas, text: str, width: float) -> Tuple[float, str, List[Lis
                 return float(size), role, [cl]
     for size in range(108, 55, -6):
         for role in ("wide", "black", "cond"):
-            lines = c.wrap(cl, role, size, width)
+            lines = c.wrap(cl, role, size, width, max_lines=3)
             if len(lines) <= 2:
                 return float(size), role, lines
-    lines = c.wrap(cl, "cond", 56, width)
-    rest: List[Cluster] = []
-    for line in lines[1:]:
-        rest += ([("text", " ", None)] if rest else []) + line
+    # Too long even for two small lines: fill the first, end the second with an ellipsis.
+    first = max(1, c.longest_prefix(cl, "cond", 56, width))
+    space = max((i for i in range(first) if cl[i][1] == " "), default=-1)
+    if first < len(cl) and space > 0:
+        first = space
+    rest = list(cl[first:])
+    while rest and rest[0][1] == " ":
+        rest = rest[1:]
     ell: List[Cluster] = [("text", "…", None)]
-    while rest and c.measure(rest + ell, "cond", 56) > width:
+    rest = rest[: c.longest_prefix(rest, "cond", 56, width, ell)]
+    while rest and rest[-1][1] == " ":
         rest = rest[:-1]
-        while rest and rest[-1][1] == " ":
-            rest = rest[:-1]
-    return 56.0, "cond", [lines[0], rest + ell]
+    return 56.0, "cond", [list(cl[:first]), rest + ell]
 
 
 def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:

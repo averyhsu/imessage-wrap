@@ -30,9 +30,10 @@ from pathlib import Path
 from typing import Any, Callable, List, Optional, Sequence
 
 from . import PRODUCT_NAME, chatdb, send
-from .agent import Agent, AgentConfig, acquire_lock, consent_text, match_chats, scope_signature
+from .agent import Agent, AgentConfig, acquire_lock, consent_text, match_chats, sanitize_chats, scope_signature
 from .engine import ChatRef, EngineError
 from .state import default_state_path, home_dir
+from .fmt import scrub
 from .text import assert_safe
 
 EXIT_OK = 0
@@ -141,7 +142,7 @@ def _preflight(db_path: Path) -> None:
 
 def _list_chats(engine, db_path: Path) -> List[ChatRef]:
     try:
-        return list(engine.list_group_chats(db_path))
+        return sanitize_chats(engine.list_group_chats(db_path))
     except Exception as exc:
         if type(exc).__name__ == "DatabaseError":  # the core package's user-facing error
             raise CliError(str(exc)) from exc
@@ -216,7 +217,7 @@ def _make_logger(log_path: Optional[Path]) -> Callable[[str], None]:
     def log(line: str) -> None:
         stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for part in str(line).splitlines() or [""]:
-            text = f"{stamp}  {part}"
+            text = f"{stamp}  {scrub(part)}"  # no control or reordering characters, whatever was logged
             print(text, flush=True)
             if log_path is not None:
                 try:

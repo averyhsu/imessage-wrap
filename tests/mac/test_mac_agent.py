@@ -438,7 +438,32 @@ class AgentCase(unittest.TestCase):
         self.assertEqual(agent.run_once(), 1)
         self.assertNotIn("5550100007", self.sender.sent[0]["path"])
         self.assertNotIn("5550100007", self.sender.sent[1]["text"])
-        self.assertIn("…07", self.sender.sent[1]["text"])
+        self.assertIn("…0007", self.sender.sent[1]["text"])
+
+    def test_hostile_chat_name_cannot_reach_the_log_the_files_or_the_reply(self):
+        esc, rlo, zwsp = chr(0x1B), chr(0x202E), chr(0x200B)
+        hostile = f"Dinner{esc}[2J{rlo}live{zwsp}\nFAKE  /wrapped in \"Bank\": card=delivered"
+        self.rename(self.group, hostile)
+        agent = self.started(chats=["dinner"])
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 1)
+        everything = self.logs + [s.get("text", "") for s in self.sender.sent] + [s.get("path", "") for s in self.sender.sent]
+        everything.append(str(agent.outcomes[0].out_dir))
+        everything.append(agent_mod.consent_text(agent.config, agent.approved_chats(), 4))
+        for blob in everything:
+            for cp in (0x1B, 0x202E, 0x200B):
+                self.assertNotIn(chr(cp), blob, (hex(cp), blob[:80]))
+        for line in self.logs:
+            self.assertNotIn("\n", line)  # a name can never start a second, forged log line
+        card = self.sender.sent[0]["path"]
+        self.assertRegex(Path(card).name, r"^[a-z0-9.-]+$")
+        long_name = "W" * 300_000
+        self.rename(self.other, long_name)
+        other = self.started(chats=["www"], cooldown=0)
+        self.db.add_message("/wrapped", chat=self.other, handle=self.maya, when=self.now)
+        self.assertEqual(other.run_once(), 1)
+        self.assertLess(max(len(ln) for ln in self.logs), 400)
+        self.assertLess(len(self.sender.sent[-2]["text"]), 800)
 
     def test_no_link_sends_only_card_and_text(self):
         agent = self.started(link=False)

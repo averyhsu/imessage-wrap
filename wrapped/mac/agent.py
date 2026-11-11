@@ -35,7 +35,7 @@ from . import PRODUCT_NAME, chatdb
 from .engine import ChatRef, Engine
 from .send import FAILED, SendResult
 from .state import State
-from .fmt import safe_chat_name
+from .fmt import clean, safe_chat_name
 from .text import assert_safe, empty_text, recap_lines
 from .triggers import Trigger, parse_trigger
 
@@ -82,6 +82,17 @@ class TriggerOutcome:
         return f"{head}: " + " ".join(parts)
 
 
+def sanitize_chats(chats: Iterable[ChatRef]) -> List[ChatRef]:
+    """Chats with names that are safe to print, log and send (cleaned, masked, capped).
+
+    Chat names are other people's input: this is where they enter the helper."""
+    return [
+        ChatRef(guid=c.guid, identifier=c.identifier, name=safe_chat_name(c.name) or "Group chat", rowid=c.rowid,
+                members=c.members)
+        for c in chats
+    ]
+
+
 def match_chats(chats: Iterable[ChatRef], patterns: Sequence[str]) -> List[ChatRef]:
     """Chats whose name contains any of the patterns (case-insensitive)."""
     wanted = [p.casefold().strip() for p in patterns if p and p.strip()]
@@ -89,7 +100,7 @@ def match_chats(chats: Iterable[ChatRef], patterns: Sequence[str]) -> List[ChatR
 
 
 def slugify(text: str, fallback: str = "chat") -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")
+    slug = re.sub(r"[^a-z0-9]+", "-", str(text)[:200].lower()).strip("-")
     return slug[:40].strip("-") or fallback
 
 
@@ -129,7 +140,7 @@ class Agent:
 
         Names are used here and nowhere else: this list is shown to the owner,
         and what they approve is frozen by ``approve``."""
-        chats = list(self.engine.list_group_chats(self.config.db_path))
+        chats = sanitize_chats(self.engine.list_group_chats(self.config.db_path))
         return chats if self.config.all_chats else match_chats(chats, self.config.chats)
 
     def approve(self, chats: Iterable[ChatRef]) -> None:
@@ -137,7 +148,7 @@ class Agent:
 
         Any member can rename a group or start a new one, so a name can never add
         a chat afterwards; a renamed approved chat stays approved (same id)."""
-        approved = list(chats)
+        approved = sanitize_chats(chats)
         self._known = {c.key: c for c in approved}
         self._approved = frozenset(self._known)
 
@@ -172,7 +183,7 @@ class Agent:
                         if self._handle_row(conn, row):
                             answered += 1
                     except Exception as exc:  # one bad row must never stop the loop
-                        self._log(f"error while handling message row {row.rowid}: {type(exc).__name__}: {exc}")
+                        self._log(f"error while handling message row {row.rowid}: {type(exc).__name__}: {clean(exc, 300)}")
                     self.state.cursor = row.rowid
         finally:
             conn.close()
@@ -274,7 +285,7 @@ class Agent:
         known = self._known.get(key)
         # the current name if the group has one (an approved chat may have been
         # renamed since start), else the name worked out from its members at start
-        name = row.display_name.strip() or (known.name if known else "") or "Group chat"
+        name = safe_chat_name(row.display_name) or (known.name if known else "") or "Group chat"
         # Reply through the exact chat row the command arrived on.
         return ChatRef(
             guid=row.guid,
@@ -297,7 +308,7 @@ class Agent:
         try:
             stats = self.engine.compute_stats(self.config.db_path, chat, trigger.period, self.config.me)
         except Exception as exc:
-            outcome.error = f"could not compute stats ({type(exc).__name__}: {exc})"
+            outcome.error = f"could not compute stats ({type(exc).__name__}: {clean(exc, 300)})"
             return outcome
 
         if int(((stats.get("totals") or {}).get("messages")) or 0) <= 0:
@@ -310,14 +321,14 @@ class Agent:
             try:
                 stats = self._awards_hook(stats) or stats
             except Exception as exc:  # AI awards are optional; never let them block a reply
-                self._log(f"AI awards skipped ({type(exc).__name__}: {exc}); using the built-in ones")
+                self._log(f"AI awards skipped ({type(exc).__name__}); using the built-in ones")
 
         link = ""
         if self.config.link:
             try:
                 link = self.engine.build_link(stats, self.config.quotes)
             except Exception as exc:
-                self._log(f"no link this time ({type(exc).__name__}: {exc}); sending the card and text only")
+                self._log(f"no link this time ({type(exc).__name__}: {clean(exc, 300)}); sending the card and text only")
         text = "\n".join(recap_lines(stats, with_link=bool(link)))
         assert_safe(text)
         if link:
@@ -336,7 +347,7 @@ class Agent:
             try:
                 self._render_card(stats, card_path)
             except Exception as exc:
-                outcome.error = f"could not render the card ({type(exc).__name__}: {exc})"
+                outcome.error = f"could not render the card ({type(exc).__name__}: {clean(exc, 300)})"
                 return outcome
             if self.config.dry_run:
                 (folder / "recap.txt").write_text(text + "\n", encoding="utf-8")

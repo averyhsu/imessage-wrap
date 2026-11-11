@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import List
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name, short_date
+from .fmt import clean, display_names, first_name, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name, short_date
 from .triggers import starts_with_trigger
 
 PERSONALITY_EMOJI = {
@@ -86,7 +86,7 @@ def recap_lines(stats: dict, with_link: bool = True) -> List[str]:
             continue
         if a_title.lower().startswith("the "):
             a_title = a_title[4:]
-        awards.append(f"{a_title}: {names.get(winner, winner.split(' ')[0])}")
+        awards.append(f"{a_title}: {names.get(winner) or first_name(winner)}")
     if awards:
         lines.append("🏆 " + " · ".join(awards))
 
@@ -96,7 +96,7 @@ def recap_lines(stats: dict, with_link: bool = True) -> List[str]:
         giver = ((stats.get("reactions") or {}).get("top_giver") or {}).get("name")
         if giver:
             g = clean(giver)
-            line += f" · most generous: {names.get(g, g.split(' ')[0])}"
+            line += f" · most generous: {names.get(g) or first_name(g)}"
         lines.append(line)
 
     busiest = stats.get("busiest_day") or {}

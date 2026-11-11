@@ -153,7 +153,29 @@ class CardRender(unittest.TestCase):
         stats["senders"][0]["name"] = "Maya Okafor-Lindqvist"
         stats["senders"][1]["name"] = "+1 (415) 555-0134"
         stats["senders"][2]["name"] = "priya.invented@example.invalid"
-        self.assertEqual([n for n, _s, _m in card._top_senders(stats)], ["Maya", "…34", "P…"])
+        self.assertEqual([n for n, _s, _m in card._top_senders(stats)], ["Maya", "…0134", "priya.invented"])
+
+    def test_a_huge_unbroken_chat_name_cannot_stall_the_renderer(self):
+        import time
+
+        # anyone in a chat can rename it, so this is attacker-controlled input
+        started = time.perf_counter()
+        render_card(sample_stats(), self.dir / "base.png", size=SMALL)
+        baseline = time.perf_counter() - started
+        for length in (120, 500, 100_000):
+            with self.subTest(length=length):
+                started = time.perf_counter()
+                out = render_card(sample_stats(chat_name="W" * length), self.dir / "long.png", size=SMALL)
+                took = time.perf_counter() - started
+                self.assertLess(took, baseline + 1.0, f"{length} characters took {took:.2f}s (plain card {baseline:.2f}s)")
+                self.assertTrue(out.is_file())
+        hostile = sample_stats(chat_name=("😀" + chr(0x200D)) * 50_000)
+        hostile["personality"]["title"] = "T" * 200_000
+        hostile["period"]["label"] = "9" * 200_000
+        hostile["senders"][0]["name"] = "N" * 200_000
+        started = time.perf_counter()
+        render_card(hostile, self.dir / "hostile.png", size=SMALL)
+        self.assertLess(time.perf_counter() - started, baseline + 1.5)
 
     def test_palette_matches_the_web_card(self):
         out = render_card(sample_stats(), self.dir / "card.png")
@@ -303,6 +325,23 @@ class FontsAndText(unittest.TestCase):
         self.assertEqual(lines[1][-1][1], "…")
         self.assertLessEqual(canvas.measure(lines[1], role, size), 936)
         self.assertEqual(len(card._fit_title(canvas, "", 936)[2]), 1)  # an empty name still draws something
+
+    def test_fitting_is_bounded_whatever_it_is_given(self):
+        import time
+
+        canvas = card.Canvas(2160, 2700, 2.0, self.plain)
+        started = time.perf_counter()
+        size, role, lines = card._fit_title(canvas, "W" * 100_000, 936)
+        cl, fitted = canvas.fit("W" * 100_000, "black", 60, 500, 40)
+        wrapped = canvas.wrap(clusters("W" * 100_000, self.plain), "black", 60, 500)
+        took = time.perf_counter() - started
+        self.assertLess(took, 0.5, f"fitting took {took:.2f}s")
+        self.assertEqual(len(lines), 2)
+        for line in lines:
+            self.assertLessEqual(canvas.measure(line, role, size), 936)
+        self.assertLessEqual(canvas.measure(cl, "black", fitted), 500)
+        self.assertLessEqual(len(clusters("W" * 100_000, self.plain)), 200)
+        self.assertLessEqual(len(wrapped), 60)
 
     def test_fit_roles_prefers_the_wider_cut(self):
         canvas = card.Canvas(2160, 2700, 2.0, self.plain)
