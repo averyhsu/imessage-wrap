@@ -185,6 +185,59 @@ class Formatting(unittest.TestCase):
         self.assertLessEqual(len(text.splitlines()), 8)  # the newline did not make an extra line
         self.assertIn("Dinner[31mevil FAKE", text.splitlines()[0])
 
+    def named(self, names):
+        stats = sample_stats(members=len(names), messages=900)
+        for sender, name in zip(stats["senders"], names):
+            sender["name"] = name
+        return stats
+
+    def test_short_names_follow_the_schema(self):
+        stats = self.named(["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Avery Hsu", "…0123"])
+        stats["late_night"]["top"]["name"] = "Sam Rivera"
+        stats["most_reacted"][0]["sender"] = "Dave Plumber"
+        stats["reactions"]["top_giver"]["name"] = "Sam Kowalski"
+        stats["reactions"]["top_receiver"]["name"] = "Avery Hsu"
+        stats["awards"] = [{"id": "yapper", "emoji": "🗣️", "title": "The Yapper", "winner": "Dave Plumber", "detail": "x"}]
+        out = fmt.short_names(stats, me="Avery Hsu")
+        self.assertEqual([s["name"] for s in out["senders"]], ["Dave", "Sam R.", "Sam K.", "Avery Hsu", "…0123"])
+        self.assertEqual(out["late_night"]["top"]["name"], "Sam R.")
+        self.assertEqual(out["most_reacted"][0]["sender"], "Dave")
+        self.assertEqual(out["reactions"]["top_giver"]["name"], "Sam K.")
+        self.assertEqual(out["reactions"]["top_receiver"]["name"], "Avery Hsu")  # the owner's own name is kept
+        self.assertEqual(out["awards"][0]["winner"], "Dave")
+        self.assertEqual(stats["senders"][0]["name"], "Dave Plumber")  # a copy; the input is untouched
+        self.assertEqual(out["totals"], stats["totals"])
+
+    def test_short_names_that_still_collide_stay_full(self):
+        out = fmt.short_names(self.named(["Sam Rivera", "Sam Rogers", "Lena Park"]), me="Me")
+        self.assertEqual([s["name"] for s in out["senders"]], ["Sam Rivera", "Sam Rogers", "Lena"])
+        out = fmt.short_names(self.named(["Sam", "Sam Rivera", "Lena Park"]), me="Sam")  # the owner is "Sam"
+        self.assertEqual([s["name"] for s in out["senders"]], ["Sam", "Sam R.", "Lena"])
+        self.assertEqual(fmt.short_names({"v": 1}, me="Me"), {"v": 1})
+
+    def test_account_first_name(self):
+        calls = []
+
+        def runner(output=None, error=None):
+            def run(cmd, **kw):
+                calls.append(cmd)
+                if error:
+                    raise error
+                return type("P", (), {"stdout": output, "returncode": 0})()
+            return run
+
+        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("Avery Hsu\n")), "Avery")
+        self.assertEqual(calls[-1], ["/usr/bin/id", "-F"])
+        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("  \n")), "Me")
+        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner(error=OSError("no id"))), "Me")
+        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("5550100123\n")), "Me")
+        self.assertEqual(
+            fmt.account_first_name(platform="darwin", run=runner("Av" + chr(0x202E) + "ery" + chr(0x1B) + " X\n")), "Avery"
+        )
+        before = len(calls)
+        self.assertEqual(fmt.account_first_name(platform="linux", run=runner("Avery Hsu")), "Me")
+        self.assertEqual(len(calls), before)  # only asked on macOS
+
     def test_peak_hour_fallbacks(self):
         self.assertEqual(fmt.peak_hour({"personality": {"peak_hour": 7}}), 7)
         self.assertEqual(fmt.peak_hour({"by_hour": [0] * 9 + [5] + [0] * 14}), 9)

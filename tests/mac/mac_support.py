@@ -282,6 +282,7 @@ class FakeEngine:
         self.stats = stats
         self.compute_calls: List[tuple] = []
         self.link_calls: List[bool] = []
+        self.link_stats: List[dict] = []
         self.fail_compute: Optional[Exception] = None
         self.fail_link: Optional[Exception] = None
 
@@ -314,6 +315,7 @@ class FakeEngine:
 
     def build_link(self, stats, quotes):
         self.link_calls.append(quotes)
+        self.link_stats.append(copy.deepcopy(stats))
         if self.fail_link is not None:
             raise self.fail_link
         return "https://example.invalid/story/#w1=FAKEPAYLOAD" + ("" if quotes else "-noquotes")

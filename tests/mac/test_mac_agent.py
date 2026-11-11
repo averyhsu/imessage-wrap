@@ -465,6 +465,33 @@ class AgentCase(unittest.TestCase):
         self.assertLess(max(len(ln) for ln in self.logs), 400)
         self.assertLess(len(self.sender.sent[-2]["text"]), 800)
 
+    def full_named_stats(self):
+        stats = sample_stats(members=4, messages=900)
+        for sender, name in zip(stats["senders"], ["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Avery"]):
+            sender["name"] = name
+        stats["awards"][0]["winner"] = "Dave Plumber"
+        return stats
+
+    def test_the_link_carries_short_names_by_default(self):
+        self.engine.stats = self.full_named_stats()
+        agent = self.started(me="Avery")
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 1)
+        sent = self.engine.link_stats[0]
+        self.assertEqual([s["name"] for s in sent["senders"]], ["Dave", "Sam R.", "Sam K.", "Avery"])
+        self.assertEqual(sent["awards"][0]["winner"], "Dave")
+        self.assertNotIn("Plumber", json.dumps(sent))
+        self.assertNotIn("Plumber", self.sender.sent[1]["text"])
+        self.assertIn("🥇 Dave ", self.sender.sent[1]["text"])
+
+    def test_full_names_is_an_explicit_choice_for_the_link_only(self):
+        self.engine.stats = self.full_named_stats()
+        agent = self.started(me="Avery", full_names=True)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
+        self.assertEqual(agent.run_once(), 1)
+        self.assertEqual(self.engine.link_stats[0]["senders"][0]["name"], "Dave Plumber")
+        self.assertNotIn("Plumber", self.sender.sent[1]["text"])  # the text in the thread keeps first names
+
     def test_no_link_sends_only_card_and_text(self):
         agent = self.started(link=False)
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
@@ -651,6 +678,12 @@ class Scope(unittest.TestCase):
             self.assertIn(f"  - {chat.name}", everything)
         self.assertIn("created later are NOT included until you restart", everything)
         self.assertIn("Only these exact chats", text)
+        named = consent_text(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], me="Robin"), self.CHATS[:1], 3)
+        self.assertIn('Your own messages appear under the name "Robin"', named)
+        self.assertIn("--me", named)
+        self.assertIn("first names", named)
+        self.assertIn("full contact names", consent_text(
+            AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], full_names=True), self.CHATS[:1], 3))
         self.assertIn("renamed", text)
         self.assertIn("including the text of the most-reacted messages, because you passed --quotes", everything)
         no_link = consent_text(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], link=False), self.CHATS[:1], 3)

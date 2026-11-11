@@ -6,7 +6,10 @@ lives in one place.
 
 from __future__ import annotations
 
+import copy
 import re
+import subprocess
+import sys
 from typing import Dict, Iterable, List, Optional
 
 _WS = re.compile(r"\s+")
@@ -208,6 +211,96 @@ def display_names(names: Iterable[object]) -> Dict[str, str]:
         if seen[shown[name]] > 1:
             shown[name] = f"{shown[name]} {seen[shown[name]]}"
     return shown
+
+
+def _apply_names(stats: dict, rename) -> dict:
+    """A deep copy of ``stats`` with every person's name passed through ``rename``."""
+    out = copy.deepcopy(stats)
+    for sender in out.get("senders") or []:
+        if isinstance(sender, dict) and isinstance(sender.get("name"), str):
+            sender["name"] = rename(sender["name"])
+    top = (out.get("late_night") or {}).get("top")
+    if isinstance(top, dict) and isinstance(top.get("name"), str):
+        top["name"] = rename(top["name"])
+    for item in out.get("most_reacted") or []:
+        if isinstance(item, dict) and isinstance(item.get("sender"), str):
+            item["sender"] = rename(item["sender"])
+    for key in ("top_giver", "top_receiver"):
+        who = (out.get("reactions") or {}).get(key)
+        if isinstance(who, dict) and isinstance(who.get("name"), str):
+            who["name"] = rename(who["name"])
+    for award in out.get("awards") or []:
+        if isinstance(award, dict) and isinstance(award.get("winner"), str):
+            award["winner"] = rename(award["winner"])
+    return out
+
+
+def short_names(stats: dict, me: str = "Me") -> dict:
+    """docs/SCHEMA.md 2, "Short names", for use until the engine's own
+    ``wrapped.short_names`` is available (``shorten`` prefers that one).
+
+    Contact names are the owner's private labels ("Dave plumber"), so a recap
+    shows the first word. The owner's own name and masked labels are unchanged;
+    two people with the same first word become "Sam R." / "Sam K."; if that
+    still collides they keep their full names."""
+    names: List[str] = []
+    seen = set()
+
+    def collect(name: str) -> str:
+        if name not in seen:
+            seen.add(name)
+            names.append(name)
+        return name
+
+    _apply_names(stats, collect)
+
+    def kept(name: str) -> bool:
+        return name == me or name.startswith("…")
+
+    short = {name: (name if kept(name) else (name.split() or [name])[0]) for name in names}
+    for _round in range(2):
+        counts: Dict[str, int] = {}
+        for value in short.values():
+            counts[value] = counts.get(value, 0) + 1
+        clashing = [name for name in names if counts[short[name]] > 1 and not kept(name)]
+        if not clashing:
+            break
+        for name in clashing:
+            words = name.split() or [name]
+            short[name] = f"{words[0]} {words[-1][0]}." if _round == 0 else name
+    return _apply_names(stats, lambda name: short.get(name, name))
+
+
+def shorten(stats: dict, me: str = "Me") -> dict:
+    """Short names through the engine when it provides them, else the same rule here."""
+    try:
+        from .. import short_names as engine_short_names  # wrapped.short_names(stats, me=...)
+    except ImportError:
+        return short_names(stats, me)
+    try:
+        return engine_short_names(stats, me=me)
+    except TypeError:
+        return engine_short_names(stats)
+
+
+def account_first_name(platform: Optional[str] = None, run=None) -> str:
+    """The first name of this Mac's user account (``id -F``), or "Me".
+
+    Used as the default for ``--me``: a recap the whole chat reads should not call
+    its owner "Me"."""
+    if (platform or sys.platform) != "darwin":
+        return "Me"
+    try:
+        proc = (run or subprocess.run)(  # noqa: S603 - fixed command, no shell
+            ["/usr/bin/id", "-F"], capture_output=True, text=True, timeout=3, stdin=subprocess.DEVNULL
+        )
+        full = clean(proc.stdout, 80)
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return "Me"
+    name = first_name(full) if full else ""
+    if not name or name == "?" or name.startswith("…"):
+        return "Me"
+    return name
 
 
 def peak_hour(stats: dict) -> Optional[int]:

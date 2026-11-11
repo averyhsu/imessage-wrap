@@ -142,6 +142,7 @@ class EngineCase(unittest.TestCase):
         patches = [
             mock.patch.dict(os.environ, {"HOME": str(self.home), "THREADBACK_HOME": str(self.dir / "tb")}),
             mock.patch.object(send, "run_osascript", side_effect=AssertionError("osascript reached in a test")),
+            mock.patch.object(mac_cli, "account_first_name", lambda: "Robin"),
             mock.patch.object(send.subprocess, "run", side_effect=AssertionError("subprocess reached in a test")),
         ]
         for p in patches:
@@ -333,6 +334,7 @@ class AgentCommand(EngineCase):
         code, out, err = self.live("--chat", "taco", "--from-rowid", "0")
         self.assertEqual(code, 2)
         self.assertIn("Replies are sent from YOUR Apple ID into these group chats when someone types /wrapped", out)
+        self.assertIn('Your own messages appear under the name "Robin"', out)  # from the Mac account
         self.assertIn(self.chats["lively"]["display_name"], out)
         self.assertIn("--yes", err)
         # a terminal, and the owner says no
@@ -443,6 +445,36 @@ class OtherCommands(EngineCase):
         folder = next(self.out.iterdir())
         self.assertEqual(len(list(folder.glob("*.png"))), 1)
         self.assertFalse((self.dir / "tb" / "state.json").exists())  # a preview keeps no state
+
+    def test_owner_is_named_after_the_mac_account_unless_me_is_given(self):
+        base = ["preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "taco", "--year", "2026",
+                "--out", str(self.out)]
+        code, out, err = self.run_cli(*base)
+        self.assertEqual(code, 0, err + out)
+        self.assertIn("Robin 20%", out)  # the account's first name, not "Me"
+        self.assertNotIn(" Me ", out)
+        link = [ln for ln in out.splitlines() if ln.startswith("https://")][0]
+        self.assertIn("Robin", [s["name"] for s in wrapped.stats_from_url(link)["senders"]])
+        code, out, err = self.run_cli(*base, "--me", "Avery")
+        self.assertIn("Avery 20%", out)
+        code, out, err = self.run_cli("doctor", "--db", str(self.db))
+        self.assertIn('"Robin"', out)
+        self.assertIn("--me", out)
+
+    def test_full_names_flag_reaches_the_link(self):
+        base = ["preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "taco", "--year", "2026",
+                "--out", str(self.out)]
+
+        def names(*extra):
+            code, out, err = self.run_cli(*base, *extra)
+            self.assertEqual(code, 0, err + out)
+            link = [ln for ln in out.splitlines() if ln.startswith("https://")][0]
+            return [s["name"] for s in wrapped.stats_from_url(link)["senders"]]
+
+        short, full = names(), names("--full-names")
+        self.assertTrue(any(" " in n and not n.endswith(".") for n in full), full)  # the fixture has full contact names
+        self.assertTrue(all(" " not in n or n.endswith(".") or n == "Robin" for n in short), short)
+        self.assertEqual(len(short), len(full))
 
     def test_preview_needs_exactly_one_chat(self):
         code, _, err = self.run_cli("preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "zzz")

@@ -33,7 +33,7 @@ from . import PRODUCT_NAME, chatdb, send
 from .agent import Agent, AgentConfig, acquire_lock, consent_text, match_chats, sanitize_chats, scope_signature
 from .engine import ChatRef, EngineError
 from .state import default_state_path, home_dir
-from .fmt import scrub
+from .fmt import account_first_name, clean, scrub
 from .text import assert_safe
 
 EXIT_OK = 0
@@ -95,7 +95,8 @@ def _friendly(func: Callable[[argparse.Namespace], int]) -> Callable[[argparse.N
 def _add_source_options(parser: argparse.ArgumentParser) -> None:
     group = parser.add_argument_group("where the messages come from")
     group.add_argument("--db", metavar="PATH", help="Messages database (default: ~/Library/Messages/chat.db)")
-    group.add_argument("--me", metavar="NAME", default="Me", help="your own name in the recap (default: Me)")
+    group.add_argument("--me", metavar="NAME", default=None,
+                       help="your own name in the recap (default: the first name of this Mac's account, else Me)")
     group.add_argument("--contacts", metavar="PATH", action="append",
                        help="address-book database or folder to take names from (default: found automatically)")
     group.add_argument("--no-contacts", action="store_true",
@@ -113,6 +114,13 @@ def _add_ai_options(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--ai-yes", action="store_true", help="skip the AI consent question (you have read it)")
 
 
+def _resolve_me(args: argparse.Namespace) -> str:
+    """``--me`` if given, else the first name of the macOS account, else "Me"."""
+    given = clean(getattr(args, "me", None), 40)
+    args.me = given or account_first_name()
+    return args.me
+
+
 def _db_path(args: argparse.Namespace) -> Path:
     return Path(args.db).expanduser() if getattr(args, "db", None) else chatdb.default_db_path()
 
@@ -121,7 +129,7 @@ def _engine(args: argparse.Namespace):
     from .engine import load_engine
 
     engine = load_engine()
-    engine.me = getattr(args, "me", "Me") or "Me"
+    engine.me = _resolve_me(args)
     if getattr(args, "no_contacts", False):
         engine.contacts = False
     elif getattr(args, "contacts", None):
@@ -265,6 +273,7 @@ def cmd_agent(args: argparse.Namespace) -> int:
         out_dir=Path(args.out).expanduser() if args.out else None,
         quotes=bool(args.quotes) and not args.no_quotes,
         link=not args.no_link,
+        full_names=bool(args.full_names),
     )
     if config.dry_run:
         sender: Any = send.DryRunSender()
@@ -370,6 +379,7 @@ def cmd_preview(args: argparse.Namespace) -> int:
     config = AgentConfig(
         db_path=db_path, state_path=Path(os.devnull), me=args.me, dry_run=True, out_dir=out_dir,
         quotes=bool(args.quotes) and not args.no_quotes, link=not args.no_link,
+        full_names=bool(args.full_names),
     )
     logs: List[str] = []
     agent = Agent(config, engine, send.DryRunSender(), log=logs.append)
@@ -580,6 +590,10 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     else:
         line(None, "Messages automation not checked (add --automation; it sends nothing)")
 
+    given = clean(getattr(args, "me", None), 40)
+    whose = given or account_first_name()
+    source = "from --me" if given else ("from this Mac's account" if whose != "Me" else "no account name found")
+    line(None, f'your name in recaps: "{whose}" ({source}; change it with --me NAME)')
     state_path = default_state_path()
     line(None, f"state: {state_path}" + ("" if state_path.exists() else " (not created yet)"))
     _say()
@@ -625,6 +639,8 @@ def register(subparsers: Any) -> None:
                        help="include the text of the most-reacted messages in the link (off unless you ask)")
     agent.add_argument("--no-quotes", action="store_true", help="keep message text out of the link (the default)")
     agent.add_argument("--no-link", action="store_true", help="send the image and the text only, no link")
+    agent.add_argument("--full-names", action="store_true",
+                       help="keep people's full contact names in the link (default: first names)")
     agent.add_argument("--keep-awake", action="store_true",
                        help="stop this Mac from idle-sleeping while the helper runs (caffeinate -i)")
     agent.add_argument("--state", metavar="FILE", help="state file (default: ~/.threadback/state.json)")
@@ -649,6 +665,8 @@ def register(subparsers: Any) -> None:
                          help="include the text of the most-reacted messages in the link (off unless you ask)")
     preview.add_argument("--no-quotes", action="store_true", help="keep message text out of the link (the default)")
     preview.add_argument("--no-link", action="store_true", help="leave the link out")
+    preview.add_argument("--full-names", action="store_true",
+                         help="keep people's full contact names in the link (default: first names)")
     preview.add_argument("--open", action="store_true", help="open the folder afterwards (macOS)")
     _add_ai_options(preview)
     _add_source_options(preview)
@@ -689,6 +707,7 @@ def register(subparsers: Any) -> None:
     doctor.add_argument("--automation", action="store_true",
                         help="also ask Messages for its chat list (triggers the macOS permission prompt)")
     doctor.add_argument("--db", metavar="PATH", help="Messages database (default: ~/Library/Messages/chat.db)")
+    doctor.add_argument("--me", metavar="NAME", default=None, help="your own name in the recap")
     doctor.set_defaults(func=cmd_doctor)
 
 

@@ -35,7 +35,7 @@ from . import PRODUCT_NAME, chatdb
 from .engine import ChatRef, Engine
 from .send import FAILED, SendResult
 from .state import State
-from .fmt import clean, safe_chat_name
+from .fmt import clean, safe_chat_name, shorten
 from .text import assert_safe, empty_text, recap_lines
 from .triggers import Trigger, parse_trigger
 
@@ -54,6 +54,7 @@ class AgentConfig:
     out_dir: Optional[Path] = None  # where a dry run writes card + text + link
     quotes: bool = False  # True puts the most-reacted messages' text in the link (--quotes)
     link: bool = True  # False sends the card and text only
+    full_names: bool = False  # True keeps full contact names in the link (--full-names)
     join_attempts: int = 10  # a message row can appear before its chat join row
     join_delay: float = 0.3
     batch: int = 500
@@ -323,10 +324,20 @@ class Agent:
             except Exception as exc:  # AI awards are optional; never let them block a reply
                 self._log(f"AI awards skipped ({type(exc).__name__}); using the built-in ones")
 
+        # Contact names are the owner's private labels, so everything that leaves
+        # uses short names (docs/SCHEMA.md 2). --full-names keeps them in the link
+        # only; the card and the text in the thread always use first names.
+        full_stats = stats
+        try:
+            stats = shorten(stats, self.config.me)
+        except Exception as exc:
+            outcome.error = f"could not shorten names ({type(exc).__name__}: {clean(exc, 300)})"
+            return outcome
+
         link = ""
         if self.config.link:
             try:
-                link = self.engine.build_link(stats, self.config.quotes)
+                link = self.engine.build_link(full_stats if self.config.full_names else stats, self.config.quotes)
             except Exception as exc:
                 self._log(f"no link this time ({type(exc).__name__}: {clean(exc, 300)}); sending the card and text only")
         text = "\n".join(recap_lines(stats, with_link=bool(link)))
@@ -429,6 +440,9 @@ def consent_text(config: AgentConfig, allowed: Sequence[ChatRef], total_groups: 
     else:
         lines.append("Each reply is two messages that everyone in the chat will see: a recap image and a short text recap.")
     lines += [
+        f'Your own messages appear under the name "{clean(config.me, 40)}" (change it with --me NAME).',
+        "Other people appear under their first names"
+        + (", and the link carries their full contact names (--full-names)." if config.full_names else "."),
         f"At most one reply per chat every {int(config.cooldown)} seconds. Anyone in the chat can trigger it.",
         "Your messages are read on this Mac only; nothing is uploaded.",
     ]
