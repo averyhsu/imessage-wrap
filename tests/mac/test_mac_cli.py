@@ -648,6 +648,15 @@ class OtherCommands(EngineCase):
         self.assertEqual(code, 1)
         self.assertIn("Privacy & Security > Automation", out)
 
+    def test_console_output_is_scrubbed(self):
+        esc, rlo = chr(0x1B), chr(0x202E)
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            mac_cli._say(f"line one{esc}[2J\n  line {rlo}two")
+            mac_cli._err(f"oops{esc}]0;title{chr(7)}")
+        self.assertEqual(out.getvalue(), "line one[2J\n  line two\n")
+        self.assertEqual(err.getvalue(), "oops]0;title\n")
+
     def test_register_avoids_name_clashes(self):
         import argparse
 

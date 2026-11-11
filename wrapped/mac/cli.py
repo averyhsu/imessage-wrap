@@ -53,12 +53,18 @@ class CliError(Exception):
         self.code = code
 
 
+def _printable(text: object) -> str:
+    """Console output never carries control or reordering characters, whatever
+    name or error text ended up in it (line breaks are kept)."""
+    return "\n".join(scrub(part) for part in str(text).split("\n"))
+
+
 def _say(text: str = "") -> None:
-    print(text, flush=True)
+    print(_printable(text), flush=True)
 
 
 def _err(text: str) -> None:
-    print(text, file=sys.stderr, flush=True)
+    print(_printable(text), file=sys.stderr, flush=True)
 
 
 def _friendly(func: Callable[[argparse.Namespace], int]) -> Callable[[argparse.Namespace], int]:
