@@ -503,16 +503,69 @@
    */
   function maskHandle(label) {
     label = String(label);
+    var local = addressLocal(label);
+    return maskDigits(local === null ? label : local);
+  }
+
+  /**
+   * The part before the "@" of the first e-mail address in the label (cut to
+   * 16 characters plus an ellipsis), or null when it holds none.
+   */
+  function addressLocal(label) {
     var at = label.indexOf('@');
     while (at !== -1) {
       var start = at;
       while (start > 0 && !endsRun(label, start - 1)) start--;
       var end = at + 1;
       while (end < label.length && !endsRun(label, end)) end++;
-      if (start < at && end > at + 1) return maskDigits(truncate(label.slice(start, at), 16));
+      if (start < at && end > at + 1) return truncate(label.slice(start, at), 16);
       at = label.indexOf('@', at + 1);
     }
-    return maskDigits(label);
+    return null;
+  }
+
+  /** What may stand between the digits of one phone number: spaces, + - ( ) . and dashes. */
+  function joinsPhone(c) {
+    return isSpace(c) || c === 43 || c === 45 || c === 40 || c === 41 || c === 46 ||
+      (c >= 0x2010 && c <= 0x2015) || c === 0x2212;
+  }
+
+  /**
+   * The last four digits of the first stretch of the label that is shaped
+   * like a phone number, or null. A stretch is digits joined by spaces,
+   * + - ( ) . or dashes; it counts when it holds ten or more digits, or seven
+   * or more after a "+". Years and counts ("Class of 2026-2027", "Flat 12")
+   * are not phone numbers.
+   */
+  function phoneRun(label) {
+    var digits = [];
+    var plus = false;
+    for (var i = 0; i <= label.length; i++) {
+      var c = i < label.length ? label.codePointAt(i) : 0;
+      if (c > 0xFFFF) i++;
+      if (c >= 48 && (c <= 57 || (c > 127 && DIGITS.has(c)))) {
+        digits.push(String.fromCodePoint(c));
+      } else if (c === 43 || !joinsPhone(c)) {
+        if (digits.length >= 10 || (plus && digits.length >= 7)) return digits.slice(-4).join('');
+        digits = [];
+        plus = c === 43;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Hide a phone number or e-mail address in a chat's own name (docs/SCHEMA.md
+   * 2, "Masking"). People name chats on purpose and often with numbers in
+   * them, so the test for a phone number is stricter here than for a sender
+   * label: see phoneRun.
+   */
+  function maskChatName(label) {
+    label = String(label);
+    var local = addressLocal(label);
+    if (local !== null) return maskDigits(local);
+    var tail = phoneRun(label);
+    return tail === null ? label : '\u2026' + tail;
   }
 
   /** A database integer, whatever type it arrived as (non-numbers count as 0). */
@@ -605,7 +658,7 @@
 
   /** A chat's own name, cleaned and masked ("" when it has none). */
   function chatLabel(displayName) {
-    return maskHandle(cleanName(displayName));
+    return maskChatName(cleanName(displayName));
   }
 
   function ownerName(me) {
@@ -1629,6 +1682,7 @@
     chatDisplayName: chatDisplayName,
     contactKey: contactKey,
     maskHandle: maskHandle,
+    maskChatName: maskChatName,
     cleanName: cleanName,
     shortNames: shortNames,
     buildContactLookup: buildContactLookup,

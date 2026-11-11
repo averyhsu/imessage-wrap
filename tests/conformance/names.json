@@ -1,5 +1,5 @@
 {
- "about": "Hand-written expectations for docs/SCHEMA.md section 2 (clean names, masking, short names). Both engines' unit tests read this file. clean: [input, clean name]. mask: [label, masked label after cleaning]. chat_names: [display name, the name shown for a chat without members]. short: the short form of each of the people of one recap. Every number is inside +1 555 01xx xxxx and every address is at example.com, apart from the two localhost cases the specification itself names.",
+ "about": "Hand-written expectations for docs/SCHEMA.md section 2 (clean names, masking, short names). Both engines' unit tests read this file. clean: [input, clean name]. mask: [label, masked label after cleaning]. chat_names: [display name, the name shown for a chat without members]; a chat name is masked only when it holds an address or something shaped like a phone number (ten or more digits in one stretch, or seven or more after a +). short: the short form of each of the people of one recap. Every number is inside +1 555 01xx xxxx and every address is at example.com, apart from the two localhost cases the specification itself names.",
  "clean": [
   [
    "Maya",
@@ -352,6 +352,46 @@
   [
    "Book Club 2026",
    "Book Club 2026"
+  ],
+  [
+   "Class of 2026-2027",
+   "Class of 2026-2027"
+  ],
+  [
+   "NYE 2025/2026",
+   "NYE 2025/2026"
+  ],
+  [
+   "Flat 12, floor 3, since 2019",
+   "Flat 12, floor 3, since 2019"
+  ],
+  [
+   "555-0142 pizza",
+   "555-0142 pizza"
+  ],
+  [
+   "Call 555-010-0142",
+   "\u20260142"
+  ],
+  [
+   "Call +1 555 010 0142 now",
+   "\u20260142"
+  ],
+  [
+   "+1555010",
+   "\u20265010"
+  ],
+  [
+   "+1\u00a0555\u2011010\u20130142",
+   "\u20260142"
+  ],
+  [
+   "tel:\uff11\uff15\uff15\uff15\uff10\uff11\uff10\uff10\uff11\uff14\uff12",
+   "\u2026\uff10\uff11\uff14\uff12"
+  ],
+  [
+   "Room 15550100142 crew",
+   "\u20260142"
   ]
  ],
  "short": [

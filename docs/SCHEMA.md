@@ -130,7 +130,7 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   A name that is empty afterwards is `Unknown` (`Unnamed group` for a chat).
 - **Masking**: a recap is made to be shared, so a raw phone number or e-mail address never
   goes into the stats, the link, the card, a log or a chat's name. The rule applies to every
-  sender label that did not come from the contact table, and to a chat's own display name:
+  sender label that did not come from the contact table:
   1. **E-mail**: if the label contains an address, meaning a run of characters around an
      `@` with at least one character on each side, where a run ends at whitespace or any of
      `< > ( ) [ ] " ' , ; :`, the label becomes the part of that run before the `@`, cut to
@@ -141,9 +141,13 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
      them, the label becomes `…` plus its last four digits as written
      (`tel:+1 555-010-0123 (mobile)` → `…0123`, `Maya +15550100123` → `…0123`).
   3. Anything else (a name from an imported export, a short code) is kept.
-  A chat display name gets the same treatment, so a group somebody named after a phone
-  number does not publish it. Two unnamed people whose numbers end in the same four digits
-  are merged; the maker page lets the user rename people, which avoids that.
+  A **chat's own name** is masked too, so a group somebody named after a phone number does
+  not publish it, but with a stricter test for step 2, because people put years and counts
+  in chat names on purpose ("Class of 2026-2027"): the name is masked only when one stretch
+  of digits joined by spaces, `+ - ( ) .` or dashes holds 10 or more digits, or 7 or more
+  after a `+`. Step 1 (e-mail) is the same. Two unnamed people whose numbers end in the
+  same four digits are merged; the maker page lets the user rename people, which avoids
+  that.
 - **Short names**: contact names are the owner's private labels ("Dave plumber"), so what
   users see by default is the short form. `shortNames(stats)` / `short_names(stats)` returns
   a copy of a finished stats object in which every person's name (in `senders`,

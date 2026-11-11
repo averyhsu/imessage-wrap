@@ -54,7 +54,7 @@ from .typedstream import decode_attributed_body
 
 __all__ = [
     "compute_stats", "chat_display_name", "contact_key", "build_contact_lookup", "ContactLookup",
-    "clean_name", "mask_handle", "short_names",
+    "clean_name", "mask_handle", "mask_chat_name", "short_names",
     "clean_text", "count_words", "resolve_period", "GENERATOR", "KINDS",
 ]
 
@@ -187,6 +187,8 @@ _DIGIT_BLOCKS = (
 )
 _DIGITS = frozenset(chr(start + i) for start in _DIGIT_BLOCKS for i in range(10))
 _RUN_ENDS = frozenset(WHITESPACE + "<>()[]\"',;:")
+# what may stand between the digits of one phone number (spaces, + - ( ) . and dashes)
+_PHONE_JOINERS = frozenset(WHITESPACE + "+-()." + "\u2010\u2011\u2012\u2013\u2014\u2015\u2212")
 
 # clean_name(): tab, line breaks and the Unicode line/paragraph separators
 # become a space; other control characters, bidirectional overrides and
@@ -218,6 +220,55 @@ def _mask_digits(label: str) -> str:
     return label
 
 
+def _address_local(label: str) -> Optional[str]:
+    """The part before the ``@`` of the first e-mail address in ``label`` (cut
+    to 16 characters plus an ellipsis), or ``None`` when it holds none."""
+    at = label.find("@")
+    while at != -1:
+        start = at
+        while start > 0 and label[start - 1] not in _RUN_ENDS:
+            start -= 1
+        end = at + 1
+        while end < len(label) and label[end] not in _RUN_ENDS:
+            end += 1
+        if start < at and end > at + 1:
+            local = label[start:at]
+            return local if len(local) <= 16 else local[:16] + "\u2026"
+        at = label.find("@", at + 1)
+    return None
+
+
+def _phone_run(label: str) -> Optional[str]:
+    """The last four digits of the first stretch of ``label`` that is shaped
+    like a phone number, or ``None``. A stretch is digits joined by spaces,
+    ``+ - ( ) .`` or dashes; it counts when it holds ten or more digits, or
+    seven or more after a ``+``. Years and counts ("Class of 2026-2027",
+    "Flat 12") are not phone numbers."""
+    digits: List[str] = []
+    plus = False
+    for ch in label + "\0":
+        if ch in _DIGITS:
+            digits.append(ch)
+        elif ch == "+" or ch not in _PHONE_JOINERS:
+            if len(digits) >= 10 or (plus and len(digits) >= 7):
+                return "".join(digits[-4:])
+            digits = []
+            plus = ch == "+"
+    return None
+
+
+def mask_chat_name(label: str) -> str:
+    """Hide a phone number or e-mail address in a chat's own name
+    (docs/SCHEMA.md 2, "Masking"). People name chats on purpose and often
+    with numbers in them, so the test for a phone number is stricter here
+    than for a sender label: see :func:`_phone_run`."""
+    local = _address_local(label)
+    if local is not None:
+        return _mask_digits(local)
+    tail = _phone_run(label)
+    return label if tail is None else "\u2026" + tail
+
+
 def mask_handle(label: str) -> str:
     """Hide a phone number or e-mail address inside a label.
 
@@ -234,19 +285,8 @@ def mask_handle(label: str) -> str:
        ellipsis plus its last four digits as written;
     3. anything else is returned unchanged.
     """
-    at = label.find("@")
-    while at != -1:
-        start = at
-        while start > 0 and label[start - 1] not in _RUN_ENDS:
-            start -= 1
-        end = at + 1
-        while end < len(label) and label[end] not in _RUN_ENDS:
-            end += 1
-        if start < at and end > at + 1:
-            local = label[start:at]
-            return _mask_digits(local if len(local) <= 16 else local[:16] + "\u2026")
-        at = label.find("@", at + 1)
-    return _mask_digits(label)
+    local = _address_local(label)
+    return _mask_digits(label if local is None else local)
 
 
 class ContactLookup(dict):
@@ -312,7 +352,7 @@ class _Names:
 
 def _chat_label(display_name: Any) -> str:
     """A chat's own name, cleaned and masked ("" when it has none)."""
-    return mask_handle(clean_name(display_name))
+    return mask_chat_name(clean_name(display_name))
 
 
 def _owner_name(me: Any) -> str:

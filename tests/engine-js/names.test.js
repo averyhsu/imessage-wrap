@@ -89,7 +89,6 @@ test('masking: the shared table; what comes out holds nothing private', () => {
   for (const [raw, expected] of NAMES.mask) {
     const shown = Engine.maskHandle(Engine.cleanName(raw));
     assert.equal(shown, expected, JSON.stringify(raw));
-    assert.equal(I.chatLabel(raw), expected);
     assert.deepEqual(textLeaks(shown), [], JSON.stringify(raw));
     assert.ok(countDecimals(shown) < 7, JSON.stringify(raw));
     assert.equal(Engine.maskHandle(Engine.cleanName(shown)), shown, JSON.stringify(raw));     // stable

@@ -182,8 +182,20 @@ def safe_chat_name(name: object, limit: int = MAX_CHAT_NAME) -> str:
     for i, part in enumerate(parts):
         if part in (", ", " & ") or part.startswith("…"):
             continue
-        parts[i] = mask_label(part)
+        parts[i] = _mask_chat_part(part)
     return clean("".join(parts), limit)
+
+
+def _mask_chat_part(part: str) -> str:
+    """The engine's rule for a chat's own name: an address is hidden, and so is
+    anything shaped like a phone number, but years and counts are left alone
+    ("Class of 2026-2027"). Falls back to the stricter label rule if the engine
+    cannot be imported."""
+    try:
+        from ..stats import mask_chat_name
+    except Exception:  # pragma: no cover - the engine is part of this package
+        return mask_label(part)
+    return mask_chat_name(part)
 
 
 def display_names(names: Iterable[object]) -> Dict[str, str]:

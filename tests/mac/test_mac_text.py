@@ -167,7 +167,9 @@ class Formatting(unittest.TestCase):
         self.assertEqual(fmt.safe_chat_name("Bram, x.invented@example.invalid"), "Bram, x.invented")
         self.assertEqual(fmt.safe_chat_name("Bram, …0007, …0012 & 2 more"), "Bram, …0007, …0012 & 2 more")
         self.assertEqual(len(fmt.safe_chat_name("W" * 100_000)), 60)
-        for untouched in ("Dinner Club 🍝", "Class of 2019", "Flat 12 & friends", "24/7", ""):
+        self.assertEqual(fmt.safe_chat_name("Call +1 555 010 0142"), "…0142")
+        for untouched in ("Dinner Club 🍝", "Class of 2019", "Class of 2026-2027", "NYE 2025/2026",
+                          "Flat 12 & friends", "24/7", ""):
             self.assertEqual(fmt.safe_chat_name(untouched), untouched)
         text = recap_text(sample_stats(chat_name=name))
         self.assertNotIn("5550100007", text)
