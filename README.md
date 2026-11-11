@@ -46,6 +46,12 @@ npm ci && npm run serve
 
 Everyone *else* in the chat needs nothing at all. The link opens in any phone's browser.
 
+With the iPhone app, the recap also lives in the Messages app drawer. These are from the
+real Messages app in the iOS Simulator, driven by the test suite
+([all screenshots and a recording](docs/screenshots/ios/)):
+
+![Threadback in the Messages app drawer, a recap card delivered in a conversation, and the story playing inside Messages](docs/media/messages-extension.jpg)
+
 ## Where your messages go: nowhere
 
 - **Counted on your device.** The browser page, the Mac helper and the command-line tool all

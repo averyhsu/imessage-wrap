@@ -1,6 +1,6 @@
 # Status
 
-_Last updated: 2026-11-11. Builds landing; independent review still to come._
+_Last updated: 2026-11-11. All pieces built; fixes from the first independent review are in progress._
 
 Everything below was built and tested without a real iPhone or Mac at hand: on Linux, and on
 GitHub's macOS runners for the Apple parts. "Seen working" means it ran here, or in a CI run
@@ -14,11 +14,11 @@ that passed and whose output was looked at. Nothing is listed on a build agent's
 | **Stats engines** (Python + JavaScript) | Both give byte-identical results on every invented chat, period and time zone in the conformance suite, and match a chat whose numbers were worked out by hand. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
 | **Command-line tool** | `wrapped chats`, `wrapped stats`, `wrapped link` on the invented database. | `wrapped/cli.py` |
 | **Mac helper** (`/wrapped`) | Everything up to the moment of sending: finds the command, builds the card, text and link, verifies sends against the database (with a fake Messages). The send script compiles against the real Messages scripting dictionary on macOS 26. The installer runs for real on a clean macOS runner. | `wrapped/mac/`, [guide](docs/MAC.md) |
-| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
-| **Messages extension** | In the Simulator's real Messages app: appears in the app drawer, shows its launcher, sends a recap bubble ("Delivered"), and the bubble can be tapped. Being finished: proof that the story plays in the expanded view, and the bubble showing the recap's own numbers. | `ios/MessagesExtension/` |
-| **Maker page** ("make your own" in the browser) | In progress. | `web/make/` |
+| **iPhone app** | Builds on a macOS runner with no signing; 42 unit tests and 7 UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
+| **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, shows its launcher, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also checked from the receiving side of the simulated chat. | `ios/MessagesExtension/`, [run](https://github.com/averyhsu/imessage-wrap/actions/runs/43058727671) |
+| **Maker page** ("make your own" in the browser) | In a real browser (Chromium): the invented Mac database with its write-ahead log, an iPhone backup folder, pasted exports and the sample chat all go from file to chat list to link; the stats match the Python engine byte for byte; quotes off by default; no outside requests. | `web/make/`, [screenshots](docs/screenshots/web/) |
 
-CI (GitHub Actions, on this branch): `Web story`, `engine`, `Mac helper` and `iOS` workflows.
+CI (GitHub Actions, on this branch): `Web story`, `Make page`, `engine`, `Mac helper` and `iOS` workflows.
 Latest results are on the [Actions page](https://github.com/averyhsu/imessage-wrap/actions).
 
 ## What does not work, or is not proven
@@ -34,7 +34,9 @@ These cannot be checked without real devices. None has been claimed as working.
 3. **Link behaviour inside Messages on a real phone**: whether the preview card (and its
    short video) appears, and whether the part of the link after `#` survives delivery.
 4. **The Messages extension between two real phones**, in a group, and for people without
-   the app.
+   the app. In the Simulator a *received* live bubble gets no data from Messages, so the app
+   sends a plain card instead (it always shows the chat's name and count); real phones may
+   differ.
 5. **The iPhone-only Shortcut route** ([docs/SHORTCUT.md](docs/SHORTCUT.md)): a recipe, never
    run.
 6. **Encrypted iPhone backups** are detected and explained, not read.
@@ -84,7 +86,7 @@ Nothing below has been done. Each needs your yes.
 
 ## What's next
 
-1. Finish the maker page and the two extension fixes; independent review; fix what it finds.
+1. Land the fixes from the independent review (see below), then a second review pass.
 2. With your yes: public site on, then checks C and B.
 3. With the developer program: TestFlight build, then real-phone checks of the extension.
 4. If the Shortcut test (E) shows senders in group chats: make it the main iPhone route.

@@ -204,6 +204,15 @@ It sends one `MSMessage` whose `url` is the same https link (so Macs and people 
 app still get the story), with a natively rendered template card, and plays the story in
 the expanded view. Live layout is behind a switch because of its open reliability reports.
 
+**Update after testing in the Simulator's Messages app.** Both bubble styles were sent,
+received and tapped by the UI tests. The live layout works on the sender's side, but a
+*received* live bubble is handed no conversation and no message by Messages (seen in the
+Simulator: `activeConversation` is nil and `willBecomeActive` is never called for a
+transcript-style controller), so it can only show a generic "open to play" face. The
+template card always shows the chat's name and count, for people with and without the app.
+So `WrappedConfig.useLiveLayout` is **off**; tapping either bubble plays the same story.
+Whether real phones behave like the Simulator here is on the device checklist.
+
 ### D6 — Never silently undercount
 A Mac's live `chat.db` keeps recent rows in `chat.db-wal`. The browser analyzer either
 merges the sidecar or warns; the CLI opens read-only (never `immutable`). Every analysis
