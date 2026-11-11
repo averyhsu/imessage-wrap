@@ -1,0 +1,256 @@
+import tempfile
+import unittest
+from pathlib import Path
+
+import mac_support
+from mac_support import sample_stats
+
+try:
+    from PIL import Image
+
+    from wrapped.mac import card
+    from wrapped.mac.card import CardError, FontBook, clusters, render_card
+
+    HAVE_PILLOW = True
+except ImportError:  # the card is the only part that needs Pillow
+    HAVE_PILLOW = False
+
+SMALL = (540, 675)  # same layout at half size: keeps the matrix fast
+
+
+class TrackingDict(dict):
+    """A stats dict that remembers which top-level keys were read."""
+
+    def __init__(self, *a, **kw):
+        super().__init__(*a, **kw)
+        self.read = set()
+
+    def get(self, key, default=None):
+        self.read.add(key)
+        return super().get(key, default)
+
+    def __getitem__(self, key):
+        self.read.add(key)
+        return super().__getitem__(key)
+
+
+def edge_cases():
+    cases = {}
+    cases["demo"] = sample_stats()
+    cases["long name"] = sample_stats(
+        chat_name="The Extremely Long Group Chat Name That Never Ends 🎉🎉🎉 (official)", messages=9311
+    )
+    s = sample_stats(members=2, messages=7, chat_name="Maya & Dev")
+    s["personality"] = {"id": "quiet_ones", "title": "The Quiet Ones", "blurb": "", "peak_hour": 9}
+    cases["two members, tiny count"] = s
+    s = sample_stats(members=12, messages=1234567, chat_name="Class of 2019 🎓")
+    s["personality"] = {"id": "always_on", "title": "The Always-On Group Chat", "blurb": "", "peak_hour": 14}
+    cases["twelve members, seven digits"] = s
+    cases["forty members"] = sample_stats(members=40, messages=99999)
+    s = sample_stats(members=5, messages=880)
+    for key in ("awards", "reactions", "most_reacted", "busiest_day", "late_night"):
+        s.pop(key, None)
+    cases["optional sections missing"] = s
+    s = sample_stats(members=4, messages=412)
+    s.pop("personality")
+    s.pop("by_hour")
+    cases["no personality, no hours"] = s
+    s = sample_stats(members=3, messages=2400)
+    s["senders"] = []
+    cases["no senders"] = s
+    s = sample_stats(members=6, messages=15230, chat_name="週末ごはん会 🍣")
+    s["senders"][0]["name"] = "Bartholomew-Alexander Montgomery"
+    s["senders"][1]["name"] = "+1 (415) 555-0134"
+    s["senders"][2]["name"] = "Алексей Иванов"
+    s["period"]["label"] = "All time"
+    cases["unicode names"] = s
+    cases["emoji-only name"] = sample_stats(members=4, messages=3021, chat_name="👨‍👩‍👧‍👦🏳️‍🌈🇯🇵👍🏽")
+    cases["one message"] = sample_stats(members=3, messages=1, chat_name="x")
+    cases["zero messages"] = sample_stats(members=3, messages=0)
+    cases["empty name"] = sample_stats(chat_name="")
+    cases["whitespace and newlines in name"] = sample_stats(chat_name="  Dinner\n\tClub  ")
+    cases["right-to-left name"] = sample_stats(chat_name="ארוחת ערב مرحبا")
+    s = sample_stats()
+    s["personality"]["title"] = "The Longest Personality Title Anyone Could Possibly Come Up With Here"
+    cases["very long personality"] = s
+    s = sample_stats()
+    s["senders"][0]["share"] = 0.97
+    s["senders"][1]["share"] = 0.02
+    s["senders"][2]["share"] = 0.0001
+    cases["skewed shares"] = s
+    s = sample_stats()
+    s["totals"]["messages"] = "not a number"
+    s["chat"]["members"] = None
+    s["senders"][0]["share"] = "x"
+    s["by_hour"] = [1, 2, 3]
+    cases["junk values"] = s
+    cases["bare minimum"] = {"v": 1}
+    legacy = sample_stats()
+    legacy["messages_by_hour"] = {str(i): v for i, v in enumerate(legacy.pop("by_hour"))}
+    cases["legacy hour keys"] = legacy
+    return cases
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow is not installed")
+class CardRender(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_default_size_is_exactly_1080_by_1350(self):
+        out = render_card(sample_stats(), self.dir / "card.png")
+        self.assertEqual(out, self.dir / "card.png")
+        with Image.open(out) as im:
+            self.assertEqual(im.size, (1080, 1350))
+            self.assertEqual(im.format, "PNG")
+            self.assertEqual(im.mode, "RGB")
+            # a real picture, not a flat fill
+            self.assertGreater(len(im.resize((64, 80)).getcolors(maxcolors=64 * 80)), 500)
+        self.assertLess(out.stat().st_size, 3_000_000)
+
+    def test_other_sizes(self):
+        for size in [(540, 675), (1080, 1920), (1200, 1200)]:
+            with self.subTest(size=size):
+                out = render_card(sample_stats(), self.dir / f"c-{size[0]}x{size[1]}.png", size=size)
+                with Image.open(out) as im:
+                    self.assertEqual(im.size, size)
+        with self.assertRaises(CardError):
+            render_card(sample_stats(), self.dir / "tiny.png", size=(10, 10))
+
+    def test_edge_case_matrix_renders_without_error(self):
+        for name, stats in edge_cases().items():
+            with self.subTest(case=name):
+                out = render_card(stats, self.dir / "m.png", size=SMALL)
+                with Image.open(out) as im:
+                    self.assertEqual(im.size, SMALL)
+
+    def test_edge_case_matrix_without_an_emoji_font(self):
+        for name in ("demo", "emoji-only name", "unicode names", "long name"):
+            with self.subTest(case=name):
+                out = render_card(edge_cases()[name], self.dir / "n.png", size=SMALL, emoji=False)
+                self.assertTrue(out.is_file())
+
+    def test_same_input_gives_identical_bytes(self):
+        a = render_card(sample_stats(), self.dir / "a.png", size=SMALL).read_bytes()
+        b = render_card(sample_stats(), self.dir / "b.png", size=SMALL).read_bytes()
+        self.assertEqual(a, b)
+        c = render_card(sample_stats(messages=48214), self.dir / "c.png", size=SMALL).read_bytes()
+        self.assertNotEqual(a, c)
+
+    def test_message_text_is_never_read(self):
+        stats = TrackingDict(sample_stats())
+        render_card(stats, self.dir / "t.png", size=SMALL)
+        self.assertIn("totals", stats.read)
+        self.assertIn("senders", stats.read)
+        for forbidden in ("most_reacted", "awards", "reactions", "late_night"):
+            self.assertNotIn(forbidden, stats.read)
+
+    def test_only_first_names_reach_the_card(self):
+        stats = sample_stats(members=3, messages=300)
+        stats["senders"][0]["name"] = "Maya Okafor-Lindqvist"
+        stats["senders"][1]["name"] = "+1 (415) 555-0134"
+        stats["senders"][2]["name"] = "priya.invented@example.invalid"
+        self.assertEqual([n for n, _s, _m in card._top_senders(stats)], ["Maya", "···0134", "priya.invented"])
+
+    def test_hero_bubble_is_blue_and_background_is_not(self):
+        out = render_card(sample_stats(), self.dir / "card.png")
+        with Image.open(out) as im:
+            r, g, b = im.getpixel((560, 520))  # inside the hero bubble, between the digits and the caption
+            self.assertGreater(b, 220)
+            self.assertLess(r, 90)
+            r2, g2, b2 = im.getpixel((1040, 1320))  # bottom-right corner: warm end of the gradient
+            self.assertGreater(r2, 200)
+
+    def test_creates_parent_folders_and_rejects_non_dicts(self):
+        out = render_card(sample_stats(), self.dir / "deep" / "er" / "card.png", size=SMALL)
+        self.assertTrue(out.is_file())
+        with self.assertRaises(CardError):
+            render_card([], self.dir / "x.png")
+
+
+@unittest.skipUnless(HAVE_PILLOW, "Pillow is not installed")
+class FontsAndText(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.book = FontBook()
+        cls.plain = FontBook(emoji=False)
+
+    def test_bundled_fonts_and_licence_ship_with_the_package(self):
+        for name in card.FONT_FILES.values():
+            self.assertTrue((card.FONT_DIR / name).is_file(), name)
+        licence = (card.FONT_DIR / "OFL.txt").read_text(encoding="utf-8")
+        self.assertIn("SIL Open Font License", licence)
+        self.assertIn("Inter", licence)
+
+    def test_cmap_reader(self):
+        ranges = card._cmap_ranges(str(card.FONT_DIR / card.FONT_FILES["bold"]))
+        self.assertGreater(len(ranges), 50)
+        for ch in "Az09é·…Жλ":
+            self.assertTrue(card._covers(ranges, ord(ch)), ch)
+        for cp in (0x9031, 0x1F35D, 0x5D0):
+            self.assertFalse(card._covers(ranges, cp), hex(cp))
+        self.assertEqual(card._cmap_ranges("/nonexistent/font.ttf"), [])
+        self.assertEqual(card._cmap_ranges(__file__), [])  # not a font: no crash
+
+    def test_missing_font_folder_is_a_clear_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(CardError) as ctx:
+                FontBook(font_dir=Path(tmp))
+            self.assertIn("font", str(ctx.exception).lower())
+
+    def test_emoji_are_dropped_cleanly_without_an_emoji_font(self):
+        text = "".join(c[1] for c in clusters("Dinner Club 🍝", self.plain))
+        self.assertEqual(text, "Dinner Club")
+        text = "".join(c[1] for c in clusters("🎉 Party 🎉 time", self.plain))
+        self.assertEqual(text, "Party time")
+        self.assertEqual(clusters("🍕🍕🍕", self.plain), [])
+
+    def test_emoji_sequences_stay_together_when_a_font_exists(self):
+        if not self.book.emoji_path:
+            self.skipTest("no colour emoji font on this machine")
+        family = "👨‍👩‍👧‍👦"
+        cl = clusters("a" + family + "🇯🇵" + "👍🏽" + "b", self.book)
+        kinds = [k for k, _t, _p in cl]
+        self.assertEqual(kinds, ["text", "emoji", "emoji", "emoji", "text"])
+        if self.book.shaping:
+            self.assertEqual(cl[1][1], family)
+
+    def test_control_characters_and_lone_joiners_are_dropped(self):
+        cl = clusters("a\x00b" + chr(0x200D) + chr(0xFE0F) + "c", self.plain)
+        self.assertEqual("".join(c[1] for c in cl), "abc")
+
+    def test_fit_shrinks_then_truncates_with_an_ellipsis(self):
+        canvas = card.Canvas(400, 400, 1.0, self.plain)
+        cl, size = canvas.fit("Short", "bold", 40, 300)
+        self.assertEqual(size, 40)
+        self.assertEqual("".join(c[1] for c in cl), "Short")
+        cl, size = canvas.fit("A considerably longer piece of text than fits", "bold", 40, 300, 30)
+        self.assertEqual(size, 30)
+        text = "".join(c[1] for c in cl)
+        self.assertTrue(text.endswith("…"))
+        self.assertLessEqual(canvas.measure(cl, "bold", size), 300)
+        self.assertTrue(text.startswith("A cons"))
+
+    def test_bubble_tail_sticks_out_at_the_bottom_only(self):
+        canvas = card.Canvas(800, 800, 1.0, self.plain)
+        mask, pad = canvas.bubble_mask(300, 200, 60, "right")
+        self.assertGreater(pad, 4)
+        width, height = mask.size
+        right_of_body = [(x, y) for x in range(pad + 300, width) for y in range(height) if mask.getpixel((x, y)) > 128]
+        self.assertTrue(right_of_body)
+        self.assertTrue(all(y > height - 60 for _x, y in right_of_body))
+        plain, _ = canvas.bubble_mask(300, 200, 60, None)
+        self.assertFalse(any(plain.getpixel((x, y)) for x in range(pad + 300, plain.size[0]) for y in range(height)))
+        left, _ = canvas.bubble_mask(300, 200, 60, "left")
+        self.assertTrue(any(left.getpixel((x, height - 2)) > 128 for x in range(0, pad)))
+
+    def test_split_title(self):
+        self.assertEqual(card._split_title("The Always-On Group Chat"), ["The Always-On", "Group Chat"])
+        self.assertEqual(card._split_title("Single"), ["Single"])
+
+
+if __name__ == "__main__":
+    unittest.main()
