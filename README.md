@@ -55,7 +55,10 @@ arrives as a long plain link; it still opens the same story.
 
 A recap made with the defaults shows first names, shows people who are not in your contacts
 as `…1234` until you name them, and leaves the words of messages out. The pictures above
-are the invented demo with names and quotes switched on.
+are the invented demo with names and quotes switched on; this is an invented recap with the
+defaults, before anyone has been named:
+
+![Three slides of a recap made with the defaults: top senders with two unnamed people, message of the year without its text, and the summary card](docs/screenshots/web/default-overview.png)
 
 With the iPhone app, the recap also lives in the Messages app drawer. These are from the
 real Messages app in the iOS Simulator, driven by the test suite
