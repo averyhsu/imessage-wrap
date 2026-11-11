@@ -3,7 +3,7 @@
   "private": true,
   "description": "Wrapped for iMessage group chats: web story, in-browser analyzer and tests",
   "scripts": {
-    "test": "node --test tests/js/",
+    "test": "node --test \"tests/js/**/*.test.js\"",
     "test:e2e": "node tests/e2e/run.mjs",
     "serve": "npx http-server web -p 4173 -c-1 --silent"
   },
