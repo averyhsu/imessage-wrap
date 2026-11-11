@@ -134,8 +134,10 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   **Length**: only the first 1,024 characters (Unicode code points) of a name are looked at.
   After cleaning, a chat name longer than 80 characters is cut to 80 plus `…`, and a
   person's name longer than 40 to 40 plus `…` (never inside a surrogate pair). The cut comes
-  before masking, so a masked label is never cut. A chat name built from its members and
-  `period.label` are held to 80 as well, `meta.source` to 40.
+  before masking, so a masked label is never cut. Known limit of that order: in a label
+  longer than the cut, a phone number that happens to straddle it is no longer seven digits
+  long, so up to six of its leading digits can remain. A whole number never does. A chat
+  name built from its members and `period.label` are held to 80 as well, `meta.source` to 40.
 - **Masking**: a recap is made to be shared, so a raw phone number or e-mail address never
   goes into the stats, the link, the card, a log or a chat's name. The rule applies to every
   sender label: a handle, an imported sender, the owner's name, and a name from the contact
