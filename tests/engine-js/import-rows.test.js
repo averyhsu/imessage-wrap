@@ -37,12 +37,12 @@ test('columnar: dates and senders, empty sender is me', () => {
     messages: 4, senders: 3, from_me: 1, first_unix: utc(2026, 3, 15, 4), last_unix: utc(2026, 3, 15, 8),
     first_date: '2026-03-15', last_date: '2026-03-15'
   });
-  const st = stats(result.rows, { tz: LA, me: 'Avery' });
+  const st = stats(result.rows, { tz: LA, me: 'Amara' });
   assert.equal(st.totals.messages, 4);                 // rows without text still count
   assert.equal(st.totals.words, 0);
   assert.equal(st.totals.reactions, 0);
   assert.deepEqual(st.most_reacted, []);
-  assert.deepEqual(st.senders.map((s) => [s.name, s.messages]), [['Maya', 2], ['Avery', 1], ['Dev', 1]]);
+  assert.deepEqual(st.senders.map((s) => [s.name, s.messages]), [['Maya', 2], ['Amara', 1], ['Dev', 1]]);
   assert.equal(st.by_hour[21], 3);                     // 21:41 and 21:00 on Mar 14, Pacific time
   assert.equal(st.busiest_day.date, '2026-03-14');
 });
@@ -186,7 +186,7 @@ test('TSV, semicolons, and header detection by name', () => {
 
 test('CSV: direction values, separate date and time columns, a type column that is not a direction', () => {
   let result = Import.parseExport('date,time,sender,is_from_me,message\n' +
-    '2026-11-10,21:41:07,Maya,0,a\n2026-11-10,9:42 PM,Avery,1,b\n11/11/2026,00:05,Dev,false,c\n2026-11-12,,Kai,TRUE,d\n' +
+    '2026-11-10,21:41:07,Maya,0,a\n2026-11-10,9:42 PM,Amara,1,b\n11/11/2026,00:05,Dev,false,c\n2026-11-12,,Kai,TRUE,d\n' +
     '2026-11-13,08:00,Zed,sent,e\n2026-11-13,08:01,Zed,received,f\n', { tz: 'UTC' });
   assert.deepEqual(result.columns, { date: 'date', time: 'time', sender: 'sender', text: 'message', direction: 'is_from_me' });
   assert.deepEqual(result.rows.map((r) => [r.is_from_me, r.handle]), [[0, 'Maya'], [1, null], [0, 'Dev'], [1, null], [1, null], [0, 'Zed']]);
@@ -346,22 +346,22 @@ test('dates: month-first or day-first is settled from the whole file', () => {
 
 test('own names, engine options and a full recap from an import', () => {
   const lines = ['date,sender,text'];
-  const people = ['Maya', 'Dev', '', 'Avery H.', 'Priya'];
+  const people = ['Maya', 'Dev', '', 'Amara H.', 'Priya'];
   for (let i = 0; i < 400; i++) {
     const day = String(1 + (i % 28)).padStart(2, '0');
     const hour = String(18 + (i % 6)).padStart(2, '0');
     lines.push('2026-0' + (1 + (i % 9)) + '-' + day + ' ' + hour + ':' + String(i % 60).padStart(2, '0') + ':00,' +
       people[i % 5] + ',"message number ' + i + ', with a comma"');
   }
-  const result = Import.parseExport(lines.join('\n'), { tz: LA, me: ['Avery H.'] });
+  const result = Import.parseExport(lines.join('\n'), { tz: LA, me: ['Amara H.'] });
   assert.deepEqual(result.warnings, []);
   assert.equal(result.summary.messages, 400);
   assert.equal(result.summary.from_me, 160);
   assert.equal(result.summary.senders, 4);
-  const st = Engine.computeStats(result.rows, { tz: LA, year: 2026, now: NOW, me: 'Avery', chat_name: 'Imported chat' });
+  const st = Engine.computeStats(result.rows, { tz: LA, year: 2026, now: NOW, me: 'Amara', chat_name: 'Imported chat' });
   assert.equal(st.totals.messages, 400);
   assert.equal(st.totals.words, 400 * 6);
-  assert.deepEqual(st.senders.map((s) => [s.name, s.messages]), [['Avery', 160], ['Dev', 80], ['Maya', 80], ['Priya', 80]]);
+  assert.deepEqual(st.senders.map((s) => [s.name, s.messages]), [['Amara', 160], ['Dev', 80], ['Maya', 80], ['Priya', 80]]);
   assert.equal(sumOf(st.by_hour.slice(18, 24)), 400);
   assert.equal(st.totals.reactions, 0);
   assert.deepEqual(st.most_reacted, []);

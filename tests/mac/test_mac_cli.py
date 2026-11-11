@@ -211,13 +211,13 @@ class RealEngineAdapter(EngineCase):
         engine = RealEngine(contacts=[self.contacts])
         ref = ChatRef(guid=self.chats["lively"]["guid"], identifier=self.chats["lively"]["chat_identifier"],
                       name="x", rowid=self.chats["lively"]["rowid"])
-        year = engine.compute_stats(self.db, ref, "2026", "Avery")
-        everything = engine.compute_stats(self.db, ref, "all", "Avery")
+        year = engine.compute_stats(self.db, ref, "2026", "Amara")
+        everything = engine.compute_stats(self.db, ref, "all", "Amara")
         self.assertEqual(year["v"], 1)
         self.assertEqual(year["period"]["label"], "2026")
         self.assertGreater(year["totals"]["messages"], 0)
         self.assertGreaterEqual(everything["totals"]["messages"], year["totals"]["messages"])
-        self.assertIn("Avery", [s["name"] for s in everything["senders"]])
+        self.assertIn("Amara", [s["name"] for s in everything["senders"]])
         link = engine.build_link(year, True)
         self.assertLessEqual(len(link), 4800)
         self.assertEqual(wrapped.stats_from_url(link)["totals"], year["totals"])
@@ -436,7 +436,7 @@ class OtherCommands(EngineCase):
     def test_preview_writes_what_would_be_sent_and_sends_nothing(self):
         code, out, err = self.run_cli(
             "preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "taco", "--year", "2026",
-            "--out", str(self.out), "--me", "Avery",
+            "--out", str(self.out), "--me", "Amara",
         )
         self.assertEqual(code, 0, err + out)
         self.assertIn("nothing was sent", out)
@@ -455,8 +455,8 @@ class OtherCommands(EngineCase):
         self.assertNotIn(" Me ", out)
         link = [ln for ln in out.splitlines() if ln.startswith("https://")][0]
         self.assertIn("Robin", [s["name"] for s in wrapped.stats_from_url(link)["senders"]])
-        code, out, err = self.run_cli(*base, "--me", "Avery")
-        self.assertIn("Avery 20%", out)
+        code, out, err = self.run_cli(*base, "--me", "Amara")
+        self.assertIn("Amara 20%", out)
         code, out, err = self.run_cli("doctor", "--db", str(self.db))
         self.assertIn('"Robin"', out)
         self.assertIn("--me", out)

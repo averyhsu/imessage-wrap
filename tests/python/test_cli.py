@@ -104,7 +104,7 @@ class CommandLine(unittest.TestCase):
     def test_stats_options(self):
         with tempfile.TemporaryDirectory() as folder:
             target = os.path.join(folder, "out.json")
-            status, out, err = run("stats", "3", "--all-time", "--me", "Avery", "--tz", "UTC",
+            status, out, err = run("stats", "3", "--all-time", "--me", "Amara", "--tz", "UTC",
                                    "--no-contacts", "--db", support.path("chat_db"),
                                    "-o", target, "--compact")
             self.assertEqual((status, out), (0, ""))
@@ -115,7 +115,7 @@ class CommandLine(unittest.TestCase):
             got = json.loads(text)
         self.assertEqual(got["period"]["label"], "All time")
         self.assertEqual(got["period"]["start"], "2025-12-21")       # B1 in UTC
-        self.assertIn("Avery", [s["name"] for s in got["senders"]])
+        self.assertIn("Amara", [s["name"] for s in got["senders"]])
         self.assertIn("\u20260011", [s["name"] for s in got["senders"]])
         status, out, _err = run("stats", "Book Club", "--year", "2025", "--tz", LA, *source_args())
         self.assertEqual(json.loads(out)["totals"]["messages"], 2)
@@ -236,15 +236,15 @@ class OwnerName(unittest.TestCase):
         return run, calls
 
     def test_the_first_name_of_the_mac_account(self):
-        run, calls = self.answering("Avery Quinn\n")
-        self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Avery")
+        run, calls = self.answering("Amara Quinn\n")
+        self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Amara")
         command, options = calls[0]
         self.assertEqual(command, ["/usr/bin/id", "-F"])
         self.assertEqual(options.get("timeout"), 3)
         self.assertFalse(options.get("shell"))
         cases = {
-            "Avery\n": "Avery", "  Avery   Quinn  \n": "Avery", "Zo\xeb M\xfcller\n": "Zo\xeb",
-            "\u738b \u5c0f\u660e\n": "\u738b", "Av\u202eery\x1b X\n": "Avery",
+            "Amara\n": "Amara", "  Amara   Quinn  \n": "Amara", "Zo\xeb M\xfcller\n": "Zo\xeb",
+            "\u738b \u5c0f\u660e\n": "\u738b", "Am\u202eara\x1b X\n": "Amara",
             "A" * 100: "A" * 40 + "\u2026",
             # not a name: nothing, a question mark, a number, an address
             "": "Me", "  \n": "Me", "?\n": "Me", "5550100123\n": "Me", "+1 555 010 0123\n": "Me",
@@ -260,15 +260,15 @@ class OwnerName(unittest.TestCase):
                       UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")):
             run, _calls = self.answering(error=error)
             self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Me", error)
-        run, _calls = self.answering("Avery Quinn\n", returncode=1)
+        run, _calls = self.answering("Amara Quinn\n", returncode=1)
         self.assertEqual(wrapped.account_first_name(platform="darwin", run=run), "Me")
         for platform in ("linux", "win32"):             # only a Mac is asked
-            run, calls = self.answering("Avery Quinn\n")
+            run, calls = self.answering("Amara Quinn\n")
             self.assertEqual(wrapped.account_first_name(platform=platform, run=run), "Me")
             self.assertEqual(calls, [])
         self.assertIsInstance(wrapped.account_first_name(), str)        # the real thing never raises
 
-    def command(self, *args, account="Avery", env=None):
+    def command(self, *args, account="Amara", env=None):
         """Run the command line in this process with a stand-in for the lookup."""
         environment = {key: value for key, value in os.environ.items() if key != "WRAPPED_ME"}
         environment.update(env or {})
@@ -281,15 +281,15 @@ class OwnerName(unittest.TestCase):
         period = ["--year", "2026", "--tz", LA]
         status, out, err, asked = self.command("stats", "Book Club", *period, *source_args())
         self.assertEqual((status, asked), (0, 1))
-        self.assertEqual(err, self.NOTICE % "Avery")
+        self.assertEqual(err, self.NOTICE % "Amara")
         names = [s["name"] for s in json.loads(out)["senders"]]
-        self.assertIn("Avery", names)
+        self.assertIn("Amara", names)
         self.assertNotIn("Me", names)
         status, out, err, asked = self.command("link", "Book Club", *period, *source_args())
-        self.assertEqual((status, asked, err), (0, 1, self.NOTICE % "Avery"))
+        self.assertEqual((status, asked, err), (0, 1, self.NOTICE % "Amara"))
         shared = wrapped.stats_from_url(out.strip())
-        self.assertIn("Avery", [s["name"] for s in shared["senders"]])
-        self.assertEqual(shared["late_night"]["top"]["name"], "Avery")
+        self.assertIn("Amara", [s["name"] for s in shared["senders"]])
+        self.assertEqual(shared["late_night"]["top"]["name"], "Amara")
         # the chat list does not show the owner: the same name is used, nothing is said
         status, out, err, asked = self.command("chats", *source_args())
         self.assertEqual((status, err, asked), (0, "", 1))

@@ -155,9 +155,9 @@ class TinyChat(unittest.TestCase):
         got = wrapped.compute_stats(support.path("chat_db"), "Book Club", 2026, "Me", LA,
                                     contacts=support.path("address_book_dir"), now=NOW)
         self.assertEqual(got, case["stats"])
-        renamed = wrapped.compute_stats(support.path("chat_db"), "Book Club", year=2026, me="Avery",
+        renamed = wrapped.compute_stats(support.path("chat_db"), "Book Club", year=2026, me="Amara",
                                         tz=LA, contacts=False, now=NOW)
-        self.assertEqual(renamed["senders"][0]["name"], "Avery")
+        self.assertEqual(renamed["senders"][0]["name"], "Amara")
 
     def test_invariants_on_every_chat(self):
         with mac_source() as source:

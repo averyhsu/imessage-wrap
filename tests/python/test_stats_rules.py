@@ -249,7 +249,7 @@ class Senders(unittest.TestCase):
 
     def test_owner_name(self):
         self.assertEqual(run([msg(self.t)])["senders"][0]["name"], "Me")
-        self.assertEqual(run([msg(self.t)], me="Avery")["senders"][0]["name"], "Avery")
+        self.assertEqual(run([msg(self.t)], me="Amara")["senders"][0]["name"], "Amara")
 
     def test_contacts_match_phones_on_last_ten_digits_and_emails_without_case(self):
         contacts = {"(555) 010-0001": "Ines Calloway", "Ines.Calloway@Example.com": "Ines Calloway",
@@ -345,7 +345,7 @@ class ChatName(unittest.TestCase):
         self.assertEqual(name("", []), "Unnamed group")
         self.assertEqual(name("", [A, "(555) 010-0001", "ines@example.com"],
                               {A: "Ines Calloway", "ines@example.com": "Ines Calloway"}), "Ines")
-        self.assertEqual(name("", [A, B], {A: "Avery"}, me="Avery"), NB)
+        self.assertEqual(name("", [A, B], {A: "Amara"}, me="Amara"), NB)
 
     def test_stats_use_the_same_name(self):
         st = run([msg(utc(2026, 5, 5), A)], participants=[A, B, C, "+15550100004"],

@@ -130,10 +130,10 @@ class AgentCase(unittest.TestCase):
         self.assertEqual(card["guid"], "any;+;chat111")
 
     def test_trigger_from_me(self):
-        agent = self.started(me="Avery")
+        agent = self.started(me="Amara")
         self.db.add_message("/recap", chat=self.group, is_from_me=True, when=self.now - 1)
         self.assertEqual(agent.run_once(), 1)
-        self.assertEqual(self.engine.compute_calls, [("chat111", None, "Avery")])
+        self.assertEqual(self.engine.compute_calls, [("chat111", None, "Amara")])
         self.assertEqual(self.kinds(), ["file", "text", "text"])
 
     def test_attributed_body_only_command(self):
@@ -478,18 +478,18 @@ class AgentCase(unittest.TestCase):
 
     def full_named_stats(self):
         stats = sample_stats(members=4, messages=900)
-        for sender, name in zip(stats["senders"], ["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Avery"]):
+        for sender, name in zip(stats["senders"], ["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Amara"]):
             sender["name"] = name
         stats["awards"][0]["winner"] = "Dave Plumber"
         return stats
 
     def test_the_link_carries_short_names_by_default(self):
         self.engine.stats = self.full_named_stats()
-        agent = self.started(me="Avery")
+        agent = self.started(me="Amara")
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
         self.assertEqual(agent.run_once(), 1)
         sent = self.engine.link_stats[0]
-        self.assertEqual([s["name"] for s in sent["senders"]], ["Dave", "Sam R.", "Sam K.", "Avery"])
+        self.assertEqual([s["name"] for s in sent["senders"]], ["Dave", "Sam R.", "Sam K.", "Amara"])
         self.assertEqual(sent["awards"][0]["winner"], "Dave")
         self.assertNotIn("Plumber", json.dumps(sent))
         self.assertNotIn("Plumber", self.sender.sent[1]["text"])
@@ -497,7 +497,7 @@ class AgentCase(unittest.TestCase):
 
     def test_full_names_is_an_explicit_choice_for_the_link_only(self):
         self.engine.stats = self.full_named_stats()
-        agent = self.started(me="Avery", full_names=True)
+        agent = self.started(me="Amara", full_names=True)
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)
         self.assertEqual(agent.run_once(), 1)
         self.assertEqual(self.engine.link_stats[0]["senders"][0]["name"], "Dave Plumber")

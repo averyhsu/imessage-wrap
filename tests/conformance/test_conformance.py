@@ -33,7 +33,7 @@ PERIODS = [{"year": 2026}, {"year": 2025}, {"all_time": True},
            {"start": "2026-02-10", "end": "2026-03-10"}]
 LOCAL_ZONE = "America/Los_Angeles"
 HEX = re.compile(r"(?:[0-9a-f]{2})+\Z")
-EVIL_ME = "\x1b]0;owned\x07Avery\u202e\r\nQuinn\x00"
+EVIL_ME = "\x1b]0;owned\x07Amara\u202e\r\nQuinn\x00"
 
 with open(os.path.join(HERE, "expected_tiny.json"), encoding="utf-8") as handle:
     EXPECTED = json.load(handle)
@@ -210,7 +210,7 @@ def build_job(fixture_dir, info):
          contacts, "Me"],
         [None, ["+15550100004", "+15550100009", "+15550100002"], contacts, "Me"],
         ["   ", [], None, "Me"],
-        ["", ["+15550100007", "+15550100008"], None, "Avery"],
+        ["", ["+15550100007", "+15550100008"], None, "Amara"],
         ["", ["+15550100002", "+15550100002", "(555) 010-0002"], contacts, None],
     ]
     labels = [ident for ident, _label in build_fixture.EVIL_HANDLES if isinstance(ident, str)]

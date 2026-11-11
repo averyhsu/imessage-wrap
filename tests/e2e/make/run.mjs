@@ -551,11 +551,11 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await period(page, 'last');
   await matchesCli(page, [...base, '--tz', LA, '--year', String(year - 1)], LA, `last year (${year - 1}): byte-identical`);
   await period(page, 'all');
-  await rename(page, 'me', 'Avery');
-  await matchesCli(page, [...base, '--tz', LA, '--all-time', '--me', 'Avery'], LA, 'your own name: byte-identical to --me');
+  await rename(page, 'me', 'Amara');
+  await matchesCli(page, [...base, '--tz', LA, '--all-time', '--me', 'Amara'], LA, 'your own name: byte-identical to --me');
   await page.locator('#advanced summary').click();
   await page.selectOption('#tz', 'Asia/Tokyo');
-  await matchesCli(page, [...base, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Avery'], LA, 'another time zone: byte-identical to --tz');
+  await matchesCli(page, [...base, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Amara'], LA, 'another time zone: byte-identical to --tz');
   ok((await page.locator('#tz option').count()) > 100, 'the time zone list is filled in');
 
   // Another chat without reloading the file: the stress chat needs the trim ladder.
@@ -567,7 +567,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   state = await create(page);
   ok(state.link.steps === 0 && state.link.length < 3000, `largest chat, first names: the link is short (${state.link.length} characters) and nothing is trimmed`);
   await page.click('#first-names');                 // full names: fourteen enormous ones
-  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Avery'], LA, 'largest chat, full names (the owner keeps the name typed for the first chat): byte-identical');
+  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Amara'], LA, 'largest chat, full names (the owner keeps the name typed for the first chat): byte-identical');
   state = await snap(page);
   ok(state.link.length <= 4800, `largest chat: the link fits (${state.link.length} characters, quotes off)`);
   ok(await page.locator('#quotes').isEnabled(), 'largest chat: quotes can still be switched on');
@@ -587,7 +587,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await period(page, 'all');
   await create(page);
   await page.click('#first-names');
-  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Avery'], LA, 'unnamed chat, full names: byte-identical');
+  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Amara'], LA, 'unnamed chat, full names: byte-identical');
   state = await snap(page);
   ok(state.stats.chat.name.includes('…') && (await page.getAttribute('#chat-name', 'placeholder')) === state.stats.chat.name, 'unnamed chat: its name is built from the members, masked');
   eq(leaks(JSON.stringify(decode(state.link.url))), [], 'unnamed chat: nothing raw in the link');
@@ -1375,19 +1375,19 @@ await section('name', 'Your name: asked first, needed for a recap, "Me" only by 
   ok(box.y >= 0 && box.y + box.height <= tall, 'the field is scrolled into view');
 
   // Type it: the complaint goes, the recap is made with that name.
-  await page.keyboard.type('Avery');
+  await page.keyboard.type('Amara');
   ok(!(await visible(page, '#me-error')) && (await page.getAttribute('#me-name', 'aria-invalid')) === null, 'typing a name clears the message');
   state = await create(page);
-  ok(state.created && state.options.me === 'Avery', 'now Create makes the recap');
-  ok(state.stats.senders.some((x) => x.name === 'Avery') && !state.stats.senders.some((x) => x.name === 'Me'), 'with the owner under their own name, not "Me"');
-  await matchesShort(page, [...base, '--me', 'Avery'], 'the recap is byte-identical to `wrapped stats --me Avery` (first names, as both start out)');
+  ok(state.created && state.options.me === 'Amara', 'now Create makes the recap');
+  ok(state.stats.senders.some((x) => x.name === 'Amara') && !state.stats.senders.some((x) => x.name === 'Me'), 'with the owner under their own name, not "Me"');
+  await matchesShort(page, [...base, '--me', 'Amara'], 'the recap is byte-identical to `wrapped stats --me Amara` (first names, as both start out)');
 
   // Emptied afterwards: the recap on show is not remade for nobody.
   await page.fill('#me-name', '');
   await page.waitForSelector('#me-error:not([hidden])');
   await page.waitForTimeout(700);
   state = await snap(page);
-  ok(!state.busy && state.stats.senders.some((x) => x.name === 'Avery'), 'emptying the field afterwards asks again and leaves the recap as it was');
+  ok(!state.busy && state.stats.senders.some((x) => x.name === 'Amara'), 'emptying the field afterwards asks again and leaves the recap as it was');
 
   // A first name someone else already goes by: they get an initial, nobody is merged.
   await page.fill('#me-name', 'Ines');
@@ -1454,7 +1454,7 @@ await section('contacts', 'People without a name: a note, listed first, the cont
   ok(await page.locator('#create').isEnabled() && !(await visible(page, '#error-tune')), 'none of this stands in the way of creating');
 
   // Say who you are, pick a period and name one person by hand; then make the recap.
-  await rename(page, 'me', 'Avery');
+  await rename(page, 'me', 'Amara');
   await period(page, 'all');
   await rename(page, 'h:p:5550100002', 'Bramble');
   eq(await text(page, '#unnamed-hint'), '6 people have no name yet. Name them, or add your contacts file to fill them in.', 'the count follows as names are typed');
@@ -1476,7 +1476,7 @@ await section('contacts', 'People without a name: a note, listed first, the cont
   ok(/6 more people have a name now/.test(await text(page, '#contacts-note')), `the page says what the contacts did: "${await text(page, '#contacts-note')}"`);
   state = await settled(page);
   ok(await visible(page, '#step-tune.is-active') && state.chat.id === TACO, 'the chosen chat stays chosen');
-  eq([await page.inputValue('#me-name'), await page.locator('input[name="period"]:checked').getAttribute('value')], ['Avery', 'all'], 'your name and the period are as you left them');
+  eq([await page.inputValue('#me-name'), await page.locator('input[name="period"]:checked').getAttribute('value')], ['Amara', 'all'], 'your name and the period are as you left them');
   eq(await page.inputValue('.mk-person[data-person="n:Bram Okoye"] input'), 'Bramble', 'a name typed by hand stays with its person');
   ok((await text(page, '.mk-person[data-person="n:Bram Okoye"]')).includes('Bram Okoye'), 'with the name from the contacts beside it as a hint');
   eq(await page.inputValue('.mk-person[data-person="n:Sam Rivera"] input'), 'Sam R.', 'the others get the first names from the contacts');
@@ -1485,10 +1485,10 @@ await section('contacts', 'People without a name: a note, listed first, the cont
   ok(list.slice(firstNamed(list)).every((r) => !r.unnamed), 'nobody without a name comes after someone with one');
   eq(await text(page, '#unnamed-hint'), 'One person has no name yet: they are not in the contacts you added. Name them, or add another contacts file.', 'the note counts one');
   ok(/contacts?/.test(await text(page, '#source-summary')) && (await page.locator('#source-notes [data-note="no_contacts"]').count()) === 0, 'step 1\'s summary now shows the contacts');
-  eq(state.stats.senders.map((x) => x.name).sort(), ['Avery', 'Bramble', 'Ines', 'Sam C.', 'Sam R.', 'Zoë', '…0006'].sort(), 'the recap that was showing is remade with the names');
+  eq(state.stats.senders.map((x) => x.name).sort(), ['Amara', 'Bramble', 'Ines', 'Sam C.', 'Sam R.', 'Zoë', '…0006'].sort(), 'the recap that was showing is remade with the names');
   eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workers, 'without starting over: the same reader, the database is not read again');
   await rename(page, 'n:Bram Okoye', '');
-  await matchesShort(page, [String(TACO), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', LA, '--all-time', '--me', 'Avery'],
+  await matchesShort(page, [String(TACO), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', LA, '--all-time', '--me', 'Amara'],
     'and, the hand-typed name aside, it is byte-identical to `wrapped stats --contacts`');
   eq(leaks(JSON.stringify(decode((await snap(page)).link.url))), [], 'nothing raw in the link');
 
@@ -1925,7 +1925,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     await page.waitForSelector('#step-chat.is-active');
     await shot(page, `2-choose-${size}`);
     await pick(page, UNNAMED);
-    await rename(page, 'me', 'Avery');
+    await rename(page, 'me', 'Amara');
     await shot(page, `3-tune-${size}`);
     await s.close();
 

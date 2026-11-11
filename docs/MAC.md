@@ -88,7 +88,7 @@ writes into the folder you happen to be in). It sends nothing and never touches 
 app. Add `--year 2025` or `--all-time` for another period.
 
 **Names.** Your own messages appear under the first name of this Mac's user account
-(`threadback doctor` shows which name that is); use `--me "Avery"` to choose another. Everyone
+(`threadback doctor` shows which name that is); use `--me "Amara"` to choose another. Everyone
 else appears under their first name, because your contact names are your private labels
 ("Dave plumber" becomes "Dave"; two Sams become "Sam R." and "Sam K."). `--full-names` keeps
 full contact names in the link; the image and the text always use first names. Someone who is

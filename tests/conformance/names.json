@@ -557,26 +557,26 @@
   },
   {
    "names": [
-    "Avery Quinn",
-    "Avery Stone",
+    "Amara Quinn",
+    "Amara Stone",
     "Bram Okoye"
    ],
-   "me": "Avery Quinn",
+   "me": "Amara Quinn",
    "expected": {
-    "Avery Quinn": "Avery Quinn",
-    "Avery Stone": "Avery",
+    "Amara Quinn": "Amara Quinn",
+    "Amara Stone": "Amara",
     "Bram Okoye": "Bram"
    }
   },
   {
    "names": [
-    "Avery",
-    "Avery Stone"
+    "Amara",
+    "Amara Stone"
    ],
-   "me": "Avery",
+   "me": "Amara",
    "expected": {
-    "Avery": "Avery",
-    "Avery Stone": "Avery S."
+    "Amara": "Amara",
+    "Amara Stone": "Amara S."
    }
   },
   {

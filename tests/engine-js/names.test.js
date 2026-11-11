@@ -19,7 +19,7 @@ const Import = require(path.join(ROOT, 'web', 'make', 'import-rows.js'));
 const I = Engine._internals;
 const NOW = utc(2026, 11, 11, 20);
 const ELLIPSIS = '\u2026';
-const ME = '\x07Avery\u202E\r\nQuinn\x7f';            // cleans to "Avery Quinn"
+const ME = '\x07Amara\u202E\r\nQuinn\x7f';            // cleans to "Amara Quinn"
 
 function run(rows, options) {
   return Engine.computeStats(rows, Object.assign({ tz: 'UTC', now: NOW, all_time: true }, options || {}));
@@ -71,7 +71,7 @@ test('clean names: every name that reaches the stats is clean', () => {
   assert.deepEqual(st.chat, { name: 'Chat name !', members: 3 });
   assert.equal(st.period.label, 'Label 2');
   assert.equal(st.meta.source, 'chat.db');
-  assert.deepEqual(st.senders.map((s) => s.name).sort(), ['Avery Quinn', 'Mal[31mory X', 'Tab by [0mCat']);
+  assert.deepEqual(st.senders.map((s) => s.name).sort(), ['Amara Quinn', 'Mal[31mory X', 'Tab by [0mCat']);
   assert.deepEqual(leaks(st), []);
   // a chat without a name of its own is called after its (clean) members
   st = run(rows, { me: ME, contacts, participants: [evil, '+15550100020'] });
@@ -312,17 +312,17 @@ function recap() {
     rows.push(msg(t + i * 600, people[(i * i + Math.floor(i / 5)) % 6], 'word '.repeat(1 + i % 5), { guid: 'G' + i }));
   }
   for (let i = 0; i < 30; i++) rows.push(tap(t + 40000 + i, people[i % 6], i % 2 ? 2003 : 2000, rows[(i * 7) % 12]));
-  return run(rows, { contacts, me: 'Avery Quinn', chat_name: 'Dinner' });
+  return run(rows, { contacts, me: 'Amara Quinn', chat_name: 'Dinner' });
 }
 
 test('short names: a whole recap is renamed consistently and nothing else changes', () => {
   const full = recap();
   const frozen = JSON.stringify(full);
-  const short = Engine.shortNames(full, 'Avery Quinn');
+  const short = Engine.shortNames(full, 'Amara Quinn');
   assert.equal(JSON.stringify(full), frozen);                     // the input is not modified
   const expected = {
     'Sam Rivera': 'Sam R.', 'Sam Chen': 'Sam C.', 'Ines Calloway': 'Ines', 'Dave plumber': 'Dave',
-    'Avery Quinn': 'Avery Quinn'
+    'Amara Quinn': 'Amara Quinn'
   };
   expected[ELLIPSIS + '0022'] = ELLIPSIS + '0022';
   assert.deepEqual(full.senders.map((s) => s.name).sort(), Object.keys(expected).sort());
@@ -342,9 +342,9 @@ test('short names: a whole recap is renamed consistently and nothing else change
     }
   }
   assert.deepEqual(short.senders.map((s) => s.messages), full.senders.map((s) => s.messages));
-  assert.deepEqual(Engine.shortNames(short, 'Avery Quinn'), short);
+  assert.deepEqual(Engine.shortNames(short, 'Amara Quinn'), short);
   // the owner is whoever the caller says; the default is "Me"
-  assert.ok(Engine.shortNames(full).senders.some((s) => s.name === 'Avery'));
+  assert.ok(Engine.shortNames(full).senders.some((s) => s.name === 'Amara'));
   // computeStats itself keeps full names
   assert.ok(recap().senders.some((s) => s.name === 'Sam Rivera'));
 });
@@ -404,7 +404,7 @@ async function check(dbKey, walKey, books, me, expectedNames) {
 test('nothing private is shown: the ordinary fixture', async () => {
   const books = fixture().info.paths.address_books;
   assert.ok((await check('chat_db', 'chat_db_wal', books, 'Me')).has('Ines Calloway'));
-  assert.ok((await check('chat_db', 'chat_db_wal', null, 'Avery')).has(ELLIPSIS + '0001'));
+  assert.ok((await check('chat_db', 'chat_db_wal', null, 'Amara')).has(ELLIPSIS + '0001'));
 });
 
 test('nothing private is shown: the evil fixture', async () => {
@@ -414,7 +414,7 @@ test('nothing private is shown: the evil fixture', async () => {
   let seen = await check('evil_db', null, ['evil_address_book'], ME, names);
   for (const entry of info.handles) assert.ok(seen.has(entry.label), entry.label);
   for (const entry of info.contacts) assert.ok(seen.has(entry.name), entry.name);
-  for (const name of ['Avery Quinn', 'Unknown', info.stranger.label]) assert.ok(seen.has(name), name);
+  for (const name of ['Amara Quinn', 'Unknown', info.stranger.label]) assert.ok(seen.has(name), name);
   for (const entry of info.numbered) assert.ok(seen.has(entry.name), entry.name);     // cards saved under a number
   seen = await check('evil_db', null, null, 'Me', names);
   for (const entry of info.handles) assert.ok(seen.has(entry.label), entry.label);

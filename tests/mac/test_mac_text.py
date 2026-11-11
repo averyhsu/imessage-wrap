@@ -194,18 +194,18 @@ class Formatting(unittest.TestCase):
         return stats
 
     def test_short_names_follow_the_schema(self):
-        stats = self.named(["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Avery Hsu", "…0123"])
+        stats = self.named(["Dave Plumber", "Sam Rivera", "Sam Kowalski", "Amara Hsu", "…0123"])
         stats["late_night"]["top"]["name"] = "Sam Rivera"
         stats["most_reacted"][0]["sender"] = "Dave Plumber"
         stats["reactions"]["top_giver"]["name"] = "Sam Kowalski"
-        stats["reactions"]["top_receiver"]["name"] = "Avery Hsu"
+        stats["reactions"]["top_receiver"]["name"] = "Amara Hsu"
         stats["awards"] = [{"id": "yapper", "emoji": "🗣️", "title": "The Yapper", "winner": "Dave Plumber", "detail": "x"}]
-        out = fmt.short_names(stats, me="Avery Hsu")
-        self.assertEqual([s["name"] for s in out["senders"]], ["Dave", "Sam R.", "Sam K.", "Avery Hsu", "…0123"])
+        out = fmt.short_names(stats, me="Amara Hsu")
+        self.assertEqual([s["name"] for s in out["senders"]], ["Dave", "Sam R.", "Sam K.", "Amara Hsu", "…0123"])
         self.assertEqual(out["late_night"]["top"]["name"], "Sam R.")
         self.assertEqual(out["most_reacted"][0]["sender"], "Dave")
         self.assertEqual(out["reactions"]["top_giver"]["name"], "Sam K.")
-        self.assertEqual(out["reactions"]["top_receiver"]["name"], "Avery Hsu")  # the owner's own name is kept
+        self.assertEqual(out["reactions"]["top_receiver"]["name"], "Amara Hsu")  # the owner's own name is kept
         self.assertEqual(out["awards"][0]["winner"], "Dave")
         self.assertEqual(stats["senders"][0]["name"], "Dave Plumber")  # a copy; the input is untouched
         self.assertEqual(out["totals"], stats["totals"])
@@ -229,11 +229,11 @@ class Formatting(unittest.TestCase):
 
         stats = self.named(["Dave Plumber", "Lena Park", "Sam Rivera"])
         with mock.patch.object(wrapped, "short_names", engine_short_names, create=True):
-            out = fmt.shorten(stats, me="Avery")
+            out = fmt.shorten(stats, me="Amara")
         self.assertEqual(out["shortened_by"], "engine")
-        self.assertEqual(calls, ["Avery"])
+        self.assertEqual(calls, ["Amara"])
         if not hasattr(wrapped, "short_names"):  # until then: the same rule, applied here
-            self.assertEqual([s["name"] for s in fmt.shorten(stats, me="Avery")["senders"]], ["Dave", "Lena", "Sam"])
+            self.assertEqual([s["name"] for s in fmt.shorten(stats, me="Amara")["senders"]], ["Dave", "Lena", "Sam"])
 
     def test_account_first_name(self):
         calls = []
@@ -246,16 +246,16 @@ class Formatting(unittest.TestCase):
                 return type("P", (), {"stdout": output, "returncode": 0})()
             return run
 
-        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("Avery Hsu\n")), "Avery")
+        self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("Amara Hsu\n")), "Amara")
         self.assertEqual(calls[-1], ["/usr/bin/id", "-F"])
         self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("  \n")), "Me")
         self.assertEqual(fmt.account_first_name(platform="darwin", run=runner(error=OSError("no id"))), "Me")
         self.assertEqual(fmt.account_first_name(platform="darwin", run=runner("5550100123\n")), "Me")
         self.assertEqual(
-            fmt.account_first_name(platform="darwin", run=runner("Av" + chr(0x202E) + "ery" + chr(0x1B) + " X\n")), "Avery"
+            fmt.account_first_name(platform="darwin", run=runner("Am" + chr(0x202E) + "ara" + chr(0x1B) + " X\n")), "Amara"
         )
         before = len(calls)
-        self.assertEqual(fmt.account_first_name(platform="linux", run=runner("Avery Hsu")), "Me")
+        self.assertEqual(fmt.account_first_name(platform="linux", run=runner("Amara Hsu")), "Me")
         self.assertEqual(len(calls), before)  # only asked on macOS
 
     def test_peak_hour_fallbacks(self):

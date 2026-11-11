@@ -138,9 +138,9 @@ test('renaming tells two people with the same last digits apart, and totals neve
 
   // giving two people the same name merges them; giving someone the owner's name merges with the owner
   const merged = (await worker.ask('compute', {
-    options: Object.assign({ me: 'Avery', names: { 'n:Maya': 'Dev', 'h:e:pat.lastname@example.com': ' Avery ' } }, OPTIONS),
+    options: Object.assign({ me: 'Amara', names: { 'n:Maya': 'Dev', 'h:e:pat.lastname@example.com': ' Amara ' } }, OPTIONS),
   })).stats;
-  assert.deepStrictEqual(senders(merged), { '…0001': 4, Dev: 3, Avery: 2 });
+  assert.deepStrictEqual(senders(merged), { '…0001': 4, Dev: 3, Amara: 2 });
   assert.deepStrictEqual(merged.totals, base.totals);
   assert.equal(merged.senders.reduce((sum, s) => sum + s.messages, 0), merged.totals.messages);
   assert.equal(merged.chat.members, 3);

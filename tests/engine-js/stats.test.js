@@ -245,7 +245,7 @@ test('cleaning and word counting', () => {
 
 test('owner name, contacts and merging', () => {
   assert.equal(run([msg(T)]).senders[0].name, 'Me');
-  assert.equal(run([msg(T)], { me: 'Avery' }).senders[0].name, 'Avery');
+  assert.equal(run([msg(T)], { me: 'Amara' }).senders[0].name, 'Amara');
   const contacts = {
     '(555) 010-0001': 'Ines Calloway', 'Ines.Calloway@Example.com': 'Ines Calloway',
     '001 555 010 0002': 'Bram Okoye'
@@ -321,7 +321,7 @@ test('chat names', () => {
   assert.equal(name(' ', [A, B, C, '+15550100004', 'x@example.com', '+15550100009'], contacts), 'Ines, Bram, Sam & 3 more');
   assert.equal(name('', [B, '+15550100007', A]), '\u20260002, \u20260007, \u20260001');
   assert.equal(name('', []), 'Unnamed group');
-  assert.equal(name('', [A, B], { [A]: 'Avery' }, 'Avery'), NB);
+  assert.equal(name('', [A, B], { [A]: 'Amara' }, 'Amara'), NB);
   let st = run([msg(T, A)], { participants: [A, B, C, '+15550100004'], contacts, chat_name: '' });
   assert.deepEqual(st.chat, { name: 'Ines, Bram, Sam & 1 more', members: 5 });
   st = run([msg(T, A)], { chat_name: 'Named', participants: [A] });

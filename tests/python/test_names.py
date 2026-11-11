@@ -23,7 +23,7 @@ from wrapped import payload, stats as S
 VECTORS = support.names_vectors()
 FIXTURE = support.build_fixture
 utc = FIXTURE.utc
-ME = "\x07Avery\u202e\r\nQuinn\x7f"            # cleans to "Avery Quinn"
+ME = "\x07Amara\u202e\r\nQuinn\x7f"            # cleans to "Amara Quinn"
 
 
 def run(rows, **options):
@@ -71,8 +71,8 @@ class CleanNames(unittest.TestCase):
         self.assertEqual(st["period"]["label"], "Label 2")
         self.assertEqual(st["meta"]["source"], "chat.db")
         self.assertEqual(sorted(s["name"] for s in st["senders"]),
-                         ["Avery Quinn", "Mal[31mory X", "Tab by [0mCat"])
-        self.assertIn(st["reactions"]["top_giver"]["name"], ("Avery Quinn", "Mal[31mory X"))
+                         ["Amara Quinn", "Mal[31mory X", "Tab by [0mCat"])
+        self.assertIn(st["reactions"]["top_giver"]["name"], ("Amara Quinn", "Mal[31mory X"))
         self.assertEqual(support.leaks(st), [])
         # a chat without a name of its own is called after its (clean) members
         st = run(rows, me=ME, contacts=contacts, participants=[evil, "+15550100020"])
@@ -197,7 +197,7 @@ class SenderLabels(unittest.TestCase):
     def test_the_owner_is_a_sender_label_too(self):
         self.assertEqual(run([msg(self.t)], me="+1 555 010 0123")["senders"][0]["name"], "\u20260123")
         self.assertEqual(run([msg(self.t)], me="jane.doe@example.com")["senders"][0]["name"], "jane.doe")
-        self.assertEqual(run([msg(self.t)], me="Avery Quinn")["senders"][0]["name"], "Avery Quinn")
+        self.assertEqual(run([msg(self.t)], me="Amara Quinn")["senders"][0]["name"], "Amara Quinn")
 
     def test_names_are_capped_however_long_they_are(self):
         million = 1000000
@@ -297,15 +297,15 @@ class ShortNames(unittest.TestCase):
             rows.append(msg(t + i * 600, sender, "word " * (1 + i % 5), guid="G%d" % i))
         for i in range(30):
             rows.append(tap(t + 40000 + i, people[i % 6], 2003 if i % 2 else 2000, rows[(i * 7) % 12]))
-        return run(rows, contacts=contacts, me="Avery Quinn", chat_name="Dinner")
+        return run(rows, contacts=contacts, me="Amara Quinn", chat_name="Dinner")
 
     def test_a_whole_recap(self):
         full = self.recap()
         frozen = copy.deepcopy(full)
-        short = wrapped.short_names(full, me="Avery Quinn")
+        short = wrapped.short_names(full, me="Amara Quinn")
         self.assertEqual(full, frozen)                                # the input is not modified
         expected = {"Sam Rivera": "Sam R.", "Sam Chen": "Sam C.", "Ines Calloway": "Ines",
-                    "Dave plumber": "Dave", "\u20260022": "\u20260022", "Avery Quinn": "Avery Quinn"}
+                    "Dave plumber": "Dave", "\u20260022": "\u20260022", "Amara Quinn": "Amara Quinn"}
         self.assertEqual({s["name"] for s in full["senders"]}, set(expected))
         self.assertEqual([s["name"] for s in short["senders"]],
                          [expected[s["name"]] for s in full["senders"]])
@@ -323,14 +323,14 @@ class ShortNames(unittest.TestCase):
                 self.assertEqual(short[key], full[key], key)
         self.assertEqual([s["messages"] for s in short["senders"]],
                          [s["messages"] for s in full["senders"]])
-        self.assertEqual(wrapped.short_names(short, me="Avery Quinn"), short)
+        self.assertEqual(wrapped.short_names(short, me="Amara Quinn"), short)
         self.assertIs(wrapped.short_names, S.short_names)
 
     def test_the_owner_is_whoever_the_caller_says(self):
         full = self.recap()
         default = wrapped.short_names(full)             # me="Me": nobody here is called that
-        self.assertIn("Avery", [s["name"] for s in default["senders"]])
-        self.assertEqual(S.short_names(full, "Avery Quinn"), wrapped.short_names(full, me="Avery Quinn"))
+        self.assertIn("Amara", [s["name"] for s in default["senders"]])
+        self.assertEqual(S.short_names(full, "Amara Quinn"), wrapped.short_names(full, me="Amara Quinn"))
 
     def test_compute_stats_itself_keeps_full_names(self):
         self.assertIn("Sam Rivera", [s["name"] for s in self.recap()["senders"]])
@@ -400,7 +400,7 @@ class NothingPrivateIsShown(unittest.TestCase):
     def test_the_ordinary_fixture(self):
         book = support.path("address_book_dir")
         self.assertIn("Ines Calloway", self.check(support.path("chat_db"), book, "Me"))
-        self.assertIn("\u20260001", self.check(support.path("chat_db"), None, "Avery"))
+        self.assertIn("\u20260001", self.check(support.path("chat_db"), None, "Amara"))
 
     def test_the_evil_fixture(self):
         info = support.fixture()[1]["evil"]
@@ -410,7 +410,7 @@ class NothingPrivateIsShown(unittest.TestCase):
             self.assertIn(entry["label"], seen)
         for entry in info["contacts"]:
             self.assertIn(entry["name"], seen)
-        self.assertLessEqual({"Avery Quinn", "Unknown", info["stranger"]["label"]}, seen)
+        self.assertLessEqual({"Amara Quinn", "Unknown", info["stranger"]["label"]}, seen)
         for entry in info["numbered"]:                  # cards saved under a number or an address
             self.assertIn(entry["name"], seen)
         seen = self.check(support.path("evil_db"), None, "Me", names)
