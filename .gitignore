@@ -1,0 +1,52 @@
+# ── Never commit private data ────────────────────────────────────────────────
+# Real Messages databases (Mac chat.db, iPhone-backup sms.db) and anything
+# derived from them. Test fixtures are generated at test time from invented data.
+chat.db
+chat.db-*
+sms.db
+sms.db-*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+Manifest.plist
+Manifest.db
+# Generated stats / recaps from real chats
+stats.json
+*_stats.json
+*-stats.json
+wrapped-output/
+out/
+recap-*.png
+recap-*.json
+# Secrets
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+*.key
+secrets.*
+
+# ── Tooling noise ────────────────────────────────────────────────────────────
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+test-results/
+playwright-report/
+.build/
+DerivedData/
+xcuserdata/
+*.xcodeproj/
+*.xcworkspace/
+*.xcresult/
+*.ipa
+*.dSYM/
