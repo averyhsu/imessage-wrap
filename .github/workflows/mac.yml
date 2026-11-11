@@ -33,6 +33,8 @@ jobs:
     name: macOS 26 (system Python, osacompile, installer, dry run)
     runs-on: macos-26
     timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"   # with -p no:cacheprovider: the tests leave the checkout untouched
     steps:
       - name: Check out
         uses: actions/checkout@v6
@@ -61,7 +63,7 @@ jobs:
       - name: Tests (pytest)
         run: |
           set -o pipefail
-          "$WORK/venv/bin/python" -m pytest tests/mac -v -rs 2>&1 | tee "$WORK/pytest.txt"
+          "$WORK/venv/bin/python" -m pytest tests/mac -v -rs -p no:cacheprovider 2>&1 | tee "$WORK/pytest.txt"
 
       - name: Tests again with plain unittest
         env:
@@ -94,13 +96,15 @@ jobs:
           THREADBACK_PYTHON: /usr/bin/python3
         run: |
           export HOME="$WORK/home"
-          mkdir -p "$HOME"
-          THREADBACK_SOURCE="$GITHUB_WORKSPACE" bash install.sh
+          mkdir -p "$HOME" "$WORK/src"
+          # install from a copy, so pip's build folders never land in the checkout
+          cp -R wrapped pyproject.toml README.md "$WORK/src/"
+          THREADBACK_SOURCE="$WORK/src" bash install.sh
           "$HOME/.local/bin/wrapped" --help
           "$HOME/.local/bin/threadback" --version
           "$HOME/.local/bin/threadback" agent --help
           # run it twice: installing over an existing install must work
-          THREADBACK_SOURCE="$GITHUB_WORKSPACE" bash install.sh >/dev/null
+          THREADBACK_SOURCE="$WORK/src" bash install.sh >/dev/null
           "$HOME/.local/bin/wrapped" --help >/dev/null
 
       - name: Dry-run agent pass with the installed command (sends nothing)
@@ -143,6 +147,16 @@ jobs:
           test ! -e "$HOME/.local/bin/wrapped"
           test ! -e "$HOME/.local/bin/threadback"
 
+      - name: Nothing was written into the checkout
+        run: |
+          left="$(git status --porcelain --ignored)"
+          if [ -n "$left" ]; then
+            echo "::error::the tests or the installer wrote into the repository:"
+            echo "$left"
+            exit 1
+          fi
+          echo "checkout untouched"
+
       - name: Evidence (what this run actually showed)
         if: always()
         run: |
@@ -174,6 +188,8 @@ jobs:
     name: Linux (same tests, no Messages)
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Check out
         uses: actions/checkout@v6
@@ -188,4 +204,10 @@ jobs:
 
       - name: Tests
         run: |
-          "$RUNNER_TEMP/venv/bin/python" -m pytest tests/mac -v -rs
+          "$RUNNER_TEMP/venv/bin/python" -m pytest tests/mac -v -rs -p no:cacheprovider
+          left="$(git status --porcelain --ignored)"
+          if [ -n "$left" ]; then
+            echo "::error::the tests wrote into the repository:"
+            echo "$left"
+            exit 1
+          fi

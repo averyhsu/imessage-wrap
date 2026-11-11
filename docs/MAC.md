@@ -48,6 +48,11 @@ curl -fsSL https://raw.githubusercontent.com/averyhsu/imessage-wrap/claude/imess
 
 To remove it again: `curl -fsSL https://raw.githubusercontent.com/averyhsu/imessage-wrap/main/install.sh | bash -s -- --uninstall`
 
+Uninstalling removes exactly what was installed: the two commands, the private Python
+environment and the helper's own state and log files. It removes `~/.threadback` itself only
+if nothing else is in it, and it never touches a folder it did not create. (For the same
+reason the installer refuses to install into a folder that already has other things in it.)
+
 ## 2. Let your terminal read your messages (Full Disk Access)
 
 macOS protects the Messages database. The app you type commands in needs permission once:
@@ -77,9 +82,17 @@ Pick a chat (part of its name is enough) and look at exactly what would be sent:
 threadback preview --chat "Dinner Club" --open
 ```
 
-This writes the card image, the text and the link to a folder and opens it. It sends nothing
-and never touches the Messages app. Add `--year 2025` or `--all-time` for another period, and
-`--me "Avery"` so your own messages show under your name instead of "Me".
+This writes the card image, the text and the link to a new folder in
+`~/Pictures/Threadback/preview/` and opens it (`--out DIR` to put it somewhere else; it never
+writes into the folder you happen to be in). It sends nothing and never touches the Messages
+app. Add `--year 2025` or `--all-time` for another period.
+
+**Names.** Your own messages appear under the first name of this Mac's user account
+(`threadback doctor` shows which name that is); use `--me "Avery"` to choose another. Everyone
+else appears under their first name, because your contact names are your private labels
+("Dave plumber" becomes "Dave"; two Sams become "Sam R." and "Sam K."). `--full-names` keeps
+full contact names in the link; the image and the text always use first names. Someone who is
+not in your contacts appears as `…` and the last four digits of their number, never the number.
 
 To rehearse the whole thing, run the helper in dry-run mode and type `/wrapped` in that chat:
 
@@ -151,7 +164,8 @@ threadback agent --chat "Dinner Club" --keep-awake
   to its own replies.
 - Every reply is logged as one line, for example
   `/wrapped in "Dinner Club" (default period): card=delivered text=delivered link=delivered`.
-  The log (`~/.threadback/agent.log`) never contains message text.
+  The log (`~/.threadback/agent.log`, readable only by you) never contains message text, and
+  never the name of a chat you did not approve.
 - `--keep-awake` stops the Mac from idle-sleeping while the helper runs. Closing the lid still
   puts it to sleep.
 - `--no-link` sends the image and the text only. `--quotes` adds the text of the three
@@ -171,11 +185,17 @@ threadback preview --chat "Dinner Club" --ai
 This is the one feature that sends something off your Mac, so it asks first and says exactly
 what leaves: the chat name, each member's **first name**, and counts (messages, words,
 tapbacks, activity by hour and day). No message text is sent unless you also pass
-`--ai-quotes`, which adds the text of the up to three most-reacted messages. Phone numbers and
-e-mail addresses are never sent. The default model is `claude-sonnet-5-5`
-(`--ai-model` to change). If the request fails or the answer does not pass strict checks, the
-built-in awards are used and the log says why. If the model declines a request, Anthropic may
-re-run it on its own fallback model (the server-side fallback option is switched on).
+`--ai-quotes`, which adds the text of the up to three most-reacted messages (with any phone
+number or address in them blanked out). Phone numbers and e-mail addresses are never sent:
+names are masked first, and the request is checked once more and dropped if anything in it
+still looks like one. The default model is `claude-sonnet-5-5` (`--ai-model` to change).
+
+What comes back is checked strictly before it can reach the chat: at most six awards, every
+winner a real member, and no links or web addresses, phone numbers, e-mail addresses or
+invisible characters anywhere. If the request fails or the answer does not pass, the built-in
+awards are used and the log says why (only the kind of error, never the reply or your key).
+If the model declines a request, Anthropic may re-run it on its own fallback model (the
+server-side fallback option is switched on).
 
 ## Privacy
 
@@ -188,7 +208,8 @@ computed only for a chat where a command was typed and that you allowed.
 if you allowed that chat:
 
 - the card: totals, percentages, peak hour and **first names** (people who are not in your
-  contacts appear as the last two digits of their number). No message text;
+  contacts appear as `…` and the last four digits of their number, never the number; an
+  e-mail address is cut down to the part before the `@`). No message text;
 - a few lines of text with the same kind of numbers;
 - the link. **The link carries the recap inside itself** (after the `#`), which is why no
   server is needed and nothing is uploaded; it also means anyone the link is forwarded to can
@@ -266,7 +287,7 @@ message count, and `All good.` at the end. (`threadback chats` then lists the ch
 threadback preview --chat "Dinner Club" --no-link --open
 ```
 
-Pass: a folder opens with one PNG. The chat name, message count, top three and peak hour look
+Pass: a folder inside `~/Pictures/Threadback/preview/` opens with one PNG. The chat name, message count, top three and peak hour look
 right for that chat, the names are first names, and emoji in the chat name are drawn.
 
 **(c) `send-test` delivers to a chat you pick**
@@ -286,7 +307,8 @@ whether this Mac has the `;+;` / `;-;` mismatch.
 threadback agent --chat "Dinner Club" --no-link --keep-awake
 ```
 
-Answer `y`, then type `/wrapped` in that chat from your phone. Pass: within about ten seconds
+Check that the list it prints is exactly the chat you meant, answer `y`, then type `/wrapped`
+in that chat from your phone. Pass: within about ten seconds
 the terminal prints `/wrapped in "Dinner Club" (default period): card=delivered text=delivered`
 and the image and text appear in the chat. Type `/wrapped` again straight away: it must be
 ignored (`cooling down`). Stop with Ctrl-C. Drop `--no-link` once the story page is published.
@@ -298,12 +320,13 @@ the known failure modes this Mac has.
 
 | | How | Status |
 |---|---|---|
-| Command detection (text and `attributedBody`), allowlist, staleness, cooldown, cursor, own-reply protection, missing join row | Generated databases, fake and real stats engine | Tested in the development sandbox (Linux) and on a macOS 26 runner |
+| Command detection (text and `attributedBody`), scope fixed to approved chat ids (new and renamed chats are refused), staleness and future dates, cooldown, cursor, own-reply protection, missing join row | Generated databases, fake and real stats engine | Tested in the development sandbox (Linux) and on a macOS 26 runner |
+| Hostile names: control and bidi characters, 100,000-character names, numbers and addresses in names | Generated data | Tested in the sandbox and on a macOS 26 runner |
 | Card rendering, 20 edge cases (long names, emoji, 2 and 40 members, 0 to 1,234,567 messages, missing sections, right-to-left names) | Pillow, checked by eye | Tested in the sandbox and on a macOS 26 runner (with Apple's emoji font) |
 | Sender logic: arguments passed as ARGV, the single `-1728` swap retry, verification outcomes, error explanations | Fake `osascript` runner; on macOS also the real `osascript` with harmless scripts that never mention Messages | Tested in the sandbox and on a macOS 26 runner |
 | The AppleScript itself | `osacompile` against the real Messages scripting dictionary, with a control that must fail | Compiles on a macOS 26 runner. **Never run.** |
-| Installer | Sandboxed HOME, local source; system Python 3.9 on the runner | Tested in the sandbox and on a macOS 26 runner |
-| AI awards | Fake transport only | Request shape and validation tested. **The real API has never been called.** |
+| Installer, including refusing dangerous folders and removing only what it wrote | Sandboxed HOME, local source; system Python 3.9 on the runner | Tested in the sandbox and on a macOS 26 runner |
+| AI awards | Fake transport only | Request shape, validation (links, numbers, addresses, invisible characters are rejected) and key scrubbing tested. **The real API has never been called.** |
 | Reading a real `chat.db` with Full Disk Access | | **Needs a real Mac** (checklist a, b) |
 | The Automation prompt and a real send into a group chat, including on macOS 26/27 | | **Needs a real Mac signed in to iMessage** (checklist c, d) |
 | Whether Messages shows a link preview for the story link | | **Needs a real Mac and a published story page** |

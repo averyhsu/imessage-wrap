@@ -100,7 +100,9 @@ write_launcher() {
     # shellcheck disable=SC2016  # the launcher, not this script, expands the variable
     printf 'THREADBACK_HOME="${THREADBACK_HOME:-%s}"\n' "$TB_HOME"
     printf '%s\n' 'export THREADBACK_HOME'
-    printf 'exec "%s/bin/python" -m wrapped "$@"\n' "$VENV"
+    # -I: isolated mode. Without it Python would put the current folder first on its
+    # module path, and a folder named "wrapped" there would be run instead of this install.
+    printf 'exec "%s/bin/python" -I -m wrapped "$@"\n' "$VENV"
   } >"$target.tmp.$$"
   chmod 755 "$target.tmp.$$"
   mv -f "$target.tmp.$$" "$target"
@@ -291,9 +293,9 @@ If the message above mentions 'ensurepip', your Python is missing the venv modul
     die "could not install Threadback from $SOURCE.
 Check your internet connection and run the installer again."
 
-  "$VENV/bin/python" -c 'import wrapped.mac.card as c; c.FontBook()' ||
+  "$VENV/bin/python" -I -c 'import wrapped.mac.card as c; c.FontBook()' ||
     die "the install finished but the card renderer is not usable (see the message above)."
-  "$VENV/bin/python" -m wrapped --help >/dev/null ||
+  "$VENV/bin/python" -I -m wrapped --help >/dev/null ||
     die "the install finished but the command does not start (see the message above)."
 
   write_launcher wrapped

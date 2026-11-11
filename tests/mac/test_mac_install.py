@@ -319,6 +319,22 @@ class InstallerEndToEnd(unittest.TestCase):
         proc = self.launcher("threadback", "--version")
         self.assertIn("Threadback", proc.stdout)
 
+    def test_2b_launcher_runs_the_installed_code_not_whatever_is_in_the_current_folder(self):
+        # a folder that happens to contain a "wrapped" package (a checkout, or something planted)
+        trap = Path(self.tmp.name) / "trap"
+        (trap / "wrapped").mkdir(parents=True, exist_ok=True)
+        (trap / "wrapped" / "__init__.py").write_text("print('DECOY RAN')\n")
+        (trap / "wrapped" / "__main__.py").write_text("print('DECOY RAN')\n")
+        for name in ("wrapped", "threadback"):
+            proc = subprocess.run(
+                [str(self.bin / name), "--version"], capture_output=True, text=True, timeout=120, cwd=str(trap),
+                env={"HOME": str(self.home), "PATH": "/usr/bin:/bin", "PYTHONPATH": str(trap)}, stdin=subprocess.DEVNULL,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertNotIn("DECOY", proc.stdout + proc.stderr)
+            self.assertIn("Threadback", proc.stdout)
+        self.assertEqual(sorted(x.name for x in (trap / "wrapped").iterdir()), ["__init__.py", "__main__.py"])
+
     def test_3_installed_package_has_fonts_and_renders_a_card(self):
         py = self.home / ".threadback" / "venv" / "bin" / "python"
         out_png = Path(self.tmp.name) / "installed-card.png"
