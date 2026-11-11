@@ -717,6 +717,18 @@ class Scope(unittest.TestCase):
         for key in ("chat1", "chat2"):
             self.assertIn(key, a)
 
+    def test_asking_for_more_than_was_approved_asks_again(self):
+        def sig(**kw):
+            return scope_signature(AgentConfig(db_path=Path("x"), state_path=Path("y"), chats=["club"], **kw),
+                                   self.CHATS[:2])
+        plain = sig()
+        self.assertEqual(plain, sig())
+        # message text, full contact names, or dropping the link: each is a different agreement
+        self.assertEqual(len({plain, sig(quotes=True), sig(full_names=True), sig(link=False),
+                              sig(quotes=True, full_names=True)}), 5)
+        # with no link there is nothing for --quotes or --full-names to change
+        self.assertEqual(sig(link=False), sig(link=False, quotes=True, full_names=True))
+
     def test_lock_is_exclusive(self):
         with tempfile.TemporaryDirectory() as tmp:
             first = agent_mod.acquire_lock(Path(tmp) / "agent.lock")

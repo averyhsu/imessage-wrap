@@ -412,9 +412,13 @@ def _stop_after(res: SendResult) -> bool:
 
 
 def scope_signature(config: AgentConfig, allowed: Sequence[ChatRef]) -> str:
-    """What exactly the owner agreed to: the set of chat ids. A different set
-    (one more chat, in either mode) asks again; a renamed chat does not."""
-    return "chats:" + "|".join(sorted(c.key for c in allowed))
+    """What exactly the owner agreed to: the set of chat ids and what a reply
+    carries. A different set (one more chat, in either mode) asks again, and so
+    does asking for more than was approved before (message text or full contact
+    names in the link, or a link at all); a renamed chat does not."""
+    carries = [name for name, on in (("link", config.link), ("quotes", config.link and config.quotes),
+                                     ("full-names", config.link and config.full_names)) if on]
+    return "chats:" + "|".join(sorted(c.key for c in allowed)) + ";carries:" + ",".join(carries)
 
 
 def consent_text(config: AgentConfig, allowed: Sequence[ChatRef], total_groups: int) -> str:
