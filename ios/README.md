@@ -90,6 +90,15 @@ the notes the tests print, is linked from
 | The app plays the real web story in a `WKWebView`; the bridge reports `ready` and `slide`; taps advance; a link passed at launch and an `imessagewrapped://` link opened by the system both play. | UI tests, screenshots `app-*` | 43042222401 |
 | Inside the Simulator's **Messages** app: the extension is in the app drawer, opens in compact style, stages a bubble, sends it ("Delivered"); tapping the bubble plays the story in the expanded style (the bridge reports `ready`, taps advance); the story's close control returns to compact. | UI tests, screenshots `messages-*` | [43047037123](https://github.com/averyhsu/imessage-wrap/actions/runs/43047037123) |
 | The same message at the other end of the Simulator's simulated chat (a received bubble): it arrives, the conversation list shows its summary text, and tapping it plays the sender's recap. | UI test, screenshots `messages-live-9*` | [43050898939](https://github.com/averyhsu/imessage-wrap/actions/runs/43050898939) |
+| The template card, which is the default bubble: staged, sent, shows the share card with its caption and subcaption; tapping it plays the story. | UI test, screenshots `messages-template-*` | [43054826579](https://github.com/averyhsu/imessage-wrap/actions/runs/43054826579) |
+
+Next to the screenshots there are two short recordings from run 43054826579
+(`app-demo-story.mp4`, and `messages-extension-3x.mp4`: the whole walkthrough inside
+Messages at three times the speed), and `debug/`: the accessibility hierarchy of Messages at
+each step, which is what the walkthrough test was written from. Apple documents no way to
+automate Messages; the test relies on the element names iOS 26.5 happens to use (`add`,
+`sendButton`, the app's name in the drawer) and is expected to need care on other versions,
+so CI treats it as allowed to fail.
 
 Found along the way, in the Simulator:
 
@@ -100,8 +109,8 @@ Found along the way, in the Simulator:
   this recap" state (tapping it still plays the right story, because the expanded instance
   does get the message). That is why bubbles are template cards by default. Whether a real
   iPhone behaves the same is unknown.
-- Messages covers the top-left corner of a live bubble with the app icon; the live bubble
-  layout keeps that area clear.
+- Messages covers the top-left corner of a bubble with the app icon, on the template
+  card's image as well as on a live bubble; both layouts keep that corner clear.
 - On the CI simulator the story is on screen about 4 s after it is opened in the app and
   6 to 10 s in the extension (the first web view of a process is slow to start there). A
   real phone should be much faster; that is unmeasured.

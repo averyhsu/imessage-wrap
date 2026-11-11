@@ -31,19 +31,28 @@ enum RecapCardRenderer {
         let content = rect.insetBy(dx: inset, dy: inset)
         let white = UIColor.white
 
-        // Brand mark, top right: a white bubble with three dots.
-        drawBrandMark(in: CGRect(x: content.maxX - 44, y: content.minY - 4, width: 44, height: 31), context: context)
-
-        // Eyebrow: "2026 IN REVIEW"
+        // Eyebrow: "2026 IN REVIEW", as a pill in the top RIGHT corner. Messages lays its
+        // app-icon badge over the top-left corner of a bubble's image (seen in the
+        // Simulator), so nothing that matters is drawn there.
         let eyebrow = NSAttributedString(
             string: summary.reviewLabel.uppercased(),
             attributes: [
-                .font: WrappedTheme.displayFont(ofSize: 12, weight: .heavy),
-                .foregroundColor: white.withAlphaComponent(0.86),
-                .kern: 1.4
+                .font: WrappedTheme.displayFont(ofSize: 11.5, weight: .heavy),
+                .foregroundColor: white,
+                .kern: 1.3
             ]
         )
-        eyebrow.draw(at: CGPoint(x: content.minX, y: content.minY))
+        let eyebrowSize = eyebrow.size()
+        let pill = CGRect(
+            x: content.maxX - eyebrowSize.width - 20,
+            y: content.minY - 5,
+            width: eyebrowSize.width + 20,
+            height: eyebrowSize.height + 10
+        )
+        context.setFillColor(white.withAlphaComponent(0.2).cgColor)
+        context.addPath(UIBezierPath(roundedRect: pill, cornerRadius: pill.height / 2).cgPath)
+        context.fillPath()
+        eyebrow.draw(at: CGPoint(x: pill.minX + 10.5, y: pill.minY + 5))
 
         // Chat name, up to two lines.
         let nameStyle = NSMutableParagraphStyle()
@@ -61,8 +70,8 @@ enum RecapCardRenderer {
         )
         let nameRect = CGRect(
             x: content.minX,
-            y: content.minY + 22,
-            width: content.width - 50,
+            y: content.minY + 26,
+            width: content.width,
             height: nameFont.lineHeight * 2.0
         )
         name.draw(
@@ -170,45 +179,6 @@ enum RecapCardRenderer {
         context.setFillColor(color.cgColor)
         context.addPath(path.cgPath)
         context.fillPath()
-        context.restoreGState()
-    }
-
-    /// A small white speech bubble with three dots.
-    private static func drawBrandMark(in rect: CGRect, context: CGContext) {
-        context.saveGState()
-        let tailRoom = rect.width * 0.1
-        let body = CGRect(x: rect.minX + tailRoom, y: rect.minY, width: rect.width - tailRoom, height: rect.height * 0.92)
-        let radius = body.height / 2
-        let bubble = UIBezierPath(roundedRect: body, cornerRadius: radius)
-        let tail = UIBezierPath()
-        tail.move(to: CGPoint(x: body.minX + radius * 0.25, y: body.maxY - radius * 0.9))
-        tail.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY),
-            controlPoint: CGPoint(x: body.minX + radius * 0.2, y: rect.maxY - rect.height * 0.08)
-        )
-        tail.addQuadCurve(
-            to: CGPoint(x: body.minX + radius * 1.1, y: body.maxY - radius * 0.08),
-            controlPoint: CGPoint(x: body.minX + radius * 0.5, y: rect.maxY)
-        )
-        tail.close()
-        // Fill the two shapes separately: as one path their opposite winding would punch
-        // a hole where the tail overlaps the bubble.
-        context.setFillColor(UIColor.white.cgColor)
-        context.addPath(bubble.cgPath)
-        context.fillPath()
-        context.addPath(tail.cgPath)
-        context.fillPath()
-
-        let dot = rect.height * 0.17
-        let gap = rect.height * 0.11
-        let total = dot * 3 + gap * 2
-        var x = body.midX - total / 2
-        let y = body.midY - dot / 2
-        context.setFillColor(WrappedTheme.blueUI.cgColor)
-        for _ in 0..<3 {
-            context.fillEllipse(in: CGRect(x: x, y: y, width: dot, height: dot))
-            x += dot + gap
-        }
         context.restoreGState()
     }
 }

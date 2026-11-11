@@ -150,7 +150,7 @@ jobs:
 
           echo "== home"
           xcrun simctl launch "$UDID" "$APP_ID"
-          sleep 7
+          sleep 15
           xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-01-home.png"
           xcrun simctl terminate "$UDID" "$APP_ID" || true
 
