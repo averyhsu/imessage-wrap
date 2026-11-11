@@ -799,13 +799,13 @@
         h('div', 'btn-row', [button('share', 'Share card', 'share'), button('replay', 'Replay', 'replay')])
       ];
     } else {
-      var make_ = h('a', 'sum__make', 'Make one for your chat  →');
-      make_.href = Config.MAKE_PATH;
-      make_.setAttribute('data-web-only', '');
+      var makeLink = h('a', 'sum__make', 'Make one for your chat  →');
+      makeLink.href = Config.MAKE_PATH;
+      makeLink.setAttribute('data-web-only', '');
       actions = [
         button('share', 'Share card', 'share', 'btn--primary'),
         h('div', 'btn-row', [button('copy', 'Copy link', 'link'), button('replay', 'Replay', 'replay')]),
-        make_
+        makeLink
       ];
     }
 

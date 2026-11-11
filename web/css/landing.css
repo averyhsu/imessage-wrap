@@ -8,9 +8,13 @@
   padding: calc(env(safe-area-inset-top, 0px) + 18px) max(22px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 36px) max(22px, env(safe-area-inset-left, 0px));
   opacity: 0;
   transition: opacity 0.35s ease;
+  /* Safety net: if the scripts never run, the page still appears after a moment. */
+  animation: l-show 0.3s ease 1.5s forwards;
 }
 
-html.is-ready .landing { opacity: 1; }
+html.is-ready .landing { opacity: 1; animation: none; }
+
+@keyframes l-show { to { opacity: 1; } }
 
 .landing > * {
   position: relative;

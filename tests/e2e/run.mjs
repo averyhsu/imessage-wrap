@@ -587,6 +587,8 @@ await section('landing', 'Landing page', async () => {
     ok(heroPixels === 255, `[${vpName}] the hero card is drawn`);
     if (vpName !== 'se-320x568') {
       fs.mkdirSync(SHOTS, { recursive: true });
+      // Freeze the floating hero pieces so the committed screenshot does not change run to run.
+      await page.evaluate(() => { document.getAnimations().forEach((a) => { a.pause(); a.currentTime = 0; }); });
       await page.screenshot({ path: path.join(SHOTS, vpName.startsWith('desktop') ? 'landing-desktop.png' : 'landing-mobile.png'), fullPage: true });
     }
     // "Play the demo" starts the story in place, and Back returns.
