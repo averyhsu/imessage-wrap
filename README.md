@@ -124,7 +124,8 @@ the iPhone app in the iOS Simulator.
 
 ## Names and trademarks
 
-Threadback is an independent, open-source project. It is not affiliated with, sponsored by
+Threadback is an independent project and its source is public here. No licence has been
+chosen yet (see [STATUS.md](STATUS.md)). It is not affiliated with, sponsored by
 or endorsed by Apple or Spotify. iMessage is a trademark of Apple Inc.; Spotify Wrapped is a
 trademark of Spotify AB. They are mentioned only to describe what this project works with
 and what it resembles.

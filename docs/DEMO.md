@@ -52,7 +52,7 @@ Nothing here sends a message or needs an account.
 | 0:27–0:31 | Share card. | "One card to share." |
 | 0:31–0:38 | The "Make your own" page with the **sample data** button: chat list → link. | "Runs in your browser. Nothing is uploaded." |
 | 0:38–0:42 | The iOS Simulator screenshots of the app and the Messages bubble (`docs/screenshots/ios/`). | "And it lives in the Messages app drawer." |
-| 0:42–0:45 | End card. | "Open source. Link below." |
+| 0:42–0:45 | End card. | "The code is public. Link below." |
 
 To play the demo story locally:
 
