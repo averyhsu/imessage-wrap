@@ -2,9 +2,13 @@
 //
 //   npm run test:e2e                 everything; exits non-zero on any failure
 //   node tests/e2e/run.mjs --only=embed,matrix
+//   npm run shots                    refresh the committed screenshots (see below)
 //
 // Sections: play, links, share, embed, file, matrix, landing, brand, shots.
-// Screenshots of every slide are written to docs/screenshots/web/.
+//
+// A test run never touches tracked files: screenshots go to test-results/web-screenshots/
+// (git-ignored; CI uploads that folder). Only --update-screenshots writes them to
+// docs/screenshots/web/, which is what `npm run shots` does.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -17,7 +21,8 @@ const Config = require(path.join(WEB, 'js/config.js'));
 const Data = require(path.join(WEB, 'js/normalize.js'));
 const vector = require(path.join(ROOT, 'tests/vectors/payload-v1.json'));
 
-const SHOTS = path.join(ROOT, 'docs/screenshots/web');
+const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots');
+const SHOTS = UPDATE_SCREENSHOTS ? path.join(ROOT, 'docs/screenshots/web') : path.join(ROOT, 'test-results/web-screenshots');
 const ALL_SLIDES = ['cover', 'total', 'clock', 'persona', 'late', 'week', 'year', 'senders', 'moty', 'taps', 'awards', 'sum'];
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const wants = (name) => only.length === 0 || only.includes(name);
@@ -168,13 +173,58 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
   eq((await state(page)).index, 9, 'ArrowLeft goes back');
+  eq(await page.locator('.head__pause').getAttribute('aria-label'), 'Pause', 'the pause button says "Pause" while the story plays');
   await page.keyboard.press('Space');
   ok((await state(page)).paused, 'space pauses');
   ok(await page.locator('.stage.is-paused').count() === 1, 'paused state is reflected on the stage');
+  eq(await page.locator('.head__pause').getAttribute('aria-label'), 'Play', 'once paused, the same button says "Play"');
   await page.keyboard.press('Space');
   ok(!(await state(page)).paused, 'space resumes');
+  eq(await page.locator('.head__pause').getAttribute('aria-label'), 'Pause', 'and "Pause" again after resuming');
+  await page.locator('.head__pause').click();
+  eq([(await state(page)).paused, await page.locator('.head__pause').getAttribute('aria-label')], [true, 'Play'], 'clicking the button pauses and relabels it');
+  await page.locator('.head__pause').click();
+  eq([(await state(page)).paused, await page.locator('.head__pause').getAttribute('aria-label')], [false, 'Pause'], 'clicking again resumes');
+  // Holding (or a hidden tab) is not the viewer pressing pause: the label does not flip.
+  await page.evaluate(() => WrappedStory.pause());
+  eq(await page.locator('.head__pause').getAttribute('aria-label'), 'Pause', 'a pause the viewer did not ask for leaves the label alone');
+  await page.evaluate(() => WrappedStory.resume());
   await page.keyboard.press('End');
   eq((await state(page)).index, 11, 'End jumps to the last slide');
+
+  // Keyboard focus: every stop is a visible control, and the first one is on screen
+  // (there used to be two invisible 1×1 buttons ahead of everything). A fresh page, so
+  // the browser's tab starting point is the top of the document.
+  const kb = await open();
+  await kb.page.goto(server.url + '?demo=1');
+  await waitForStory(kb.page);
+  await kb.page.evaluate(() => { WrappedStory.goTo(2); WrappedStory.pause(); });
+  const stops = [];
+  for (let i = 0; i < 6; i++) {
+    await kb.page.keyboard.press('Tab');
+    const stop = await kb.page.evaluate(() => {
+      const el = document.activeElement;
+      if (!el || el === document.body || !el.closest('#story')) return null;
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { label: el.getAttribute('aria-label') || el.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), shown: cs.visibility === 'visible' && cs.display !== 'none' && Number(cs.opacity) > 0.5 };
+    });
+    if (!stop) break;
+    stops.push(stop);
+  }
+  eq(stops.map((x) => x.label), ['Pause', 'Close', 'Previous slide', 'Next slide'], 'tab order on a slide: the visible controls first, then Previous / Next');
+  ok(stops.every((x) => x.shown && x.w >= 30 && x.h >= 30), `every focus stop is visible and a reasonable size when focused (${JSON.stringify(stops)})`);
+  await kb.page.keyboard.press('Shift+Tab');
+  eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Next slide', 'Shift+Tab walks back through the same stops');
+  await kb.page.keyboard.press('Enter');
+  eq((await state(kb.page)).index, 3, 'the focusable "Next slide" button works from the keyboard');
+  eq(await kb.page.evaluate(() => { const r = document.activeElement.getBoundingClientRect(); return r.width >= 30 && document.activeElement.textContent; }), 'Next slide', 'and stays visible while it has focus');
+  await kb.page.evaluate(() => document.activeElement.blur());
+  const hidden = await kb.page.evaluate(() => [...document.querySelectorAll('.story__skip')].map((el) => { const r = el.getBoundingClientRect(); return r.width <= 1 && r.height <= 1; }));
+  eq(hidden, [true, true], 'without focus the Previous / Next buttons take no room on the stage');
+  eq(await kb.page.locator('#story .sr-only button, #story button.sr-only').count(), 0, 'no screen-reader-only buttons are left in the story');
+  eq(kb.problems, [], 'no console errors while tabbing');
+  await kb.close();
 
   // The last slide does not advance or loop on its own.
   await page.evaluate(() => { WrappedStory.seek(WrappedStory.duration + 500); WrappedStory.resume(); });
@@ -216,11 +266,28 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await waitForStory(page);
   eq(await page.locator('.slide.is-active .cover__name').innerText(), custom.chat.name, 'fragment link renders its own chat name');
 
-  // The same recap through the query string.
-  await page.goto(server.url + '?w1=' + Codec.encode(fixtures.duo));
+  // The same recap through the query string. That form puts the recap in the request line,
+  // so the page reads it once and moves it behind the #; nothing the site produces uses it.
+  const duoPayload = Codec.encode(fixtures.duo);
+  const sentBefore = s.requests.filter((u) => u.includes('w1=')).length;
+  await page.goto(server.url + '?utm=x&w1=' + duoPayload);
   await waitForStory(page);
   eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'query-string link renders the chat name');
   ok(!(await state(page)).ids.includes('awards'), 'a slide without data is skipped (no awards for two people)');
+  const moved = await page.evaluate(() => ({ search: location.search, hash: location.hash }));
+  eq(moved, { search: '?utm=x', hash: '#w1=' + duoPayload }, 'a ?w1= recap is moved into the #fragment (other parameters stay)');
+  await page.reload();
+  await waitForStory(page);
+  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'the story survives a reload from the fragment');
+  eq(s.requests.filter((u) => u.includes('w1=')).length - sentBefore, 1, 'only the first request ever carried the recap; the reload did not');
+  await s.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.evaluate(() => WrappedStory.goTo(WrappedStory.total - 1));
+  await page.locator('.slide.is-active [data-action="copy"]').click();
+  await page.waitForSelector('.toast.is-on');
+  const fromQuery = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+  eq([fromQuery.search, fromQuery.hash], ['', '#w1=' + duoPayload], 'Copy link from a ?w1= visit gives the fragment form');
+  eq(await page.evaluate(() => { const u = new URL(WrappedStory.link()); return [u.search, u.hash.slice(0, 4)]; }), ['', '#w1='], 'WrappedStory.link() never uses the query string');
+  eq(await page.evaluate(() => { const c = document.querySelector('link[rel="canonical"]').href; return [new URL(c).search, new URL(c).hash]; }), ['', ''], 'the canonical URL carries no recap');
 
   // Pasting another link into the same tab swaps the story.
   await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + Codec.encode(fixtures.tiny));
@@ -267,16 +334,65 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   eq(s.problems, [], 'no console errors with valid links');
   eq(s.foreign, [], 'zero foreign requests with valid links');
 
-  // Damaged links fail politely.
-  for (const bad of ['#w1=AAAA', '#w1=not*a*payload', '?w1=' + vector.payload.slice(0, 300), '#w1=' + Codec.encode({ nothing: 'here' })]) {
+  // Ids that name things on Object.prototype, and numbers no chat can have. Nothing may
+  // print a function's source, "[object Object]" or an exponent: not on a slide, not on the
+  // card (whose text is captured by wrapping fillText).
+  const spy = await open({ init: () => {
+    window.__drawn = [];
+    const fillText = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.fillText = function (text, ...rest) { window.__drawn.push(String(text)); return fillText.call(this, text, ...rest); };
+  } });
+  for (const id of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+    const hostile = JSON.parse(JSON.stringify(vector.stats));
+    hostile.personality.id = id;
+    hostile.awards.forEach((a) => { a.id = id; });
+    hostile.most_reacted[0].kinds = JSON.parse(`{"${id}": 3, "laugh": 2}`);
+    hostile.reactions.by_kind = JSON.parse(`{"${id}": 40, "love": 10, "laugh": 5}`);
+    hostile.totals.messages = 1e21;
+    hostile.senders[0].messages = 1e308;
+    hostile.late_night.messages = 1e22;
+    await spy.page.goto(link(hostile));
+    await spy.page.reload();
+    await waitForStory(spy.page);
+    const total = (await state(spy.page)).total;
+    eq(total, 12, `id "${id}": every slide still builds`);
+    const texts = [];
+    for (let i = 0; i < total; i++) {
+      await showSettled(spy.page, i);
+      texts.push(await spy.page.evaluate(() => document.querySelector('.slide.is-active').innerText));
+    }
+    const drawn = (await spy.page.evaluate(() => window.__drawn)).join('\n');
+    const seen = texts.join('\n') + '\n' + drawn;
+    ok(!/native code|function\s*\w*\s*\(|\[object|undefined|NaN|Infinity|e\+\d/.test(seen), `id "${id}": nothing inherited or malformed is printed on a slide or the card`);
+    await showSettled(spy.page, 3);
+    eq(await spy.page.locator('.slide.is-active .persona__emoji').innerText(), '💬', `id "${id}": the personality slide shows the neutral emoji`);
+    ok(drawn.includes('💬') && drawn.includes('The Night Owls'), `id "${id}": so does the share card, next to the title`);
+    ok(drawn.includes('9,999,999,999') && texts[1].includes('9,999,999,999'), `id "${id}": absurd totals are capped on the slide and on the card`);
+    await showSettled(spy.page, 8);
+    eq(await spy.page.locator('.slide.is-active .moty__tbs .tb').count(), 5, `id "${id}": an unknown tapback kind becomes a generic badge`);
+    eq(await spy.page.locator('.slide.is-active .moty__tbs .tb--emoji').count(), 3, `id "${id}": three of them`);
+  }
+  eq(await spy.page.evaluate(() => [({}).x, Object.prototype.hasOwnProperty.call(Object.prototype, 'personality')]), [null, false], 'nothing was added to Object.prototype');
+  eq(spy.problems, [], 'hostile ids and numbers cause no errors');
+  await spy.close();
+
+  // Damaged links fail politely, including ones with nothing decodable in them at all:
+  // those used to fall through to the landing page as if no link had been opened.
+  for (const bad of ['#w1=AAAA', '#w1=not*a*payload', '?w1=' + vector.payload.slice(0, 300), '#w1=' + Codec.encode({ nothing: 'here' }), '#w1=!!!', '#w1=', '?w1=***', '?demo=1#w1=!!!']) {
     const before = s.problems.length;
     await page.goto(server.url + bad);
     await page.reload();
     await page.waitForSelector('.story-error', { timeout: 5000 });
     ok((await page.locator('.story-error h2').innerText()).length > 0, `damaged link shows an error card (${bad.slice(0, 18)}…)`);
     ok(await page.locator('.story-error a[href="?demo=1"]').isVisible(), 'the error card offers the demo');
+    ok(await page.locator('.landing').isHidden(), `a damaged link does not show the landing page (${bad.slice(0, 12)})`);
+    ok(!(await page.evaluate(() => WrappedStory.isActive())), 'and does not start a story');
     eq(s.problems.slice(before), [], 'a damaged link does not throw');
   }
+  // The error card's way out works.
+  await page.locator('.story-error a[href="./"]').click();
+  await page.waitForFunction(() => document.documentElement.classList.contains('is-landing'));
+  ok(await page.locator('.landing').isVisible(), 'the error card leads back to the landing page');
   await s.close();
 });
 
@@ -446,6 +562,35 @@ await section('embed', 'Embed mode (?embed=ios) talks to the native bridge', asy
   eq(await page.locator('.story-error a').count(), 0, 'the in-app error card has no web links');
   await s.close();
 
+  // An ?embed= link opened in an ordinary browser (no native bridge): the plain web story.
+  // It used to trap the viewer: Close and Esc froze it, and Send claimed to have sent.
+  const lost = await open();
+  await lost.page.goto(link(vector.stats, '?embed=ios'));
+  await waitForStory(lost.page);
+  eq(await lost.page.evaluate(() => [document.documentElement.classList.contains('is-embed'), document.querySelector('.story').classList.contains('is-embed'), WrappedBridge.isEnabled()]), [false, false, false], 'without a native bridge ?embed=ios is not embed mode');
+  await lost.page.evaluate(() => WrappedStory.goTo(WrappedStory.total - 1));
+  eq(await lost.page.locator('.slide.is-active [data-action="send"]').count(), 0, 'no "Send to this chat" without a native bridge');
+  ok(await lost.page.locator('.slide.is-active [data-action="copy"]').isVisible(), 'the web actions are there instead');
+  await lost.page.keyboard.press('Escape');
+  await lost.page.waitForFunction(() => document.documentElement.classList.contains('is-landing'));
+  ok(await lost.page.locator('.landing').isVisible(), 'Esc leaves the story for the landing page');
+  await lost.page.locator('#play-recap').click();
+  await waitForStory(lost.page);
+  ok(!(await state(lost.page)).paused, 'the recap can be played again and is not frozen');
+  await lost.page.locator('.head__close').click();
+  await lost.page.waitForFunction(() => document.documentElement.classList.contains('is-landing'));
+  ok(await lost.page.locator('.landing').isVisible(), 'the close button leaves the story too');
+  eq(await lost.page.locator('.toast.is-on').count(), 0, 'nothing claims to have been added to a message');
+  await lost.page.goto(server.url + '?embed=ios');
+  await lost.page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));
+  ok(await lost.page.locator('.landing').isVisible(), '?embed=ios with no recap and no bridge shows the landing page, not a blank screen');
+  await lost.page.goto(server.url + '?embed=ios#w1=!!!');
+  await lost.page.reload();
+  await lost.page.waitForSelector('.story-error');
+  ok(await lost.page.locator('.story-error a[href="./"]').isVisible(), 'a damaged ?embed= link in a browser gets the web error card with its way out');
+  eq(lost.problems, [], 'no console errors for ?embed= in a plain browser');
+  await lost.close();
+
   // Outside the shell nothing is posted even if a handler happens to exist.
   const plain = await open({ init: stubBridge });
   await plain.page.goto(server.url + '?demo=1');
@@ -535,6 +680,64 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
         slides++;
         ok(issues.length === 0, `[${vpName}] ${name} / ${st.ids[i]}: ${issues.join(' | ')}`);
       }
+      // Design rules from the review, checked wherever the data can break them.
+      if (st.ids.includes('late')) {
+        await showSettled(page, st.ids.indexOf('late'));
+        // Layout boxes, not painted ones: the moon is rotated, and a line of display type
+        // is taller than its ink. The rule: the number starts below the moon, and whatever
+        // shares the moon's height stays to its left.
+        const clash = await page.evaluate(() => {
+          const slide = document.querySelector('.slide.is-active');
+          const body = slide.querySelector('.slide__body');
+          const moon = slide.querySelector('.late__moon');
+          const moonBox = { l: moon.offsetLeft, t: moon.offsetTop, r: moon.offsetLeft + moon.offsetWidth, b: moon.offsetTop + moon.offsetHeight };
+          const origin = body.getBoundingClientRect();
+          const hits = [];
+          const num = slide.querySelector('.late__num');
+          if (num.offsetTop < moonBox.b - 0.5) hits.push('number starts ' + Math.round(moonBox.b - num.offsetTop) + 'px above the bottom of the moon');
+          for (const el of slide.querySelectorAll('.kicker > span, .late__cap, .meter__label, .late__top, .late__also')) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const r = range.getBoundingClientRect();
+            const t = { l: r.left - origin.left, t: r.top - origin.top, r: r.right - origin.left, b: r.bottom - origin.top };
+            if (t.l < moonBox.r && t.r > moonBox.l && t.t < moonBox.b && t.b > moonBox.t) hits.push('"' + el.textContent.trim().slice(0, 20) + '" overlaps the moon');
+          }
+          return hits;
+        });
+        eq(clash, [], `[${vpName}] ${name} / late: nothing runs into the moon`);
+      }
+      if (name === 'rtl' && st.ids.includes('moty')) {
+        const dirs = await page.evaluate(() => ({
+          head: getComputedStyle(document.querySelector('.head__name')).direction,
+          headOverflow: getComputedStyle(document.querySelector('.head__name')).textOverflow,
+          align: getComputedStyle(document.querySelector('.head__name')).textAlign,
+        }));
+        eq(dirs, { head: 'rtl', headOverflow: 'ellipsis', align: 'left' }, `[${vpName}] rtl: the chat name in the header is truncated at its logical end`);
+        await showSettled(page, st.ids.indexOf('senders'));
+        const who = await page.evaluate(() => [...document.querySelectorAll('.slide.is-active .rank__who')].map((el) => [getComputedStyle(el).direction, el.getAttribute('dir'), getComputedStyle(el).unicodeBidi, el.scrollWidth > el.clientWidth]));
+        ok(who.length === 4 && who.every((w) => w[1] === 'auto' && w[2] === 'isolate'), `[${vpName}] rtl: sender names are direction-isolated`);
+        ok(who.filter((w) => w[3]).every((w) => w[0] === 'rtl'), `[${vpName}] rtl: every truncated right-to-left name is cut at its end (${JSON.stringify(who)})`);
+        await showSettled(page, st.ids.indexOf('moty'));
+        const runners = await page.evaluate(() => [...document.querySelectorAll('.slide.is-active .moty__runner p')].map((p) => {
+          const name = p.querySelector('b'); const facts = p.querySelector('span');
+          const pr = p.getBoundingClientRect(); const fr = facts.getBoundingClientRect();
+          return { facts: facts.textContent, shown: fr.right <= pr.right + 0.5 && fr.left >= pr.left - 0.5 && facts.scrollWidth <= facts.clientWidth + 1, nameCut: name.scrollWidth > name.clientWidth };
+        }));
+        eq(runners.length, 2, `[${vpName}] rtl: two runners-up`);
+        ok(runners.every((r) => r.shown && /tapbacks?$/.test(r.facts)), `[${vpName}] rtl: a long runner-up name never hides the tapback count (${JSON.stringify(runners)})`);
+        ok(runners.some((r) => r.nameCut) || vp.width > 600, `[${vpName}] rtl: the long name is the part that gives way`);
+        ok(runners[1].facts.includes('1,234 tapbacks'), `[${vpName}] rtl: the count is shown in full`);
+      }
+      if (name === 'astronomical') {
+        const texts = [];
+        for (let i = 0; i < st.total; i++) {
+          await showSettled(page, i);
+          texts.push(await page.evaluate(() => document.querySelector('.slide.is-active').innerText));
+        }
+        const all = texts.join('\n');
+        ok(!/e\+|NaN|Infinity|undefined/.test(all), `[${vpName}] astronomical: no exponent or NaN on any slide`);
+        ok(all.includes('9,999,999,999'), `[${vpName}] astronomical: absurd counts are capped at 9,999,999,999`);
+      }
       // The card must cope with the same data.
       const size = await page.evaluate(() => { const c = document.querySelector('.sum__card canvas'); return [c.width, c.height]; });
       eq(size, [1080, 1350], `[${vpName}] ${name}: card canvas size`);
@@ -598,6 +801,27 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
   eq(await calm.page.locator('.slide.is-active .total__num').innerText(), '48,213', 'reduced motion: numbers do not count up');
   const anim = await calm.page.evaluate(() => getComputedStyle(document.querySelector('.slide.is-active .total__unit')).animationName);
   eq(anim, 'a-fade', 'reduced motion: entrances are plain fades');
+  // Nothing advances on its own; the progress bar is a row of static segments.
+  await calm.page.evaluate(() => WrappedStory.goTo(0));
+  const segsAt = () => calm.page.evaluate(() => [...document.querySelectorAll('.seg > b')].slice(0, 3).map((b) => b.style.transform));
+  eq(await segsAt(), ['scaleX(1)', 'scaleX(0)', 'scaleX(0)'], 'reduced motion: the current segment is simply filled');
+  eq(await calm.page.locator('.slide.is-active .cover__hint').innerText(), 'Tap to continue', 'reduced motion: the hint says what to do');
+  await calm.page.waitForTimeout(6600); // the cover would auto-advance after 5.2 s
+  eq((await state(calm.page)).index, 0, 'reduced motion: the story does not auto-advance');
+  eq(await segsAt(), ['scaleX(1)', 'scaleX(0)', 'scaleX(0)'], 'reduced motion: the segments did not move while waiting');
+  ok(await calm.page.locator('.head__pause').isHidden(), 'reduced motion: there is nothing to pause, so no pause button');
+  const calmBox = await calm.page.locator('.stage').boundingBox();
+  await calm.page.touchscreen.tap(calmBox.x + calmBox.width * 0.8, calmBox.y + calmBox.height * 0.5);
+  eq((await state(calm.page)).index, 1, 'reduced motion: a tap moves on');
+  eq(await segsAt(), ['scaleX(1)', 'scaleX(1)', 'scaleX(0)'], 'reduced motion: and fills the next segment');
+  await calm.page.keyboard.press('ArrowRight');
+  eq((await state(calm.page)).index, 2, 'reduced motion: so does the keyboard');
+  // Switching the setting off while the story is open hands the clock back.
+  await calm.page.emulateMedia({ reducedMotion: 'no-preference' });
+  await calm.page.waitForFunction(() => !document.querySelector('.story').classList.contains('is-calm'));
+  ok(await calm.page.locator('.head__pause').isVisible(), 'turning reduce-motion off brings the pause button back');
+  await calm.page.waitForFunction(() => WrappedStory.index === 3, null, { timeout: 12000 });
+  ok(true, 'and auto-advance resumes');
   eq(calm.problems, [], 'reduced motion: no console errors');
   await calm.close();
   await s.close();
@@ -675,7 +899,7 @@ await section('brand', 'Copy: product name comes from one constant; no borrowed 
 });
 
 // ── 9. screenshots (committed: invented data) ──────────────────────────────────────────
-await section('shots', 'Screenshots of every slide → docs/screenshots/web/', async () => {
+await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHOTS)}/`, async () => {
   fs.mkdirSync(SHOTS, { recursive: true });
   const s = await open({ scale: 2 });
   const { page } = s;
@@ -711,15 +935,17 @@ await section('shots', 'Screenshots of every slide → docs/screenshots/web/', a
   await e.close();
 
   // Desktop: the phone-sized stage on its backdrop.
-  const d = await open({ viewport: viewports['desktop-1440x900'] });
+  // 1440 × 760 makes the framed stage exactly 392 × 700, one design pixel per CSS pixel.
+  // At fractional scales (1.2 on a 900-high window) Chromium anti-aliases a few edge
+  // pixels of the header badge differently from run to run, which made this committed
+  // screenshot change by a handful of pixels for no reason.
+  const d = await open({ viewport: { width: 1440, height: 760 } });
   await d.page.goto(server.url + '?demo=1');
   await waitForStory(d.page);
-  await showSettled(d.page, 3);
-  // Let the backdrop finish changing colour so the committed screenshot is stable.
-  await d.page.evaluate(() => { document.getAnimations().forEach((a) => { if (a.constructor.name === 'CSSTransition') a.finish(); }); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
+  await showSettled(d.page, 3); // (showSettled switches the colour transitions off, so the backdrop is already there)
   await d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') });
   const stage = await d.page.locator('.stage').boundingBox();
-  ok(stage.width < 600 && stage.height > 700 && Math.abs(stage.x + stage.width / 2 - 720) < 2, `desktop shows a centred phone-sized stage (${Math.round(stage.width)}×${Math.round(stage.height)})`);
+  eq([stage.width, stage.height, stage.x, stage.y], [392, 700, 524, 30], 'desktop shows a centred phone-sized stage on whole pixels');
   ok(await d.page.locator('.story__arrow--next').isVisible(), 'desktop has arrow buttons');
   await d.page.locator('.story__arrow--next').click();
   eq((await state(d.page)).index, 4, 'the desktop arrow advances');

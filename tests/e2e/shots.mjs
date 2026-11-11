@@ -1,10 +1,11 @@
 // Design-iteration helper: screenshot every slide of a recap, settled.
 //
-//   node tests/e2e/shots.mjs                      demo at 390×844 @2x → docs/screenshots/web/
+//   node tests/e2e/shots.mjs                      demo at 390×844 @2x → test-results/shots/
 //   node tests/e2e/shots.mjs --out=/tmp/x --w=320 --h=568 --fixture=huge --only=3,4
 //
-// The real test run (tests/e2e/run.mjs) takes the committed screenshots; this script is
-// for looking at one thing quickly.
+// The committed screenshots come from `npm run shots` (tests/e2e/run.mjs with
+// --update-screenshots); this script is for looking at one thing quickly and writes to a
+// git-ignored folder unless --out says otherwise.
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, startServer, launch, waitForStory, showSettled, findOverflow, encodePayload } from './lib.mjs';
@@ -15,7 +16,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   return m ? [m[1], m[2] ?? true] : [a, true];
 }));
 
-const out = path.resolve(args.out || path.join(ROOT, 'docs/screenshots/web'));
+const out = path.resolve(args.out || path.join(ROOT, 'test-results/shots'));
 const width = Number(args.w || 390);
 const height = Number(args.h || 844);
 const scale = Number(args.scale || 2);
@@ -25,6 +26,8 @@ fs.mkdirSync(out, { recursive: true });
 const server = await startServer();
 const browser = await launch();
 const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, hasTouch: width < 600, isMobile: width < 600 });
+// Embed mode only switches on when the native bridge exists, so --embed stubs one.
+if (args.embed) await context.addInitScript(() => { window.webkit = { messageHandlers: { wrapped: { postMessage() {} } } }; });
 const page = await context.newPage();
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}]`, m.text()); });
 page.on('pageerror', (e) => console.log('[pageerror]', e.message));

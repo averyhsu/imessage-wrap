@@ -129,6 +129,43 @@ const emojiName = makeStats({ name: '🍕🍕🍕 pizza fam 👨‍👩‍👧�
 // a masked number. The most-reacted message and the top late-night sender are masked people.
 const masked = makeStats({ name: '…0001, Maya, jo.smith & 4 more', members: 7, total: 20480, names: maskedNames, quotes: false });
 
+// A seven-digit late-night count (nine characters with its separators): the widest number
+// the late-night slide has to hold next to the moon.
+const nightHuge = makeStats({ name: 'Insomniacs Anonymous', members: 6, total: 9876543 });
+nightHuge.late_night.messages = 1234567;
+nightHuge.late_night.share = 0.125;
+nightHuge.late_night.top = { name: 'Bartholomew "Barty" Featherstonehaugh III', messages: 1004417 };
+nightHuge.senders[1].late_night = 987654;
+nightHuge.senders[2].late_night = 123456;
+
+// Numbers no chat can have. normalize() caps them; nothing may print as "1e+21".
+const astronomical = makeStats({ name: 'Numbers Station', members: 5, total: 4000 });
+astronomical.totals = { messages: 1e21, words: 1e300, attachments: 5e24, reactions: 1e22, days_active: 1e21, longest_streak: 1e21 };
+astronomical.by_hour = astronomical.by_hour.map((v, i) => (i === 21 ? 1e30 : 1e21));
+astronomical.by_weekday = astronomical.by_weekday.map(() => 1e25);
+astronomical.by_month = astronomical.by_month.map((v, i) => (i === 6 ? 1e40 : 1e21));
+astronomical.busiest_day.messages = 1e21;
+astronomical.late_night = { messages: 1e21, share: 5e20, top: { name: 'Dev', messages: 1e21 } };
+astronomical.senders.forEach((x, i) => { x.messages = 1e21 * (5 - i); x.share = 1e9; x.late_night = 1e21; x.reactions_given = 1e21; });
+astronomical.most_reacted[0].reactions = 1e21;
+astronomical.most_reacted[0].kinds = { laugh: 1e21, love: 1e22, emphasize: 3e21, like: 1e21, question: 1e21, dislike: 1e21, emoji: 1e21 };
+astronomical.most_reacted[1].reactions = 1e21;
+Object.keys(astronomical.reactions.by_kind).forEach((k, i) => { astronomical.reactions.by_kind[k] = 1e21 * (i + 1); });
+astronomical.reactions.top_giver.count = 1e21;
+astronomical.reactions.top_receiver.count = 1e300;
+
+// Right-to-left names, long enough to be truncated, including the people on the
+// message-of-the-year slide (whose tapback counts must stay visible).
+const rtlNames = [
+  'عبد الرحمن بن محمد بن عبد العزيز آل سعود الهاشمي القرشي', 'מרדכי בן אליעזר הכהן מירושלים עיר הקודש', 'فاطمة الزهراء بنت عبد الله الأنصارية الخزرجية المدنية',
+  'يوسف إسماعيل إبراهيم عبد الرحيم الطويل جداً جداً', 'נועה', 'Maya', 'שלמה זלמן בן ציון מאיר חי עוזיאל הלוי',
+];
+const rtl = makeStats({ name: 'مجموعة العائلة الكبيرة جداً وأصدقاء الطفولة من المدرسة القديمة', members: 7, total: 30200, names: rtlNames });
+rtl.most_reacted[0].text = 'من سيحضر الحلوى هذه المرة؟ آخر مرة نسي الجميع 😅';
+rtl.most_reacted[1].sender = rtlNames[0];
+rtl.most_reacted[2].sender = 'Maximilian Alexander von Hohenzollern-Sigmaringen the Younger';
+rtl.most_reacted[2].reactions = 1234;
+
 // Names outside Latin: CJK without spaces, right-to-left scripts, combining marks.
 const intl = makeStats({ name: '周末火锅小分队🔥ولائم نهاية الأسبوع', members: 6, total: 15230, label: '2026年', names: ['小明', 'محمد علي', 'Zoë', 'אורי', 'Ngọc Ánh', 'Åsa'] });
 intl.most_reacted[0].text = '今晚谁带锅？我只负责吃。😋 من سيحضر الطبق الرئيسي؟';
@@ -177,13 +214,14 @@ const legacy = {
 
 export const fixtures = {
   demo: clone(vector.stats),
-  tiny, huge, duo, dozen, longName, unbroken, emojiName, intl, masked, bare, sparse, noQuotes, zeroNight, legacy,
+  tiny, huge, nightHuge, astronomical, duo, dozen, longName, unbroken, emojiName, intl, rtl, masked, bare, sparse, noQuotes, zeroNight, legacy,
 };
 
 export const viewports = {
   'se-320x568': { width: 320, height: 568, mobile: true },
   'phone-390x844': { width: 390, height: 844, mobile: true },
   'max-430x932': { width: 430, height: 932, mobile: true },
+  'tablet-768x1024': { width: 768, height: 1024, mobile: false },
   'desktop-1440x900': { width: 1440, height: 900, mobile: false },
   'landscape-1024x600': { width: 1024, height: 600, mobile: false },
 };

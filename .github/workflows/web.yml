@@ -66,10 +66,20 @@ jobs:
       - name: End-to-end tests
         run: npm run test:e2e
 
+      - name: The test run left tracked files alone
+        run: |
+          # Screenshots go to test-results/ (git-ignored). Only `npm run shots` may rewrite
+          # docs/screenshots/web/.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::npm test / npm run test:e2e modified or created files in the repository:"
+            git status --porcelain
+            exit 1
+          fi
+
       - name: Upload screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: web-screenshots
-          path: docs/screenshots/web/
+          path: test-results/web-screenshots/
           if-no-files-found: warn

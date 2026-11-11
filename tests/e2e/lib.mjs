@@ -69,15 +69,32 @@ export async function waitForStory(page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
-/** Freeze the story on slide `i` with every entrance finished. */
+/**
+ * Freeze the story on slide `i` with every entrance finished.
+ *
+ * The chrome and the desktop backdrop change colour with CSS transitions. Chromium runs
+ * colour transitions on the compositor, and a frame captured while one is running or
+ * winding down differs from a settled frame by a few anti-aliased pixels (the edge of the
+ * header badge, the desktop arrows). So: let any transition that is already under way
+ * finish, switch transitions off for what follows, and give the compositor a moment after
+ * the slide is in place. A settled slide is then the same picture on every run.
+ */
 export async function showSettled(page, i) {
-  await page.evaluate((index) => {
+  await page.evaluate(async (index) => {
     const S = window.WrappedStory;
+    const frames = (n) => new Promise((resolve) => { const step = () => (n-- > 0 ? requestAnimationFrame(step) : resolve()); step(); });
+    const chrome = document.querySelectorAll('.story__backdrop, .story__arrow, .chrome, .chrome *');
+    if (!chrome[0] || chrome[0].style.transition !== 'none') {
+      const running = document.getAnimations().filter((a) => a.constructor.name === 'CSSTransition');
+      await Promise.all(running.map((a) => a.finished.catch(() => {})));
+      chrome.forEach((el) => { el.style.transition = 'none'; });
+      await frames(3);
+    }
     S.pause();
     S.goTo(index);
     S.layout();
     S.settle();
-    return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    await frames(3);
   }, i);
 }
 
@@ -129,6 +146,14 @@ export async function findOverflow(page) {
           issues.push(`${describe(el)} clips its text "${el.textContent.trim().slice(0, 30)}"`);
         }
       }
+      // A count or a date next to a name: the name may be shortened, this may not.
+      if (el.hasAttribute('data-keep')) {
+        const full = el.getBoundingClientRect();
+        // (Inline boxes report a clientWidth of 0, so only blocks get the scroll test.)
+        if (r.width < full.width - 1 || r.height < full.height - 1 || (el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)) {
+          issues.push(`${describe(el)} "${el.textContent.trim().slice(0, 24)}" is cut off (${Math.round(r.width)} of ${Math.round(full.width)} px shown)`);
+        }
+      }
       if (el.classList.contains('fit') && !el.classList.contains('fit--clip')) {
         const inner = el.firstElementChild;
         if (inner && inner.offsetWidth > el.clientWidth + 1 && !el.closest('.taps__top')) {
@@ -140,7 +165,8 @@ export async function findOverflow(page) {
     const body = slide.querySelector('.slide__body');
     const flow = [...body.children].filter((el) => {
       const cs = getComputedStyle(el);
-      return cs.position !== 'absolute' && cs.display !== 'none' && !el.classList.contains('gap');
+      // Spacers are empty, and a rotated glyph's bounding box is bigger than its layout box.
+      return cs.position !== 'absolute' && cs.display !== 'none' && !el.classList.contains('gap') && !el.classList.contains('late__space') && !el.classList.contains('late__moon');
     });
     for (let i = 1; i < flow.length; i++) {
       const a = flow[i - 1].getBoundingClientRect();

@@ -9,6 +9,7 @@
     "assets": "node tests/e2e/make-assets.mjs",
     "record": "node tests/e2e/record.mjs",
     "test:make": "node tests/e2e/make/run.mjs",
+    "shots": "node tests/e2e/run.mjs --only=share,landing,shots --update-screenshots",
     "shots:make": "node tests/e2e/make/run.mjs --only=shots --update-screenshots"
   },
   "devDependencies": {
