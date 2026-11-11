@@ -215,6 +215,24 @@ class Formatting(unittest.TestCase):
         self.assertEqual([s["name"] for s in out["senders"]], ["Sam", "Sam R.", "Lena"])
         self.assertEqual(fmt.short_names({"v": 1}, me="Me"), {"v": 1})
 
+    def test_shorten_uses_the_engines_short_names_once_it_exists(self):
+        import wrapped
+        from unittest import mock
+
+        calls = []
+
+        def engine_short_names(stats, me="Me"):
+            calls.append(me)
+            return dict(stats, shortened_by="engine")
+
+        stats = self.named(["Dave Plumber", "Lena Park", "Sam Rivera"])
+        with mock.patch.object(wrapped, "short_names", engine_short_names, create=True):
+            out = fmt.shorten(stats, me="Avery")
+        self.assertEqual(out["shortened_by"], "engine")
+        self.assertEqual(calls, ["Avery"])
+        if not hasattr(wrapped, "short_names"):  # until then: the same rule, applied here
+            self.assertEqual([s["name"] for s in fmt.shorten(stats, me="Avery")["senders"]], ["Dave", "Lena", "Sam"])
+
     def test_account_first_name(self):
         calls = []
 
