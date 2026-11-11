@@ -10,9 +10,9 @@ final class LauncherModel: ObservableObject {
     @Published var isRoomy = false
 
     var onSendDemo: () -> Void = {}
-    /// Debug builds only: stage the demo with the template layout alone, so a UI test can
-    /// capture the card that people without the app see.
-    var onSendDemoAsTemplate: () -> Void = {}
+    /// Debug builds only: stage the demo with a chosen layout (`true` = live bubble,
+    /// `false` = template card alone), whatever `WrappedConfig.useLiveLayout` says.
+    var onSendDemoWithLayout: (Bool) -> Void = { _ in }
     var onPasteLink: () -> Void = {}
     var onPlay: (Recap) -> Void = { _ in }
     var onSend: (Recap) -> Void = { _ in }
@@ -77,19 +77,28 @@ struct LauncherView: View {
             .accessibilityIdentifier("launcher.headline")
             Spacer(minLength: 0)
             #if DEBUG
-            // Test hook, debug builds only (see `onSendDemoAsTemplate`).
-            Button(action: { model.onSendDemoAsTemplate() }) {
-                Color.white.opacity(0.001)
-                    .frame(width: 14, height: 14)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("launcher.sendDemoAsTemplate")
-            .accessibilityLabel("Send the demo as a template card (debug)")
+            // Test hooks, debug builds only (see `onSendDemoWithLayout`).
+            debugHook(live: true)
+            debugHook(live: false)
             #endif
             BrandMark(size: model.isRoomy ? 44 : 34)
         }
     }
+
+    #if DEBUG
+    /// An invisible control that stages the demo with a chosen layout, so the UI tests can
+    /// capture both the live bubble and the template card whatever the default is.
+    private func debugHook(live: Bool) -> some View {
+        Button(action: { model.onSendDemoWithLayout(live) }) {
+            Color.white.opacity(0.001)
+                .frame(width: 14, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(live ? "launcher.sendDemoLive" : "launcher.sendDemoTemplate")
+        .accessibilityLabel(live ? "Send the demo as a live bubble (debug)" : "Send the demo as a template card (debug)")
+    }
+    #endif
 
     private var cardPreview: some View {
         Image(uiImage: LauncherView.demoCard)

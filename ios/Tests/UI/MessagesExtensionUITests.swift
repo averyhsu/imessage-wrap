@@ -103,11 +103,23 @@ final class MessagesExtensionUITests: XCTestCase {
         dismissInterruptions()
         pause(1)
 
-        // Messages may reopen the last conversation; go back to the list first.
+        // Messages may come back in a conversation or in a "New Message" sheet (seen when
+        // it is relaunched; the Simulator also resets its simulated chats then). Get to
+        // the conversation list first.
         let entryField = messages.textFields["messageBodyField"]
-        if entryField.exists {
-            _ = messages.buttons["BackButton"].tapIfExists(timeout: 2)
-            pause(1.5)
+        for _ in 0..<3 {
+            let compose = messages.navigationBars["CKComposeChat"].buttons["Cancel"]
+            if compose.exists, compose.isHittable {
+                UIArtifacts.note("messages: closing the New Message sheet")
+                compose.tap()
+                pause(1.5)
+            } else if messages.buttons["BackButton"].exists, messages.buttons["BackButton"].isHittable {
+                UIArtifacts.note("messages: leaving the open conversation")
+                messages.buttons["BackButton"].tap()
+                pause(1.5)
+            } else {
+                break
+            }
         }
         checkpoint(prefix + "1-conversation-list")
 
@@ -221,7 +233,14 @@ final class MessagesExtensionUITests: XCTestCase {
         guard openLauncherInConversation(0, prefix: "live-") else {
             return
         }
-        messages.buttons["launcher.sendDemo"].tap()
+        // A debug-only control stages the demo as a live bubble whatever the default
+        // layout is (`WrappedConfig.useLiveLayout`).
+        let hook = messages.buttons["launcher.sendDemoLive"]
+        guard hook.waitForExistence(timeout: 5) else {
+            XCTFail("the debug control for live bubbles is missing")
+            return
+        }
+        hook.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         guard sendStagedBubble(prefix: "live-") else {
             return
         }
@@ -291,10 +310,10 @@ final class MessagesExtensionUITests: XCTestCase {
         guard openLauncherInConversation(1, prefix: "template-") else {
             return
         }
-        // A debug-only control: stages the demo with the template layout alone.
-        let hook = messages.buttons["launcher.sendDemoAsTemplate"]
+        // A debug-only control stages the demo as a template card whatever the default is.
+        let hook = messages.buttons["launcher.sendDemoTemplate"]
         guard hook.waitForExistence(timeout: 5) else {
-            XCTFail("the debug control for template-only bubbles is missing")
+            XCTFail("the debug control for template cards is missing")
             return
         }
         hook.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -311,16 +330,24 @@ final class MessagesExtensionUITests: XCTestCase {
         let predicate = NSPredicate(format: "label CONTAINS[c] %@ AND identifier != %@", "2026 in review", "bubble.recap")
         let cards = messages.descendants(matching: .any).matching(predicate)
         let sawCard = cards.firstMatch.waitForExistence(timeout: 10)
-        XCTAssertTrue(sawCard, "the template card did not appear in the transcript")
-        guard sawCard else {
-            return
-        }
-        let card = cards.element(boundBy: max(0, cards.count - 1))
-        UIArtifacts.note("messages: template card: \(cards.count) match(es), tapping type=\(card.elementType.rawValue) id='\(card.identifier)' label='\(card.label)'")
-        if card.isHittable {
-            card.tap()
+        if sawCard {
+            let card = cards.element(boundBy: max(0, cards.count - 1))
+            UIArtifacts.note("messages: template card: \(cards.count) match(es), tapping type=\(card.elementType.rawValue) id='\(card.identifier)' label='\(card.label)'")
+            if card.isHittable {
+                card.tap()
+            } else {
+                card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+            }
         } else {
-            card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+            // No element carries the caption: tap the newest bubble in the transcript.
+            let bubbles = messages.collectionViews["TranscriptCollectionView"].cells
+            let count = bubbles.count
+            UIArtifacts.note("messages: template card not found by its caption; tapping the last of \(count) transcript cell(s)")
+            XCTAssertGreaterThan(count, 0, "the template card did not appear in the transcript")
+            guard count > 0 else {
+                return
+            }
+            bubbles.element(boundBy: count - 1).coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.4)).tap()
         }
         watchStoryPlay(prefix: "template-")
     }

@@ -37,10 +37,15 @@ enum WrappedConfig {
     /// characters; the contract keeps a margin.
     static let maxLinkLength = 4800
 
-    /// Live in-bubble layout (`MSMessageLiveLayout`). It has long-standing "stuck on
-    /// Loading…" reports on iOS 17 and later; set this to `false` to ship template-only
-    /// bubbles. The template card is always attached as the alternate layout either way.
-    static let useLiveLayout = true
+    /// Whether a recap is sent as a live in-bubble view (`MSMessageLiveLayout`) or as the
+    /// template card alone. Off by default, on the evidence of the iOS 26.5 Simulator
+    /// (CI run 43050898939): Messages never gives a live bubble's view controller its
+    /// conversation, so a recipient's bubble cannot read its own message and can only show
+    /// a generic "Open to play this recap" state, while the template card always shows the
+    /// chat name and the count. Live layout also has long-standing "stuck on Loading…"
+    /// reports on iOS 17 and later. Turn this on once a real iPhone shows a recipient's
+    /// live bubble with the recap in it; the template card stays attached as the fallback.
+    static let useLiveLayout = false
 
     /// Custom scheme the containing app registers: `imessagewrapped://recap#w1=<payload>`.
     static let appURLScheme = "imessagewrapped"

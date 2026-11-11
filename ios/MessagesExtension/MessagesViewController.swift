@@ -50,8 +50,8 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         launcherModel.onSendDemo = { [weak self] in
             self?.compose(DemoRecap.recap)
         }
-        launcherModel.onSendDemoAsTemplate = { [weak self] in
-            self?.compose(DemoRecap.recap, live: false)
+        launcherModel.onSendDemoWithLayout = { [weak self] (live: Bool) in
+            self?.compose(DemoRecap.recap, live: live)
         }
         launcherModel.onPasteLink = { [weak self] in
             self?.pasteLink()
