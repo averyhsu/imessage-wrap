@@ -162,12 +162,16 @@ class CardRender(unittest.TestCase):
         started = time.perf_counter()
         render_card(sample_stats(), self.dir / "base.png", size=SMALL)
         baseline = time.perf_counter() - started
-        for length in (120, 500, 100_000):
-            with self.subTest(length=length):
+        names = {f"{n} letters": "W" * n for n in (120, 500, 100_000)}
+        names["60 identical emoji"] = "😀" * 60
+        names["60 different emoji"] = "".join(chr(0x1F600 + i) for i in range(60))
+        names["100,000 emoji"] = "🍝" * 100_000
+        for label, name in names.items():
+            with self.subTest(name=label):
                 started = time.perf_counter()
-                out = render_card(sample_stats(chat_name="W" * length), self.dir / "long.png", size=SMALL)
+                out = render_card(sample_stats(chat_name=name), self.dir / "long.png", size=SMALL)
                 took = time.perf_counter() - started
-                self.assertLess(took, baseline + 1.0, f"{length} characters took {took:.2f}s (plain card {baseline:.2f}s)")
+                self.assertLess(took, baseline + 1.0, f"{label} took {took:.2f}s (plain card {baseline:.2f}s)")
                 self.assertTrue(out.is_file())
         hostile = sample_stats(chat_name=("😀" + chr(0x200D)) * 50_000)
         hostile["personality"]["title"] = "T" * 200_000

@@ -379,10 +379,12 @@ def _visual_order(cl: List[Cluster]) -> List[Cluster]:
 
 
 def _runs(cl: Sequence[Cluster]) -> List[Cluster]:
-    """Merge neighbouring clusters that share a font so shaping and kerning work."""
+    """Merge neighbouring text clusters that share a font, so kerning and shaping
+    work. Emoji stay one per cluster: each is drawn (and cached) on its own, which
+    keeps the cost of a name made of many emoji linear."""
     runs: List[Cluster] = []
     for kind, text, path in cl:
-        if runs and runs[-1][0] == kind and runs[-1][2] == path:
+        if kind == "text" and runs and runs[-1][0] == "text" and runs[-1][2] == path:
             runs[-1] = (kind, runs[-1][1] + text, path)
         else:
             runs.append((kind, text, path))
@@ -604,17 +606,18 @@ class Canvas:
 
     # text ------------------------------------------------------------------------
 
-    def _emoji_image(self, seq: str, px: int) -> Optional[Image.Image]:
-        """The emoji run as an image whose height is ``px`` pixels."""
-        key = (seq, px)
+    def _emoji_strike(self, seq: str) -> Optional[Image.Image]:
+        """The emoji run drawn once at the font's native size and cropped. Every
+        other size is derived from this, so fitting never re-renders it."""
+        key = ("strike", seq)
         if key in self._emoji_cache:
             return self._emoji_cache[key]
         font = self.book.emoji_face()
-        result = None
-        if font is not None and px > 0:
+        glyph = None
+        if font is not None:
             strike = self.book.emoji_strike
             n = max(1, len(seq))
-            tmp = Image.new("RGBA", (strike * (n + 1) * 2, strike * 2), (0, 0, 0, 0))
+            tmp = Image.new("RGBA", (strike * (n + 2) * 2, strike * 2), (0, 0, 0, 0))
             try:
                 ImageDraw.Draw(tmp).text((strike // 4, strike // 4), seq, font=font, embedded_color=True)
                 box = tmp.getbbox()
@@ -622,9 +625,24 @@ class Canvas:
                 box = None
             if box:
                 glyph = tmp.crop(box)
-                scale = px / float(max(glyph.height, strike * 0.8))
-                size = (max(1, int(round(glyph.width * scale))), max(1, int(round(glyph.height * scale))))
-                result = glyph.resize(size, Image.LANCZOS)
+        self._emoji_cache[key] = glyph
+        return glyph
+
+    def _emoji_size(self, seq: str, px: int) -> Tuple[int, int]:
+        """(width, height) in pixels of the emoji run at height ``px``: arithmetic only."""
+        glyph = self._emoji_strike(seq)
+        if glyph is None or px <= 0:
+            return (0, 0)
+        scale = px / float(max(glyph.height, self.book.emoji_strike * 0.8))
+        return (max(1, int(round(glyph.width * scale))), max(1, int(round(glyph.height * scale))))
+
+    def _emoji_image(self, seq: str, px: int) -> Optional[Image.Image]:
+        """The emoji run as an image whose height is ``px`` pixels (only needed to draw it)."""
+        key = (seq, px)
+        if key in self._emoji_cache:
+            return self._emoji_cache[key]
+        glyph = self._emoji_strike(seq)
+        result = glyph.resize(self._emoji_size(seq, px), Image.LANCZOS) if glyph is not None and px > 0 else None
         self._emoji_cache[key] = result
         return result
 
@@ -638,8 +656,7 @@ class Canvas:
         total = 0.0
         for kind, text, path in _runs(cl):
             if kind == "emoji":
-                img = self._emoji_image(text, int(px * EMOJI_SCALE))
-                total += (img.width if img else 0) + px * 0.08
+                total += self._emoji_size(text, int(px * EMOJI_SCALE))[0] + px * 0.08
             else:
                 total += self.book.face(role, px, path).getlength(text)
         if len(self._widths) > 4096:
