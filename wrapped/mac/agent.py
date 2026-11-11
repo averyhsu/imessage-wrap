@@ -34,7 +34,7 @@ from typing import Callable, Dict, Iterable, List, Optional, Sequence
 from . import PRODUCT_NAME, chatdb
 from .engine import ChatRef, Engine
 from .send import FAILED, SendResult
-from .state import State
+from .state import State, private_dir
 from .fmt import clean, safe_chat_name, shorten
 from .text import assert_safe, empty_text, recap_lines
 from .triggers import Trigger, parse_trigger
@@ -49,6 +49,7 @@ class AgentConfig:
     me: str = "Me"  # the owner's display name in the recap
     cooldown: float = 120.0  # seconds between replies in one chat
     stale_after: float = 600.0  # ignore commands older than this (sleep/wake catch-up)
+    future_skew: float = 30.0  # ... and ones dated further ahead than clocks plausibly differ
     poll_interval: float = 2.0
     dry_run: bool = False
     out_dir: Optional[Path] = None  # where a dry run writes card + text + link
@@ -226,6 +227,11 @@ class Agent:
             return False
 
         age = now - row.unix_time
+        if age < -self.config.future_skew:
+            # A message cannot come from the future. A date like that is a broken or
+            # doctored row, and it would otherwise stay "fresh" for as long as it likes.
+            self._log(f"ignored a /{trigger.command} dated {int(-age)} s in the future (row {row.rowid})")
+            return False
         if age > self.config.stale_after:
             self._log(f"ignored a /{trigger.command} that is {int(age // 60)} min old (row {row.rowid})")
             return False
@@ -457,7 +463,7 @@ def acquire_lock(path: os.PathLike):
     import fcntl
 
     p = Path(path)
-    p.parent.mkdir(parents=True, exist_ok=True)
+    private_dir(p.parent)
     fh = open(p, "a+")
     try:
         fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)

@@ -176,6 +176,17 @@ class AgentCase(unittest.TestCase):
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now - 599)
         self.assertEqual(agent.run_once(), 1)
 
+    def test_command_dated_in_the_future_is_ignored(self):
+        agent = self.started(cooldown=0)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now + 3600)
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now + 10 * 365 * 86400)
+        self.assertEqual(agent.run_once(), 0)
+        self.assertEqual(self.sender.sent, [])
+        self.assertEqual(sum("in the future" in ln for ln in self.logs), 2)
+        # a few seconds of clock skew between devices is normal and still answered
+        self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now + 5)
+        self.assertEqual(agent.run_once(), 1)
+
     def test_cooldown_per_chat(self):
         agent = self.started(chats=["dinner", "book"], cooldown=120)
         self.db.add_message("/wrapped", chat=self.group, handle=self.maya, when=self.now)

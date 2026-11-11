@@ -24,6 +24,33 @@ def home_dir() -> Path:
     return Path(override).expanduser() if override else Path.home() / ".threadback"
 
 
+def private_dir(path: os.PathLike) -> Path:
+    """Create the helper's folder for the owner only (0700). A folder that already
+    exists is left exactly as it is."""
+    p = Path(path)
+    if not p.exists():
+        p.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(p, 0o700)
+        except OSError:
+            pass
+    return p
+
+
+def append_private(path: os.PathLike, text: str) -> None:
+    """Append to a file that only the owner can read (created 0600; an older,
+    more open file is tightened)."""
+    p = Path(path)
+    private_dir(p.parent)
+    fd = os.open(str(p), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        if os.fstat(fd).st_mode & 0o077:
+            os.fchmod(fd, 0o600)
+        os.write(fd, text.encode("utf-8", "replace"))
+    finally:
+        os.close(fd)
+
+
 def default_state_path() -> Path:
     return home_dir() / "state.json"
 
@@ -84,7 +111,7 @@ class State:
         text = self._payload()
         if text == self._saved and self.path.exists():
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        private_dir(self.path.parent)
         fd, tmp = tempfile.mkstemp(prefix=".state-", suffix=".json", dir=str(self.path.parent))
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as fh:

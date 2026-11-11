@@ -476,6 +476,55 @@ class OtherCommands(EngineCase):
         self.assertTrue(all(" " not in n or n.endswith(".") or n == "Robin" for n in short), short)
         self.assertEqual(len(short), len(full))
 
+    def in_empty_cwd(self):
+        """Run from an empty folder so anything written 'here' is caught."""
+        cwd = self.dir / "cwd"
+        cwd.mkdir()
+        previous = os.getcwd()
+        os.chdir(cwd)
+        self.addCleanup(os.chdir, previous)
+        return cwd
+
+    def test_preview_and_card_write_to_pictures_by_default_never_to_the_current_folder(self):
+        cwd = self.in_empty_cwd()
+        code, out, err = self.run_cli(
+            "preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "taco", "--year", "2026"
+        )
+        self.assertEqual(code, 0, err + out)
+        previews = self.home / "Pictures" / "Threadback" / "preview"
+        folder = next(previews.iterdir())
+        self.assertEqual(sorted(p.suffix for p in folder.iterdir()), [".png", ".txt", ".txt"])
+        self.assertIn(str(previews), out)
+
+        stats_file = self.dir / "s.json"
+        stats_file.write_text(json.dumps(mac_support.sample_stats()), encoding="utf-8")
+        code, out, err = self.run_cli("card", str(stats_file))
+        self.assertEqual(code, 0, err + out)
+        written = Path(out.strip().splitlines()[-1])
+        self.assertEqual(written.parent, self.home / "Pictures" / "Threadback")
+        self.assertTrue(written.is_file())
+        self.assertFalse(written.name.startswith("threadback-"))  # staged attachments are pruned; this is not one
+        code, out2, err = self.run_cli("card", str(stats_file))
+        self.assertNotEqual(Path(out2.strip().splitlines()[-1]), written)  # never overwrites an earlier card
+        code, out3, err = self.run_cli("card", str(stats_file), "--out", str(self.dir / "chosen.png"))
+        self.assertTrue((self.dir / "chosen.png").is_file())
+
+        self.assertEqual(list(cwd.iterdir()), [], "something was written into the current folder")
+
+    def test_log_file_is_private(self):
+        log = self.dir / "tb" / "agent.log"
+        args = ["agent", "--db", str(self.db), "--contacts", self.contacts, "--state", str(self.state),
+                "--dry-run", "--once", "--chat", "taco", "--out", str(self.out)]
+        code, out, err = self.run_cli(*args)
+        self.assertEqual(code, 0, err + out)
+        self.assertTrue(log.is_file())
+        self.assertEqual(oct(log.stat().st_mode & 0o777), "0o600")
+        self.assertEqual(oct(self.state.stat().st_mode & 0o777), "0o600")
+        self.assertEqual(oct(log.parent.stat().st_mode & 0o077), "0o0")  # the folder is the owner's alone
+        os.chmod(log, 0o644)  # an older, world-readable log is tightened on the next run
+        code, out, err = self.run_cli(*args)
+        self.assertEqual(oct(log.stat().st_mode & 0o777), "0o600")
+
     def test_preview_needs_exactly_one_chat(self):
         code, _, err = self.run_cli("preview", "--db", str(self.db), "--contacts", self.contacts, "--chat", "zzz")
         self.assertEqual(code, 1)

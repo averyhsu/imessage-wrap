@@ -32,7 +32,7 @@ from typing import Any, Callable, List, Optional, Sequence
 from . import PRODUCT_NAME, chatdb, send
 from .agent import Agent, AgentConfig, acquire_lock, consent_text, match_chats, sanitize_chats, scope_signature
 from .engine import ChatRef, EngineError
-from .state import default_state_path, home_dir
+from .state import append_private, default_state_path, home_dir
 from .fmt import account_first_name, clean, scrub
 from .text import assert_safe
 
@@ -222,6 +222,12 @@ def _open_folder(path: Path) -> None:
 
 
 def _make_logger(log_path: Optional[Path]) -> Callable[[str], None]:
+    if log_path is not None:
+        try:
+            append_private(log_path, "")  # create it 0600 now, or tighten an older one
+        except OSError:
+            pass
+
     def log(line: str) -> None:
         stamp = _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for part in str(line).splitlines() or [""]:
@@ -229,9 +235,7 @@ def _make_logger(log_path: Optional[Path]) -> Callable[[str], None]:
             print(text, flush=True)
             if log_path is not None:
                 try:
-                    log_path.parent.mkdir(parents=True, exist_ok=True)
-                    with open(log_path, "a", encoding="utf-8") as fh:
-                        fh.write(text + "\n")
+                    append_private(log_path, text + "\n")  # 0600: it names your chats
                 except OSError:
                     pass  # logging to a file is a convenience, never a reason to stop
 
@@ -375,7 +379,9 @@ def cmd_preview(args: argparse.Namespace) -> int:
     _preflight(db_path)
     engine = _engine(args)
     chat = _one_chat(_list_chats(engine, db_path), args.chat)
-    out_dir = Path(args.out).expanduser() if args.out else Path.cwd() / "threadback-preview"
+    # Never the current folder: a recap dropped into a project or a synced folder by
+    # accident is how private things get committed or shared.
+    out_dir = Path(args.out).expanduser() if args.out else send.staging_dir() / "preview"
     config = AgentConfig(
         db_path=db_path, state_path=Path(os.devnull), me=args.me, dry_run=True, out_dir=out_dir,
         quotes=bool(args.quotes) and not args.no_quotes, link=not args.no_link,
@@ -403,6 +409,25 @@ def cmd_preview(args: argparse.Namespace) -> int:
         if args.open:
             _open_folder(outcome.out_dir)
     return EXIT_OK
+
+
+def _default_card_path(stats: dict) -> Path:
+    """``~/Pictures/Threadback/card-<chat>-<period>.png``, never overwriting an earlier one.
+
+    Not the current folder (see ``cmd_preview``), and not a ``threadback-`` name:
+    those are staged attachments and get pruned."""
+    from .agent import slugify
+    from .fmt import safe_chat_name
+
+    chat = slugify(safe_chat_name((stats.get("chat") or {}).get("name")))
+    label = slugify(clean((stats.get("period") or {}).get("label"), 24), "recap")
+    folder = send.staging_dir()
+    candidate = folder / f"card-{chat}-{label}.png"
+    n = 1
+    while candidate.exists():
+        n += 1
+        candidate = folder / f"card-{chat}-{label}-{n}.png"
+    return candidate
 
 
 @_friendly
@@ -433,7 +458,10 @@ def cmd_card(args: argparse.Namespace) -> int:
             size = (int(w), int(h))
         except ValueError as exc:
             raise CliError("--size looks like 1080x1350.", code=EXIT_USAGE) from exc
-    out = Path(args.output).expanduser() if args.output else Path.cwd() / "threadback-card.png"
+    if args.output:
+        out = Path(args.output).expanduser()
+    else:
+        out = _default_card_path(stats)
     try:
         render_card(stats, out, size=size)
     except CardError as exc:
@@ -660,7 +688,7 @@ def register(subparsers: Any) -> None:
     preview.add_argument("--chat", metavar="NAME", required=True, help="the group chat (part of its name)")
     preview.add_argument("--year", type=int, metavar="YYYY", help="calendar year (default: this year)")
     preview.add_argument("--all-time", action="store_true", help="everything, not just one year")
-    preview.add_argument("--out", metavar="DIR", help="where to write (default: ./threadback-preview)")
+    preview.add_argument("--out", metavar="DIR", help="where to write (default: ~/Pictures/Threadback/preview)")
     preview.add_argument("--quotes", action="store_true",
                          help="include the text of the most-reacted messages in the link (off unless you ask)")
     preview.add_argument("--no-quotes", action="store_true", help="keep message text out of the link (the default)")
@@ -679,7 +707,8 @@ def register(subparsers: Any) -> None:
                     "`wrapped stats CHAT -o stats.json`. Uses aggregate numbers and first names only.",
     )
     card.add_argument("stats", metavar="STATS.json", help="stats file, or - for standard input")
-    card.add_argument("-o", "--output", metavar="FILE", help="PNG to write (default: ./threadback-card.png)")
+    card.add_argument("-o", "--out", "--output", dest="output", metavar="FILE",
+                      help="PNG to write (default: a new file in ~/Pictures/Threadback)")
     card.add_argument("--size", metavar="WxH", help="pixel size (default: 1080x1350)")
     card.add_argument("--open", action="store_true", help="open the image afterwards (macOS)")
     card.set_defaults(func=cmd_card)
