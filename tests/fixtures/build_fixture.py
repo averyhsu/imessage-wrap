@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build invented Messages databases for the test suites.
 
-Everything here is made up: names, numbers (+1555...), addresses (@example.com)
-and message text. Nothing is read from a real device. The output is generated at
+Everything here is made up: names, numbers (all inside +1 555 01xx xxxx),
+addresses (@example.com) and message text. Nothing is read from a real device. The output is generated at
 test time and never committed (the repository .gitignore blocks *.db).
 
     python tests/fixtures/build_fixture.py OUTDIR
@@ -24,6 +24,13 @@ Layout written to OUTDIR:
                                                associated_message_* columns
     noemoji/chat.db                            current schema without the
                                                associated_message_emoji column
+    evil/chat.db, evil/AddressBook-v22.abcddb  names made of phone numbers,
+                                               addresses, escape sequences and
+                                               direction overrides; cells of
+                                               the wrong type (see EVIL_*)
+    nojoin/chat.db                             no chat_handle_join table
+    nocolumn/chat.db                           message.is_from_me is missing
+    foreign-wal/chat.db (+ chat.db-wal)        a -wal taken from another database
     fixture.json                               paths, chat ids, typedstream
                                                samples, the fixed "now"
 
@@ -330,7 +337,7 @@ def stress_people(rng):
         first = " ".join(gibberish_word(rng, True) for _ in range(9 + rng.below(4)))
         last = " ".join(gibberish_word(rng, True) for _ in range(12 + rng.below(5)))
         key = "long%02d" % i
-        phone = "+155502%05d" % (200 + i)
+        phone = "+155501%05d" % (20000 + i)
         people[key] = (first, last + " \u2116%d" % (i + 1), [phone], [("phone", phone)])
     return people
 
@@ -1063,9 +1070,10 @@ def write_backup(root, files, encrypted=False):
 # small variant databases
 # --------------------------------------------------------------------------- #
 
-def write_legacy_db(path):
+def write_legacy_db(path, handle_join=True, without_column=None):
     """An old-schema database: dates in seconds, no attributedBody and no
-    associated_message_* / item_type columns."""
+    associated_message_* / item_type columns. handle_join=False leaves out the
+    chat_handle_join table; without_column removes one column of message."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     con = sqlite3.connect(path)
     create_messages_schema(con, dropped=LEGACY_DROPPED)
@@ -1090,8 +1098,232 @@ def write_legacy_db(path):
              1 if text == OBJ else 0))
         con.execute("INSERT INTO chat_message_join (chat_id, message_id) VALUES (1, ?)",
                     (cur.lastrowid,))
+    if not handle_join:
+        con.execute("DROP TABLE chat_handle_join")
+    if without_column:
+        kept = [n for n, _ in MESSAGE_COLUMNS if n not in LEGACY_DROPPED and n != without_column]
+        con.execute("CREATE TABLE message_kept AS SELECT ROWID AS ROWID, %s FROM message"
+                    % ", ".join('"%s"' % n for n in kept))
+        con.execute("DROP TABLE message")
+        con.execute("ALTER TABLE message_kept RENAME TO message")
     con.commit()
     con.close()
+
+
+def write_foreign_wal(dest_db, source_db, wal):
+    """A database flagged as WAL mode, next to a -wal that was written for a
+    different database (what is left when chat.db and chat.db-wal come from
+    two separate copies)."""
+    os.makedirs(os.path.dirname(dest_db), exist_ok=True)
+    shutil.copyfile(source_db, dest_db)
+    con = sqlite3.connect(dest_db)
+    con.execute("PRAGMA journal_mode = WAL").fetchall()
+    con.execute("CREATE TABLE touched (x)")
+    con.commit()
+    con.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
+    con.close()
+    for suffix in ("-wal", "-shm"):
+        if os.path.exists(dest_db + suffix):
+            os.remove(dest_db + suffix)
+    with open(dest_db, "rb") as f:
+        header = f.read(20)
+    assert header[18] == 2 and header[19] == 2, "expected a WAL-flagged header"
+    shutil.copyfile(wal, dest_db + "-wal")
+
+
+# --------------------------------------------------------------------------- #
+# the "evil names" database
+# --------------------------------------------------------------------------- #
+
+# Handle ids that try to carry a phone number or an address past the mask, or
+# an escape sequence into a terminal, each with the label it has to become
+# (docs/SCHEMA.md 2, "Clean names" and "Masking"). bytes, int and float values
+# are stored as BLOB, INTEGER and REAL cells.
+EVIL_HANDLES = [
+    ("tel:+15550100123", "\u20260123"),
+    ("+1 555-010-0124 (mobile)", "\u20260124"),
+    ("+1 555 010 0125 x12", "\u20262512"),
+    ("+15550100126(smsft)", "\u20260126"),
+    ("Maya +15550100127", "\u20260127"),
+    ("+1\xa0555\xa0010\xa00128", "\u20260128"),                 # no-break spaces
+    ("+1\u2011555\u2011010\u20110129", "\u20260129"),           # non-breaking hyphens
+    ("555\u2013010\u20130130", "\u20260130"),                    # en dashes
+    ("\u202a+15550100131\u202c", "\u20260131"),                  # embedding marks around it
+    ("\uff0b\uff11\uff15\uff15\uff15\uff10\uff11\uff10\uff10\uff11\uff13\uff12",
+     "\u2026\uff10\uff11\uff13\uff12"),                           # full-width digits
+    ("Jane Doe <jane.doe@example.com>", "jane.doe"),
+    ("jane@localhost", "jane"),
+    ("mailto:pat.evil@example.com", "pat.evil"),
+    ("5550100133@example.com", "\u20260133"),                    # a number as the local part
+    ("a.very.long.local.part.indeed@example.com", "a.very.long.loca\u2026"),
+    ("\x1b[2J+1555\x000100136\r\n", "\u20260136"),               # escape sequence, NUL, CR LF
+    (b"+15550100134", "\u20260134"),                             # BLOB
+    (15550100135, "\u20260135"),                                 # INTEGER
+    (555.5, "555.5"),                                            # REAL: too few digits to be a number
+    ("Maya", "Maya"),                                            # these four are kept as they are
+    ("Agent 47", "Agent 47"),
+    ("22000", "22000"),
+    ("Maya @ work", "Maya @ work"),
+]
+
+# Contact cards whose names carry control characters: (first, last, nickname,
+# organization, [(kind, value)], the name that must come out, the handle).
+EVIL_CONTACTS = [
+    ("Dr.\x1b[0m Mal\u202eicious", "Na\r\nme\x00", None, None, [("phone", "+1 555-010-0150")],
+     "Dr.[0m Malicious Na me", "+15550100150"),
+    ("Sam\x07", "Rivera", None, None, [("phone", "+15550100151")], "Sam Rivera", "+15550100151"),
+    ("Sam", "\u2066Chen\u2069", None, None, [("phone", "(555) 010-0152")], "Sam Chen",
+     "+15550100152"),
+    (None, None, "\tNick\x9f", None, [("email", "Nick@Example.com")], "Nick", "nick@example.com"),
+    ("\x00\x01", "\x7f", None, "Org\u2028Name", [("phone", "+15550100153")], "Org Name",
+     "+15550100153"),
+    (b"\xffBl\xc3\xb8b", "Bytes", None, None, [("phone", "+15550100154")], "Bl\xf8b Bytes",
+     "+15550100154"),
+]
+EVIL_STRANGER = ("+15550100160", "\u20260160")     # in the chats, not in the address book
+
+# key: (display_name cell, style cell, the name that must be shown or None for
+# "made from the members", who is in it: a third of EVIL_HANDLES, the contacts
+# or nobody). No chat has more than 11 other people: the recap lists 12 senders.
+EVIL_CHATS = [
+    ("phone_name", "+1 (555) 010-0142", 43, "\u20260142", "handles1"),
+    ("address_name", "Party Planning <party.planning@example.com>", 43, "party.planning",
+     "handles2"),
+    ("control_name", "Evil\x1b[31m\x07 name\r\nline two\ttab\u202e\u2066 \x00end\x9b", 43,
+     "Evil[31m name line two tab end", "contacts"),
+    ("blank_name", "\x1b\x07\u202e\u2069\ufffd", 43, None, "contacts"),
+    ("integer_name", 15550100177, 43, "\u20260177", "handles3"),
+    ("blob_name", b"\xffGr\xfeoup \xe2\x80\xae7", 43, "Group 7", "contacts"),
+    ("nobody", "\x00", 43, "Unnamed group", "nobody"),
+    ("text_style", "Style As Text", "43", "Style As Text", "contacts"),
+]
+EVIL_WORDS = ("tacos tonight who is in count me running late save a seat be right back "
+              "sounds good see you there").split()
+
+
+def write_evil_db(path):
+    """A database whose names and cells are hostile: see EVIL_HANDLES,
+    EVIL_CHATS and the "odd cells" below. Columns are declared without a type
+    so that every cell keeps the type it was given."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    con = sqlite3.connect(path)
+    con.executescript("""
+        CREATE TABLE handle (ROWID INTEGER PRIMARY KEY, id, service);
+        CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid, style, chat_identifier,
+            service_name, display_name);
+        CREATE TABLE message (ROWID INTEGER PRIMARY KEY, guid, text, handle_id, attributedBody,
+            service, date, is_from_me, cache_has_attachments, item_type,
+            associated_message_guid, associated_message_type, associated_message_emoji);
+        CREATE TABLE chat_message_join (chat_id, message_id);
+        CREATE TABLE chat_handle_join (chat_id, handle_id);
+    """)
+
+    def handle(ident):
+        return con.execute("INSERT INTO handle (id, service) VALUES (?, 'iMessage')",
+                           (ident,)).lastrowid
+
+    everyone = [handle(ident) for ident, _label in EVIL_HANDLES]
+    groups = {
+        "handles1": everyone[:8], "handles2": everyone[8:16], "handles3": everyone[16:],
+        "contacts": [handle(card[6]) for card in EVIL_CONTACTS] + [handle(EVIL_STRANGER[0])],
+        "nobody": [],
+    }
+    count = [0]
+
+    def message(chat, when, sender, text, **cells):
+        """sender: None for the owner, else a handle ROWID. cells replace the
+        raw value of any column. Returns the guid."""
+        count[0] += 1
+        row = {
+            "guid": "EVIL-%04d" % count[0], "text": text, "handle_id": sender or 0,
+            "attributedBody": None, "service": "iMessage",
+            "date": (when - APPLE_EPOCH) * 1000000000, "is_from_me": 1 if sender is None else 0,
+            "cache_has_attachments": 0, "item_type": 0, "associated_message_guid": None,
+            "associated_message_type": 0, "associated_message_emoji": None,
+        }
+        row.update(cells)
+        names = sorted(row)
+        cur = con.execute("INSERT INTO message (%s) VALUES (%s)" % (
+            ", ".join('"%s"' % n for n in names), ", ".join("?" for _ in names)),
+            [row[n] for n in names])
+        con.execute("INSERT INTO chat_message_join VALUES (?, ?)", (chat, cur.lastrowid))
+        return row["guid"]
+
+    chat_ids = {}
+    start = utc(2026, 5, 1, 17, 0)
+    for index, (key, display, style, _shown, who) in enumerate(EVIL_CHATS):
+        ident = "chat66600000000000000%d" % (index + 1)
+        chat = con.execute(
+            "INSERT INTO chat (guid, style, chat_identifier, service_name, display_name) "
+            "VALUES (?,?,?,?,?)", ("iMessage;+;" + ident, style, ident, "iMessage", display)).lastrowid
+        chat_ids[key] = chat
+        members = groups[who]
+        for member in members:
+            con.execute("INSERT INTO chat_handle_join VALUES (?, ?)", (chat, member))
+        if not members:
+            continue
+        t = start + index * 86400
+        mine = message(chat, t, None, "who is in for %s" % EVIL_WORDS[index])
+        first = None
+        for k, member in enumerate(members * 2):
+            t += 420
+            words = [EVIL_WORDS[(k + j) % len(EVIL_WORDS)] for j in range(2 + k % 4)]
+            guid = message(chat, t, member, " ".join(words))
+            first = first or guid
+            if k % 3 == 0:
+                message(chat, t + 5, member, "Liked a message", associated_message_type=2001,
+                        associated_message_guid="p:0/" + mine)
+        message(chat, t + 60, None, "Loved a message", associated_message_type=2000,
+                associated_message_guid="p:0/" + first)
+
+    # ---- odd cells, all in the chat with the control-character name -------
+    odd = chat_ids["control_name"]
+    a, b = groups["contacts"][1], groups["contacts"][2]
+    t = utc(2026, 5, 20, 16, 0)
+
+    def apple(unix):
+        return unix - APPLE_EPOCH
+
+    message(odd, t, a, 1099511627776)                                   # INTEGER text
+    message(odd, t + 60, a, 2.5)                                        # REAL text
+    message(odd, t + 120, b, b"hello from a blob")                      # BLOB text
+    message(odd, t + 180, b, b"caf\xe9 \xff ok")                        # BLOB text, not UTF-8
+    message(odd, t, a, "a date with a fraction", date=apple(t + 240) + 0.75)        # REAL, seconds
+    message(odd, t, a, "a date in floating point",
+            date=float(apple(t + 300) * 1000000000))                    # REAL, nanoseconds
+    message(odd, t, a, "a date that is text", date=str(apple(t + 360)))
+    message(odd, t, a, "a date that is a word", date="soon")            # no date: not counted
+    message(odd, t, a, "no date at all", date=None)
+    message(odd, t, a, "a negative date", date=-5)
+    message(odd, t, a, "a date beyond the end of time", date=1e300)
+    message(odd, t + 420, None, "mine, says a text cell", is_from_me="1")
+    message(odd, t + 480, a, "a flag that is a word", is_from_me="yes")
+    message(odd, t + 540, a, "a flag that is a fraction", is_from_me=0.9)
+    message(odd, t + 600, a, "a flag that is missing", is_from_me=None)
+    message(odd, t + 660, a, "an event, typed as text", item_type="1")  # not a message
+    message(odd, t + 720, b, "my guid is a number", guid=12345)
+    message(odd, t + 725, a, "Liked a message", associated_message_type="2001",
+            associated_message_guid="p:0/12345")
+    message(odd, t + 730, None, "Loved a message", associated_message_type=2000.0,
+            associated_message_guid=b"p:0/12345")
+    message(odd, t + 780, a, OBJ, cache_has_attachments=2.7)
+    message(odd, t + 840, a, None, attributedBody="not a typedstream")
+    message(odd, t + 900, a, "", attributedBody=7)
+    message(odd, t + 960, a, None,
+            attributedBody=archive_attributed_string("only in the attributed body"))
+    message(odd, t + 1020, a, 0,
+            attributedBody=archive_attributed_string("hidden behind a zero"))
+    message(odd, t + 1080, 999, "from a handle that does not exist")
+    message(odd, t + 1140, handle(None), "from a handle without an id")
+    message(odd, t + 1200, handle(""), "from an empty handle")
+    message(odd, t + 1260, handle("\x1b\x07\u202e"), "from a handle of control characters")
+    con.commit()
+    con.close()
+    return chat_ids
+
+
+def write_evil_address_book(path):
+    write_mac_address_book(path, [card[:5] for card in EVIL_CONTACTS])
 
 
 def write_noemoji_db(path, specs, people):
@@ -1168,6 +1400,12 @@ def build(out_dir):
 
     write_legacy_db(os.path.join(out_dir, "legacy", "chat.db"))
     write_noemoji_db(os.path.join(out_dir, "noemoji", "chat.db"), specs, people)
+    evil_ids = write_evil_db(os.path.join(out_dir, "evil", "chat.db"))
+    write_evil_address_book(os.path.join(out_dir, "evil", "AddressBook-v22.abcddb"))
+    write_legacy_db(os.path.join(out_dir, "nojoin", "chat.db"), handle_join=False)
+    write_legacy_db(os.path.join(out_dir, "nocolumn", "chat.db"), without_column="is_from_me")
+    write_foreign_wal(os.path.join(out_dir, "foreign-wal", "chat.db"),
+                      os.path.join(out_dir, "noemoji", "chat.db"), os.path.join(mac, "chat.db-wal"))
     shutil.rmtree(work)
 
     wal_size = os.path.getsize(os.path.join(mac, "chat.db-wal"))
@@ -1191,6 +1429,12 @@ def build(out_dir):
             "backup_address_book": "backup/%s/%s/%s" % (FAKE_UDID, ADDRESS_BOOK_ID[:2], ADDRESS_BOOK_ID),
             "legacy_db": "legacy/chat.db",
             "noemoji_db": "noemoji/chat.db",
+            "evil_db": "evil/chat.db",
+            "evil_address_book": "evil/AddressBook-v22.abcddb",
+            "nojoin_db": "nojoin/chat.db",
+            "nocolumn_db": "nocolumn/chat.db",
+            "foreign_wal_db": "foreign-wal/chat.db",
+            "foreign_wal": "foreign-wal/chat.db-wal",
         },
         "chats": {
             key: {"rowid": writer.chat_ids[key], "guid": CHATS[key][0],
@@ -1201,6 +1445,15 @@ def build(out_dir):
         "tiny": {label: {"guid": spec["guid"], "rowid": spec.get("rowid")}
                  for label, spec in tiny.items()},
         "lively_messages": len(lively),
+        "evil": {
+            # raw values only where they are text; the labels are what must be shown
+            "handles": [{"id": ident if isinstance(ident, str) else None, "label": label}
+                        for ident, label in EVIL_HANDLES],
+            "contacts": [{"handle": card[6], "name": card[5]} for card in EVIL_CONTACTS],
+            "stranger": {"handle": EVIL_STRANGER[0], "label": EVIL_STRANGER[1]},
+            "chats": {key: {"rowid": evil_ids[key], "name": shown, "members": who}
+                      for key, _display, _style, shown, who in EVIL_CHATS},
+        },
         "typedstream_samples": [
             {"name": name, "text": text, "mutable": mutable,
              "hex": archive_attributed_string(text, mutable=mutable).hex()}
