@@ -47,9 +47,10 @@
  * A row is always a message: rows without text count, with zero words.
  *
  * Sender names are cleaned exactly like every other name (docs/SCHEMA.md 2,
- * "Clean names": no control characters, line breaks or direction overrides)
- * before they are counted or returned, and the same goes for anything quoted
- * in a warning. A sender that is a phone number or an e-mail address is
+ * "Clean names": no control characters, line breaks or direction overrides;
+ * cut to 40 characters plus an ellipsis; no more than the first 2,048
+ * characters are ever looked at) before they are counted or returned, and
+ * the same goes for anything quoted in a warning. A sender that is a phone number or an e-mail address is
  * returned as written, like a handle from a database: the engine masks it
  * ("...0123", the part before the "@") when it computes the stats, so it never
  * reaches the recap or the link.
@@ -77,6 +78,8 @@
   var APPLE_EPOCH = 978307200;        // 2001-01-01T00:00:00Z in Unix seconds
   var MAX_UNIX = 4102444800;          // 2100-01-01
   var MAX_LISTED = 8;                 // warnings spelled out per kind before "and N more"
+  var NAME_LIMIT = 40;                // a sender's name: this many code points, plus an ellipsis
+  var NAME_WINDOW = 2048;             // no name is looked at beyond this many UTF-16 units
 
   var ROLES = {
     date: ['date', 'timestamp', 'time', 'sent', 'datetime', 'messagedate', 'datesent', 'sentat',
@@ -135,9 +138,27 @@
    * The engine's "clean names" rule, then the spaces collapsed: nothing that
    * could break a line, ring a bell or reorder the text around it survives.
    */
-  function cleanName(value) {
-    return tidy(String(value).replace(/[\t\n\r\u2028\u2029]/g, ' ')
+  function cleanName(value, limit) {
+    var text = String(value);
+    if (text.length > NAME_WINDOW) {              // bounded work, however long the input
+      text = text.slice(0, NAME_WINDOW);
+      if ((text.charCodeAt(NAME_WINDOW - 1) & 0xFC00) === 0xD800) text = text.slice(0, NAME_WINDOW - 1);
+    }
+    text = tidy(text.replace(/[\t\n\r\u2028\u2029]/g, ' ')
       .replace(/[\u0000-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069\uFFFC\uFFFD]/g, ''));
+    return limit ? cap(text, limit) : text;
+  }
+
+  /** The first `limit` code points plus an ellipsis; the text itself when it is not longer. */
+  function cap(text, limit) {
+    var count = 0;
+    for (var i = 0; i < text.length; count++) {
+      if (count === limit) return text.slice(0, i) + '\u2026';
+      var c = text.charCodeAt(i);
+      i += (c >= 0xD800 && c <= 0xDBFF && i + 1 < text.length &&
+        (text.charCodeAt(i + 1) & 0xFC00) === 0xDC00) ? 2 : 1;
+    }
+    return text;
   }
 
   function quote(value) {
@@ -243,6 +264,7 @@
       if (!isFinite(value)) return null;
       value = String(value);
     }
+    if (String(value).length > 200) return null;      // no date is this long: do not even look
     var text = tidy(value);
     if (!text) return null;
     var match, time, unix, year;
@@ -444,7 +466,7 @@
       this.notes.add('date', where + ': could not read the date ' + quote(dateValue === undefined ? '' : dateValue) + '; skipped.');
       return;
     }
-    var name = sender === null || sender === undefined ? '' : cleanName(sender);
+    var name = sender === null || sender === undefined ? '' : cleanName(sender, NAME_LIMIT);
     if (mine === null) mine = name === '' || this.ctx.me.indexOf(name.toLowerCase()) !== -1;
     if (mine) this.fromMe += 1;
     else this.senders[name || 'Unknown'] = true;
@@ -662,7 +684,7 @@
     var o = options || {};
     var notes = new Notes();
     var me = (Array.isArray(o.me) ? o.me : o.me ? [o.me] : []).concat(['me'])
-      .map(function (name) { return cleanName(name).toLowerCase(); });
+      .map(function (name) { return cleanName(name, NAME_LIMIT).toLowerCase(); });
     var ctx = { zone: makeZone(o.tz), dayFirst: o.dayFirst === undefined ? null : !!o.dayFirst, me: me, appleEpoch: false };
     var builder = new Builder(ctx, notes);
     var result = { rows: builder.rows, warnings: [], format: 'unknown', columns: null, summary: null };
