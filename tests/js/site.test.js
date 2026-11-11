@@ -80,6 +80,30 @@ test('no borrowed trademarks in the static copy', () => {
   assert.doesNotMatch(meta('name', 'description') + meta('property', 'og:description'), /wrapped|imessage/i);
 });
 
+test('the page does not claim a licence that has not been chosen', () => {
+  // "Open source" is a statement about licensing. Until the owner picks a licence the
+  // page says only what is true: the source is public.
+  const text = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.doesNotMatch(text, /open[- ]source/i);
+  assert.match(text, /independent project; the source is public on GitHub/);
+  for (const file of ownFiles('js', '.js')) {
+    assert.doesNotMatch(fs.readFileSync(path.join(WEB, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''), /open[- ]source/i, `${file}: no licence claim in copy`);
+  }
+});
+
+test('nothing the page links to carries a recap in the query string', () => {
+  // ?w1= is readable (some transports drop fragments) but must never be produced: it would
+  // put the recap in a request line. Static links first; generated ones are covered by the
+  // codec tests (buildLink) and the end-to-end run (Copy link, WrappedStory.link()).
+  const hrefs = [...html.replace(/<!--[\s\S]*?-->/g, '').matchAll(/\s(?:href|src|content)="([^"]*)"/g)].map((m) => m[1]);
+  for (const h of hrefs) assert.doesNotMatch(h, /[?&]w1=/, `no query-form recap link in index.html (${h})`);
+  assert.equal(/<link rel="canonical" href="([^"]+)"/.exec(html)[1].includes('?'), false, 'the canonical URL has no query string');
+  for (const file of ownFiles('js', '.js')) {
+    const code = fs.readFileSync(path.join(WEB, file), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    assert.doesNotMatch(code, /['"`]\?w1=|['"`]&w1=|\?['"`]\s*\+\s*Config\.PAYLOAD_KEY/, `${file}: never builds a ?w1= URL`);
+  }
+});
+
 test('hardening: strict CSP, no referrer, nothing inline', () => {
   const csp = /<meta http-equiv="Content-Security-Policy" content="([^"]+)"/.exec(html)[1];
   const directives = Object.fromEntries(csp.split(';').map((d) => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v.join(' ')]));
