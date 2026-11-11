@@ -1,0 +1,503 @@
+{
+ "about": [
+  "Expected results for the fixture's tiny 'Book Club' chat, worked out BY HAND from the",
+  "table in tests/fixtures/build_fixture.py (tiny_chat) and docs/SCHEMA.md, not by running",
+  "either engine. Both engines must reproduce them exactly. 'now' is 2026-11-11 12:00 PST.",
+  "",
+  "Countable messages in Los Angeles time, 2026:",
+  " Jan 1 Thu: M1 Me 00:00:05, M2 Ezra 00:02      (B2 at Dec 31 23:59:30 PST is still 2025)",
+  " Feb 14 Sat: M3 Nora 23:59:59.999999999;  Feb 15 Sun: M4 Ezra 00:00:00",
+  " Mar 8 Sun: M5 Me 01:59 PST, M6 Nora (e-mail handle) 03:00 PDT; 02:xx does not exist",
+  " Apr 10 Fri 12:00-12:04: M7 Ezra, M8 Me (photo only), M9 Nora (photo + 4 words),",
+  "   M10 Ezra (25 words), M11 Nora (57 words). Not counted that day: 3 group events,",
+  "   5 unsent or empty rows, a placed sticker (1000) and a poll vote (4000).",
+  " Jul 4 Sat: J1 Me, J2 Nora, J3 Ezra, J4 Me (2 photos) at 20:xx; J5 Ezra, J6 Me,",
+  "   J7 Nora (e-mail) at 21:xx",
+  " Sep 15 Tue: M12 Nora 08:30;  Nov 1 Sun: Ma Nora 01:30 PDT, Mb Me 01:30 PST",
+  " F1 (Nov 20) is after 'now' and is not counted.",
+  "Per sender: Nora 8 messages, 81 words (4+5+4+57+3+2+4+2); Me 7, 12 (3+3+0+3+0+1+2);",
+  " Ezra 6, 39 (4+2+1+25+4+3). Ezra is not in the address book: the raw number shows.",
+  "Standing tapbacks (10): M3 laugh x2 (Me, Ezra; Ezra's change to love on Nov 15 comes",
+  " after 'now'), M6 laugh (Me), M5 love (Ezra, changed from laugh), M7 emphasize (Nora,",
+  " bp: target), M11 emoji x2 (Me 2006, Ezra 2007), M10 question (Me) + dislike (Nora),",
+  " J5 laugh (Nora: love and laugh carry the same timestamp, the higher ROWID wins).",
+  "Not standing: like on M1 (added from Nora's phone handle, removed from her e-mail",
+  " handle: same person once contacts are applied), like on J3 (removed 1 ns after it",
+  " was added and stored in the opposite ROWID order), love on M7 (add row deleted),",
+  " the stray removal on M4, the tapback on an unknown guid, and love on B2 (that",
+  " message is outside the period in Los Angeles, though not in UTC)."
+ ],
+ "now": 1794427200,
+ "chat": "Book Club",
+ "cases": [
+  {
+   "name": "los_angeles_2026",
+   "options": {
+    "tz": "America/Los_Angeles",
+    "year": 2026
+   },
+   "contacts": true,
+   "stats": {
+    "v": 1,
+    "chat": {
+     "name": "Book Club 📚",
+     "members": 3
+    },
+    "period": {
+     "label": "2026",
+     "start": "2026-01-01",
+     "end": "2026-11-11"
+    },
+    "totals": {
+     "messages": 21,
+     "words": 132,
+     "attachments": 3,
+     "reactions": 10,
+     "days_active": 8,
+     "longest_streak": 2
+    },
+    "by_hour": [
+     3,
+     3,
+     0,
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     5,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     4,
+     3,
+     0,
+     1
+    ],
+    "by_weekday": [
+     0,
+     1,
+     0,
+     2,
+     5,
+     8,
+     5
+    ],
+    "by_month": [
+     2,
+     2,
+     2,
+     5,
+     0,
+     0,
+     7,
+     0,
+     1,
+     0,
+     2,
+     0
+    ],
+    "busiest_day": {
+     "date": "2026-07-04",
+     "messages": 7
+    },
+    "personality": {
+     "id": "quiet_ones",
+     "title": "The Quiet Ones",
+     "blurb": "Peak hour: 12 PM. Few words. All of them count.",
+     "peak_hour": 12
+    },
+    "late_night": {
+     "messages": 7,
+     "share": 0.3333,
+     "top": {
+      "name": "Me",
+      "messages": 3
+     }
+    },
+    "senders": [
+     {
+      "name": "Nora Quill",
+      "messages": 8,
+      "share": 0.381,
+      "words": 81,
+      "attachments": 1,
+      "late_night": 2,
+      "reactions_given": 3,
+      "reactions_received": 5
+     },
+     {
+      "name": "Me",
+      "messages": 7,
+      "share": 0.3333,
+      "words": 12,
+      "attachments": 2,
+      "late_night": 3,
+      "reactions_given": 4,
+      "reactions_received": 1
+     },
+     {
+      "name": "+15550100012",
+      "messages": 6,
+      "share": 0.2857,
+      "words": 39,
+      "attachments": 0,
+      "late_night": 2,
+      "reactions_given": 3,
+      "reactions_received": 4
+     }
+    ],
+    "most_reacted": [
+     {
+      "sender": "Nora Quill",
+      "reactions": 2,
+      "date": "2026-02-14",
+      "text": "Just under the wire",
+      "kinds": {
+       "laugh": 2
+      }
+     },
+     {
+      "sender": "+15550100012",
+      "reactions": 2,
+      "date": "2026-04-10",
+      "text": "I have read exactly one chapter and I already have opinions about every single character in this book so please prepare yourselves for a rant",
+      "kinds": {
+       "dislike": 1,
+       "question": 1
+      }
+     },
+     {
+      "sender": "Nora Quill",
+      "reactions": 2,
+      "date": "2026-04-10",
+      "text": "Zoë says the café scene is the best part 😂 and honestly I agree — the whole chapter felt like a fever dream, naïve narrator and all. Also who brings a piñata to a funeral?? 🪅🪅 Anyw…",
+      "kinds": {
+       "emoji": 2
+      }
+     }
+    ],
+    "reactions": {
+     "by_kind": {
+      "love": 1,
+      "like": 0,
+      "dislike": 1,
+      "laugh": 4,
+      "emphasize": 1,
+      "question": 1,
+      "emoji": 2
+     },
+     "top_giver": {
+      "name": "Me",
+      "count": 4
+     },
+     "top_receiver": {
+      "name": "Nora Quill",
+      "count": 5
+     }
+    },
+    "awards": [
+     {
+      "id": "yapper",
+      "emoji": "🗣️",
+      "title": "The Yapper",
+      "winner": "Nora Quill",
+      "detail": "8 messages. Nobody asked."
+     },
+     {
+      "id": "lurker",
+      "emoji": "👻",
+      "title": "The Lurker",
+      "winner": "+15550100012",
+      "detail": "6 messages. Reads everything, says little."
+     },
+     {
+      "id": "night_owl",
+      "emoji": "🦉",
+      "title": "The Night Owl",
+      "winner": "Me",
+      "detail": "3 messages after midnight."
+     },
+     {
+      "id": "comedian",
+      "emoji": "😂",
+      "title": "The Comedian",
+      "winner": "Nora Quill",
+      "detail": "Made the chat laugh 3 times."
+     },
+     {
+      "id": "hype",
+      "emoji": "📣",
+      "title": "The Hype Machine",
+      "winner": "Me",
+      "detail": "Handed out 4 tapbacks."
+     },
+     {
+      "id": "favorite",
+      "emoji": "⭐",
+      "title": "The Crowd Favorite",
+      "winner": "Nora Quill",
+      "detail": "5 tapbacks received."
+     }
+    ],
+    "meta": {
+     "generator": "wrapped/1",
+     "source": "chat.db",
+     "generated": "2026-11-11"
+    }
+   }
+  },
+  {
+   "name": "utc_2026",
+   "options": {
+    "tz": "UTC",
+    "year": 2026
+   },
+   "contacts": true,
+   "partial": {
+    "period": {
+     "label": "2026",
+     "start": "2026-01-01",
+     "end": "2026-11-11"
+    },
+    "totals": {
+     "messages": 22,
+     "words": 137,
+     "attachments": 3,
+     "reactions": 11,
+     "days_active": 7,
+     "longest_streak": 1
+    },
+    "by_hour": [
+     0,
+     0,
+     0,
+     4,
+     3,
+     0,
+     0,
+     2,
+     4,
+     2,
+     1,
+     0,
+     0,
+     0,
+     0,
+     1,
+     0,
+     0,
+     0,
+     5,
+     0,
+     0,
+     0,
+     0
+    ],
+    "busiest_day": {
+     "date": "2026-07-05",
+     "messages": 7
+    },
+    "late_night": {
+     "messages": 7,
+     "share": 0.3182,
+     "top": {
+      "name": "Me",
+      "messages": 3
+     }
+    },
+    "reactions": {
+     "by_kind": {
+      "love": 2,
+      "like": 0,
+      "dislike": 1,
+      "laugh": 4,
+      "emphasize": 1,
+      "question": 1,
+      "emoji": 2
+     },
+     "top_giver": {
+      "name": "Me",
+      "count": 4
+     },
+     "top_receiver": {
+      "name": "Nora Quill",
+      "count": 6
+     }
+    }
+   }
+  },
+  {
+   "name": "los_angeles_2025",
+   "options": {
+    "tz": "America/Los_Angeles",
+    "year": 2025
+   },
+   "contacts": true,
+   "partial": {
+    "period": {
+     "label": "2025",
+     "start": "2025-01-01",
+     "end": "2025-12-31"
+    },
+    "totals": {
+     "messages": 2,
+     "words": 12,
+     "attachments": 0,
+     "reactions": 0,
+     "days_active": 2,
+     "longest_streak": 1
+    },
+    "busiest_day": {
+     "date": "2025-12-20",
+     "messages": 1
+    },
+    "personality": {
+     "id": "quiet_ones",
+     "title": "The Quiet Ones",
+     "blurb": "Peak hour: 6 PM. Few words. All of them count.",
+     "peak_hour": 18
+    },
+    "late_night": {
+     "messages": 0,
+     "share": 0,
+     "top": null
+    },
+    "most_reacted": [],
+    "awards": []
+   }
+  },
+  {
+   "name": "los_angeles_all_time",
+   "options": {
+    "tz": "America/Los_Angeles",
+    "all_time": true
+   },
+   "contacts": true,
+   "partial": {
+    "period": {
+     "label": "All time",
+     "start": "2025-12-20",
+     "end": "2026-11-11"
+    },
+    "totals": {
+     "messages": 23,
+     "words": 144,
+     "attachments": 3,
+     "reactions": 11,
+     "days_active": 10,
+     "longest_streak": 2
+    }
+   }
+  },
+  {
+   "name": "los_angeles_2026_no_contacts",
+   "options": {
+    "tz": "America/Los_Angeles",
+    "year": 2026
+   },
+   "contacts": false,
+   "partial": {
+    "chat": {
+     "name": "Book Club 📚",
+     "members": 4
+    },
+    "totals": {
+     "messages": 21,
+     "words": 132,
+     "attachments": 3,
+     "reactions": 11,
+     "days_active": 8,
+     "longest_streak": 2
+    },
+    "senders": [
+     {
+      "name": "Me",
+      "messages": 7,
+      "share": 0.3333,
+      "words": 12,
+      "attachments": 2,
+      "late_night": 3,
+      "reactions_given": 4,
+      "reactions_received": 2
+     },
+     {
+      "name": "+15550100011",
+      "messages": 6,
+      "share": 0.2857,
+      "words": 74,
+      "attachments": 1,
+      "late_night": 1,
+      "reactions_given": 4,
+      "reactions_received": 4
+     },
+     {
+      "name": "+15550100012",
+      "messages": 6,
+      "share": 0.2857,
+      "words": 39,
+      "attachments": 0,
+      "late_night": 2,
+      "reactions_given": 3,
+      "reactions_received": 4
+     },
+     {
+      "name": "nora.quill@example.com",
+      "messages": 2,
+      "share": 0.0952,
+      "words": 7,
+      "attachments": 0,
+      "late_night": 1,
+      "reactions_given": 0,
+      "reactions_received": 1
+     }
+    ],
+    "awards": [
+     {
+      "id": "yapper",
+      "emoji": "🗣️",
+      "title": "The Yapper",
+      "winner": "Me",
+      "detail": "7 messages. Nobody asked."
+     },
+     {
+      "id": "lurker",
+      "emoji": "👻",
+      "title": "The Lurker",
+      "winner": "+15550100011",
+      "detail": "6 messages. Reads everything, says little."
+     },
+     {
+      "id": "night_owl",
+      "emoji": "🦉",
+      "title": "The Night Owl",
+      "winner": "Me",
+      "detail": "3 messages after midnight."
+     },
+     {
+      "id": "hype",
+      "emoji": "📣",
+      "title": "The Hype Machine",
+      "winner": "Me",
+      "detail": "Handed out 4 tapbacks."
+     },
+     {
+      "id": "favorite",
+      "emoji": "⭐",
+      "title": "The Crowd Favorite",
+      "winner": "+15550100011",
+      "detail": "4 tapbacks received."
+     }
+    ]
+   }
+  }
+ ]
+}
