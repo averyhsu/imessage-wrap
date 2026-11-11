@@ -26,8 +26,8 @@ What we do not know yet:
 
 ## What the web page accepts
 
-`make/` has an "From an iPhone Shortcut or export app" input. It accepts pasted text or a
-file in any of these shapes (see `web/make/import-rows.js`):
+The maker page (`make/`) has a "Paste or export file" tab. It accepts pasted text or a file
+in any of these shapes (see `web/make/import-rows.js`):
 
 1. **Columnar** (fastest for a shortcut — no loop needed):
    ```
@@ -38,7 +38,7 @@ file in any of these shapes (see `web/make/import-rows.js`):
    Maya
                      ← an empty line means "sent by me"
    ```
-   The two lists must have the same number of lines. No message text ever leaves Messages
+   The two lists must have the same number of lines (the page says so if they do not). No message text ever leaves Messages
    in this mode, so word counts are zero and there is no "message of the year".
 2. **JSON Lines** — one object per line: `{"date": "...", "sender": "...", "text": "..."}`.
 3. **JSON array** of the same objects.
@@ -65,8 +65,9 @@ may differ slightly on your version.
    message.)
 4. **Copy to Clipboard** (the Text).
 5. **Open URL** → `https://averyhsu.github.io/imessage-wrap/make/#paste`
-6. On the page, tap **Paste**, check the diagnostics line (message count, first and last
-   date), then **Create recap**. The page gives you the story and a link to send to the chat.
+6. On the page, tap **Paste**. It reads the clipboard and shows what it found (message
+   count, first and last date). Check that against Messages, then **Create recap**. The
+   page gives you the story and a link to send to the chat.
 
 If step 3 cannot produce one line per message for *Sender*, fall back to a loop: **Repeat
 with Each** message → **Dictionary** {`date`: Date (ISO 8601), `sender`: Sender,

@@ -1610,6 +1610,19 @@
     list.appendChild(item);
   }
 
+  /**
+   * Where "Open story" goes. The link people copy always points at the public site. When
+   * this page is served from somewhere else (a local copy, a fork), open the story that
+   * sits next to this page instead, so the button works before the public site exists.
+   */
+  function storyHere(url) {
+    try {
+      if (new URL(Config.BASE_URL).origin === root.location.origin) return url;
+    } catch (error) { /* fall through to the local story */ }
+    var hash = url.indexOf('#');
+    return (root.location.protocol === 'file:' ? '../index.html' : '../') + (hash === -1 ? '' : url.slice(hash));
+  }
+
   function renderRecap() {
     var stats = S.stats;
     var link = currentFit();
@@ -1621,8 +1634,8 @@
       plural(stats.chat.members, 'person', 'people') + ' \u00B7 ' + span(stats.period.start, stats.period.end);
 
     $('link').value = link.url;
-    $('open').href = link.url;
-    $('open-card').href = link.url;
+    $('open').href = storyHere(link.url);
+    $('open-card').href = storyHere(link.url);
     linkMeta();
 
     var cuts = describeTrim(stats, link, quotesOn);

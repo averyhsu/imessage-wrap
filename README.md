@@ -116,6 +116,9 @@ npm run test:e2e                           # the story in a real browser (Playwr
 npm run test:make                          # the maker page, end to end
 ```
 
+The browser suites write their screenshots to a temporary folder. `npm run shots:make`
+refreshes the committed ones in `docs/screenshots/web/`.
+
 The command-line tool, on a Mac:
 
 ```sh

@@ -506,7 +506,10 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   const link = state.link.url;
   ok(link.startsWith(Config.BASE_URL + '#w1=') && state.link.length === link.length && link.length <= 4800, `link is under the budget (${link.length} characters)`);
   eq(await page.inputValue('#link'), link, 'the link field holds the link');
-  eq(await page.getAttribute('#open', 'href'), link, '"Open story" points at the link');
+  // Served from somewhere other than the public site (here: the test server), "Open story"
+  // opens the story next to this page with the very same recap; the copied link stays public.
+  eq(await page.getAttribute('#open', 'href'), '../' + link.slice(link.indexOf('#')),
+    '"Open story" opens the local story with the same recap');
   const decoded = decode(link);
   eq(decoded, Engine.fitLink(state.stats, { quotes: false }).stats, 'the link decodes to the stats, with no message text');
   ok(decoded.most_reacted.length === 3 && decoded.most_reacted.every((m) => m.text === ''), 'quotes are off by default: every most_reacted text is blank');
@@ -982,7 +985,8 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   ok(await visible(page, '#share'), 'Share… is offered when the browser can share');
   await page.click('#share');
   eq(await page.evaluate(() => window.__shared), { url: on.link.url }, 'Share… hands over the link alone');
-  eq(await page.getAttribute('#open', 'href'), on.link.url, 'Open story is the same link');
+  eq(await page.getAttribute('#open', 'href'), '../' + on.link.url.slice(on.link.url.indexOf('#')),
+    'Open story carries the same recap');
   eq(await page.getAttribute('#open', 'target'), '_blank', 'in a new tab');
   ok(/Paste the link on its own line in the group chat\. Everyone can open it, no app needed\./.test(await text(page, '.mk-guide')), 'the one line of guidance is there');
   const story = await storyTotal(on.link.url);
