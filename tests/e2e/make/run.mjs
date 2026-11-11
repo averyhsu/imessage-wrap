@@ -121,8 +121,9 @@ async function open(opts = {}) {
     isMobile: !!vp.mobile,
     timezoneId: opts.tz || LA,
     locale: 'en-US',
-    reducedMotion: opts.reducedMotion || 'no-preference',
+    reducedMotion: opts.still ? 'reduce' : (opts.reducedMotion || 'no-preference'),
     permissions: opts.permissions || [],
+    bypassCSP: !!opts.still,
   });
   const problems = [];
   const foreign = [];
@@ -139,6 +140,23 @@ async function open(opts = {}) {
     });
   });
   if (opts.init) await context.addInitScript(opts.init);
+  if (opts.still) {
+    // For screenshots only: no animation, transition or transform at all, so that every
+    // run paints the same pixels. (Injecting a style needs bypassCSP; the sections that
+    // check the page's own policy do not use this.)
+    await context.addInitScript(() => {
+      if (!/\/make\//.test(location.pathname)) return;
+      const add = () => {
+        if (!document.documentElement) return false;
+        const style = document.createElement('style');
+        style.textContent = '*, *::before, *::after { animation: none !important; transition: none !important; }' +
+          ' .mk-btn:active, .mk-tab:active, .mk-chat:active, .mk-copy:active { transform: none !important; }';
+        document.documentElement.appendChild(style);
+        return true;
+      };
+      if (!add()) new MutationObserver((_, o) => { if (add()) o.disconnect(); }).observe(document, { childList: true });
+    });
+  }
   const page = await context.newPage();
   context.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
@@ -333,8 +351,13 @@ const overflow = (page) => page.evaluate(() => {
 
 /** A screenshot of the whole page, or of one step when `selector` is given. */
 async function shot(page, name, selector) {
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(400);
+  // Same picture every run: nothing focused or hovered, scrolled to the top.
+  await page.evaluate(() => {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    window.scrollTo(0, 0);
+  });
+  if (!page.viewportSize() || page.viewportSize().width > 800) await page.mouse.move(2, 2);
+  await page.waitForTimeout(500);
   const file = path.join(SHOTS, `make-${name}.png`);
   if (selector) await page.locator(selector).screenshot({ path: file, animations: 'disabled' });
   else await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
@@ -1101,7 +1124,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
   for (const [size, viewport] of [['desktop', VIEWPORTS['desktop-1440']], ['phone', VIEWPORTS['phone-390']]]) {
     // Whole-page pictures of the four steps; close-ups of one step for the variations.
     // Steps 1 to 3 with the invented Messages database.
-    let s = await open({ viewport });
+    let s = await open({ viewport, still: true });
     let page = s.page;
     await shot(page, `1-add-${size}`);
     await page.click('#tab-backup');
@@ -1121,7 +1144,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     await shot(page, `3-tune-${size}`);
     await s.close();
 
-    s = await open({ viewport });
+    s = await open({ viewport, still: true });
     page = s.page;
     await page.click('#tab-backup');
     await page.setInputFiles('#input-backup-folder', fx(P.backup_encrypted));
@@ -1130,7 +1153,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     await s.close();
 
     // Step 4 with the sample chat.
-    s = await open({ viewport, permissions: ['clipboard-read', 'clipboard-write'] });
+    s = await open({ viewport, still: true, permissions: ['clipboard-read', 'clipboard-write'] });
     page = s.page;
     await page.click('#try-sample');
     await page.waitForSelector('#step-tune.is-active', { timeout: 30000 });

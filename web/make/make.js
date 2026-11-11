@@ -527,6 +527,7 @@
     $('quotes').checked = false;
     $('recap').hidden = true;
     clearTimeout(computeTimer);
+    computeTimer = 0;
     computeRun += 1;
     computePending = false;
     computeBusy = false;
@@ -1313,7 +1314,7 @@
     $('recap').classList.add('is-stale');
     clearTimeout(computeTimer);
     computePending = true;
-    computeTimer = setTimeout(compute, 320);
+    computeTimer = setTimeout(function () { computeTimer = 0; compute(); }, 320);
   }
 
   function computeOptions() {
@@ -1345,6 +1346,7 @@
    */
   function compute() {
     clearTimeout(computeTimer);
+    computeTimer = 0;
     computePending = true;
     if (computeBusy) { computeAgain = true; return; }
     computeBusy = true;
@@ -1357,14 +1359,14 @@
       if (run !== computeRun) return;
       computeBusy = false;
       if (computeAgain) { compute(); return; }
-      computePending = false;
+      computePending = computeTimer !== 0;       // a newer change may already be waiting
       idle('recap');
       onStats(result.stats);
     }, function (error) {
       if (run !== computeRun) return;
       computeBusy = false;
       if (computeAgain) { compute(); return; }
-      computePending = false;
+      computePending = computeTimer !== 0;       // a newer change may already be waiting
       idle('recap');
       $('recap').hidden = true;
       S.stats = null;
