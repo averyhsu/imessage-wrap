@@ -222,6 +222,15 @@ async function pick(page, id) {
 async function period(page, value) {
   await page.locator(`input[name="period"][value="${value}"]`).evaluate((radio) => radio.click());
 }
+/**
+ * Set the quotes switch by clicking its label, as a person would. (An ordinary click, so
+ * Playwright waits until the page has stopped scrolling; a forced click on the invisible
+ * checkbox can land somewhere else while the page is still moving.)
+ */
+async function quotes(page, on) {
+  if ((await page.locator('#quotes').isChecked()) !== on) await page.locator('.mk-switch__text').click();
+  await page.waitForFunction((want) => document.getElementById('quotes').checked === want, on, { timeout: 10000 });
+}
 async function create(page) {
   await page.click('#create');
   await page.waitForFunction(() => {
@@ -544,7 +553,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   state = await snap(page);
   ok(state.link.length <= 4800, `largest chat: the link fits (${state.link.length} characters, quotes off)`);
   ok(await page.locator('#quotes').isEnabled(), 'largest chat: quotes can still be switched on');
-  await page.locator('#quotes').check({ force: true });
+  await quotes(page, true);
   state = await snap(page);
   const withQuotes = Engine.fitLink(state.stats, { quotes: true });
   ok(state.link.length <= 4800 && state.link.url === withQuotes.url, `largest chat with quotes: still fits (${state.link.length} characters)`);
@@ -947,7 +956,7 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   ok(decode(copied).most_reacted.length === 3 && decode(copied).most_reacted.every((m) => m.text === ''), 'switch off: the link copied from inside the story has blank most_reacted text');
 
   // Switch them on.
-  await page.locator('#quotes').check({ force: true });
+  await quotes(page, true);
   const on = await snap(page);
   ok(on.quotes && on.link.url !== state.link.url, 'switching on changes the link');
   eq(payloadOf(on.preview), payloadOf(on.link.url), 'switch on: the preview is rebuilt from the new link');
@@ -980,7 +989,7 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   eq(story.total, state.stats.totals.messages, 'the story opened with the link shows the right total');
 
   // Off again; a new chat name updates everything; start over.
-  await page.locator('#quotes').uncheck({ force: true });
+  await quotes(page, false);
   eq((await snap(page)).link.url, state.link.url, 'switching off restores the link without text');
   await page.fill('#chat-name', 'Cabin People');
   const renamed = await settled(page);
@@ -1276,7 +1285,7 @@ await section('matrix', 'No sideways overflow at 360, 390, 768 and 1440 px, at e
     await period(page, 'all');
     await page.locator('#advanced summary').click();
     await create(page);
-    await page.locator('#quotes').check({ force: true });
+    await quotes(page, true);
     await page.locator('#raw summary').click();
     await check('step 4, recap with quotes, trimmed, raw data open');
     await page.click('#another');
@@ -1335,7 +1344,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     await create(page);
     await freezePreview(page);
     await shot(page, `4-recap-${size}`);
-    await page.locator('#quotes').check({ force: true });
+    await quotes(page, true);
     await page.click('#copy');
     await page.waitForFunction(() => /Copied/.test(document.getElementById('copy-label').textContent));
     await shot(page, `4-recap-quotes-copied-${size}`, '#step-recap');
