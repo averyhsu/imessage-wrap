@@ -379,6 +379,20 @@ class SenderCase(unittest.TestCase):
 
         self.assertEqual(self.sender(script).send_file(self.chat, self.card).status, UNVERIFIED)
 
+    def test_attachment_row_without_the_flag_counts_when_it_has_no_typed_text(self):
+        def script(n, guid, text, file):
+            self.db.add_message(None, chat=self.chat_id, is_from_me=True)  # schema without the flag set
+            return OsaResult(0)
+
+        self.assertEqual(self.sender(script).send_file(self.chat, self.card).status, DELIVERED)
+
+    def test_text_match_ignores_whitespace_differences(self):
+        def script(n, guid, text, file):
+            self.deliver(text.replace("\n", "\r") + "  ")
+            return OsaResult(0)
+
+        self.assertEqual(self.sender(script).send_text(self.chat, "line one\nline two").status, DELIVERED)
+
     def test_default_staging_dir_is_inside_pictures(self):
         self.assertEqual(send.staging_dir(), Path.home() / "Pictures" / "Threadback")
 

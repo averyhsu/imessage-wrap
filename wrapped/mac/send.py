@@ -411,18 +411,25 @@ class MessagesSender:
 
     def _looks_like_ours(self, row: chatdb.OutgoingRow, text: str, kind: str, strict: bool) -> bool:
         """Tell our send apart from something the owner typed at the same moment."""
+        decoded: Optional[str] = None
+        if self._decode is not None:
+            try:
+                decoded = _squash(self._decode(row.text, row.attributed_body) or "")
+            except Exception:  # a decoder problem must never turn a real send into a failure
+                decoded = None
         if kind == "file":
-            return row.has_attachment or not strict
+            # an attachment row; or (schemas vary) a row with no typed text at all
+            return row.has_attachment or not strict or decoded == ""
         if row.has_attachment:
             return False
-        if self._decode is None:
+        if decoded is None:
             return True
-        try:
-            got = self._decode(row.text, row.attributed_body) or ""
-        except Exception:  # a decoder problem must never turn a real send into a failure
-            return True
-        got = got.strip()
-        return not got or got == text.strip()
+        return decoded == "" or decoded == _squash(text)
+
+
+def _squash(text: str) -> str:
+    """Whitespace-insensitive form for comparing what was sent with what was stored."""
+    return " ".join(text.replace(chr(0xFFFC), " ").split())
 
 
 @dataclass

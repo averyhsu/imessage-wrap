@@ -496,6 +496,35 @@ class OtherCommands(EngineCase):
         self.assertEqual(code, 1)
         self.assertIn("Full Disk Access", out)
 
+    def test_doctor_automation_compares_chat_ids_without_sending(self):
+        lively, tiny = self.chats["lively"]["guid"], self.chats["tiny"]["guid"]
+        listed = "\n".join([send.swap_guid_form(lively), tiny, "any;-;+15550100001"]) + "\n"
+        seen = []
+
+        def fake(script, args, timeout):
+            seen.append((script, list(args)))
+            return send.OsaResult(0, listed, "")
+
+        with mock.patch.object(send, "find_osascript", return_value="/usr/bin/osascript"), mock.patch.object(
+            send, "run_osascript", fake
+        ):
+            code, out, err = self.run_cli("doctor", "--db", str(self.db), "--automation")
+        self.assertEqual(code, 0, err + out)
+        self.assertEqual(len(seen), 1)
+        self.assertIs(seen[0][0], send.LIST_CHATS_SCRIPT)  # the read-only script, never the send script
+        self.assertEqual(seen[0][1], [])
+        self.assertIn("Messages automation allowed; it lists 3 chats", out)
+        self.assertIn("matches chat.db exactly: 1", out)
+        self.assertIn("other id spelling (;+; / ;-;): 1", out)
+
+        denied = send.OsaResult(1, "", "execution error: Not authorized to send Apple events to Messages. (-1743)")
+        with mock.patch.object(send, "find_osascript", return_value="/usr/bin/osascript"), mock.patch.object(
+            send, "run_osascript", lambda *a: denied
+        ):
+            code, out, err = self.run_cli("doctor", "--db", str(self.db), "--automation")
+        self.assertEqual(code, 1)
+        self.assertIn("Privacy & Security > Automation", out)
+
     def test_register_avoids_name_clashes(self):
         import argparse
 
