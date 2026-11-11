@@ -68,13 +68,24 @@ def render(width, height, bubble_scale=0.62):
     ]
     md.polygon(tail, fill=255)
 
-    fill = gradient((w, h), PINK, VIOLET, BLUE, angle=35)
+    # The gradient spans just the bubble (not the whole canvas), so the bubble shows the
+    # full pink-to-blue range instead of only its violet middle.
+    tail_bottom = by1 + int(bh * 0.22)
+    box_w, box_h = bx1 - bx0, tail_bottom - by0
+    span = int(max(box_w, box_h))
+    ramp = Image.linear_gradient("L").resize((span, span)).rotate(-45, resample=Image.BICUBIC, expand=True)
+    inner = int(ramp.size[0] * 0.5)
+    off = (ramp.size[0] - inner) // 2
+    ramp = ramp.crop((off, off, off + inner, off + inner)).resize((box_w, box_h), Image.BICUBIC)
+    local = ImageOps.colorize(ramp, black=PINK, white=BLUE, mid=VIOLET)
+    fill = Image.new("RGB", (w, h), VIOLET)
+    fill.paste(local, (bx0, by0))
     img = Image.composite(fill, bg, mask)
 
     # A subtle top highlight inside the bubble for depth.
     hi = Image.new("L", (w, h), 0)
     hd = ImageDraw.Draw(hi)
-    hd.rounded_rectangle((bx0, by0, bx1, by0 + int(bh * 0.5)), radius=radius, fill=46)
+    hd.rounded_rectangle((bx0, by0, bx1, by0 + int(bh * 0.5)), radius=radius, fill=26)
     hi = hi.filter(ImageFilter.GaussianBlur(base * 0.03))
     hi = ImageChops.multiply(hi, mask)
     img = Image.composite(Image.new("RGB", (w, h), (255, 255, 255)), img, hi)
