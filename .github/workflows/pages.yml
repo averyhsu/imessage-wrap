@@ -1,0 +1,43 @@
+# Publishes web/ (the story player, demo and in-browser analyzer) to GitHub Pages.
+#
+# This workflow is MANUAL ONLY on purpose: turning the public site on is the repo
+# owner's call. To go live:
+#   1. Settings → Pages → Build and deployment → Source: "GitHub Actions"
+#   2. Actions → "Publish site" → Run workflow (on main)
+# The site is fully static. Recap data lives in the URL #fragment, which browsers
+# never send to the server.
+name: Publish site
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Refuse to publish private data
+        run: |
+          set -euo pipefail
+          if find web -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*stats*.json' \) | grep -q .; then
+            echo "::error::web/ contains a database or stats file; refusing to publish."
+            exit 1
+          fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deployment
+        uses: actions/deploy-pages@v4
