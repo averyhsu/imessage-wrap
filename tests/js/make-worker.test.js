@@ -195,6 +195,25 @@ test('errors are coded, and nothing unreadable is kept', async () => {
   await assert.rejects(worker.ask('compute', { options: { tz: 'Not/AZone', all_time: true } }), { code: 'range' });
   await assert.rejects(worker.ask('compute', { options: { tz: 'UTC', start: '2026-05-01', end: '2026-04-01' } }), { code: 'range' });
   await assert.rejects(worker.ask('nonsense', {}), { code: 'unknown_request' });
+  // Contact names can only be added to a database that is open (a pasted export has none).
+  await assert.rejects(worker.ask('contacts', { contacts: [] }), { code: 'no_chat' });
+});
+
+test('people called constructor, toString or __proto__ are counted like anyone else', async () => {
+  const worker = startWorker();
+  const names = ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'];
+  const lines = names.concat(names, ['constructor', '']).map((sender, i) => JSON.stringify({ date: `2026-03-0${1 + (i % 9)}T12:0${i % 10}:00Z`, sender, text: 'an invented line' }));
+  const pasted = await worker.ask('paste', { text: lines.join('\n'), tz: 'UTC' });
+  assert.deepStrictEqual(pasted.people.filter((p) => !p.me).map((p) => p.name).sort(), names.slice().sort());
+  assert.ok(pasted.people.every((p) => p.me || (p.named && p.key === 'n:' + p.name)), 'each under a key that no object has by itself');
+  // (Pairs, not an object: this test must not trip over the very thing it is about.)
+  const counted = (stats) => stats.senders.map((s) => s.name + ' ' + s.messages).sort();
+  let { stats } = await worker.ask('compute', { options: OPTIONS });
+  assert.deepStrictEqual(counted(stats), ['Me 1', '__proto__ 2', 'constructor 3', 'hasOwnProperty 2', 'toString 2', 'valueOf 2']);
+  // Renamed to one another, and the owner called one of them too.
+  ({ stats } = await worker.ask('compute', { options: { ...OPTIONS, me: 'valueOf', names: { 'n:constructor': '__proto__', 'n:toString': 'constructor' } } }));
+  assert.deepStrictEqual(counted(stats), ['__proto__ 5', 'constructor 2', 'hasOwnProperty 2', 'valueOf 3']);
+  assert.equal(stats.totals.messages, 12);
 });
 
 test('the sample request, and the worker cutting its own network access', async () => {
@@ -205,6 +224,7 @@ test('the sample request, and the worker cutting its own network access', async 
   assert.equal(typeof worker.self.fetch, 'function');
   const result = await worker.ask('sample', {});
   assert.equal(result.named, true);
+  assert.match(result.owner, /^[A-Z][a-z]+$/, 'the sample names its owner');
   assert.equal(result.people.length, 7);
   assert.ok(result.people.every((p) => p.named && p.handles.length === 0));
   assert.ok(result.rows > 2500);

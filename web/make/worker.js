@@ -33,7 +33,9 @@
  *            -> {chats, diagnostics, warnings, contacts}
  *   chat     {chat: id from the list}        -> {people, chat_name, named}
  *   paste    {text, tz}                      -> {people, chat_name, named, format, summary, warnings}
- *   sample   {}                              -> {people, chat_name, named, summary}
+ *   sample   {}                              -> {people, chat_name, named, owner, summary}
+ *   contacts {contacts: [File]}              -> {chats, people, contacts, added, skipped}
+ *            more contact names for the open database; the chosen chat stays chosen
  *   compute  {options: {tz, year | all_time | start + end, me, chat_name, names}}
  *            -> {stats}
  *
@@ -311,29 +313,51 @@
       state.handle = handle;
       state.source = request.kind === 'backup' || /^sms/i.test(label) ? 'sms.db' : 'chat.db';
 
-      var contacts = [];
-      var warnings = [];
-      var books = request.contacts || [];
-      for (var i = 0; i < books.length; i++) {
-        await stage(id, 'contacts', { file: books[i].name });
-        try {
-          var book = await DB.openDatabase({ db: await readFile(books[i]) });
-          try { contacts = contacts.concat(DB.loadContacts(book)); } finally { book.close(); }
-        } catch (error) {
-          warnings.push({ code: 'contacts_unreadable', message: 'An address book could not be read, so it was skipped.',
-            file: books[i].name });
-        }
-      }
-      state.contacts = contacts;
+      var books = await readBooks(id, request.contacts || []);
+      var warnings = books.skipped.map(function (name) {
+        return { code: 'contacts_unreadable', message: 'An address book could not be read, so it was skipped.', file: name };
+      });
+      state.contacts = books.contacts;
 
       await stage(id, 'list');
-      var listing = DB.listGroupChats(handle, { contacts: contacts, me: 'Me' });
-      state.chats = listing.chats;
+      var listing = listChats();
       state.rows = null;
+      return {
+        chats: listing.chats,
+        diagnostics: listing.diagnostics,
+        warnings: listing.warnings.concat(warnings),
+        contacts: state.contacts.length,
+        info: handle.info
+      };
+    }
+
+    /** Read address-book files: {contacts: [[identifier, name], ...], skipped: [file names]}. */
+    async function readBooks(id, files) {
+      var contacts = [];
+      var skipped = [];
+      for (var i = 0; i < files.length; i++) {
+        await stage(id, 'contacts', { file: files[i].name });
+        try {
+          var book = await DB.openDatabase({ db: await readFile(files[i]) });
+          try {
+            if (DB.kind(book) !== 'contacts') throw failure('not_contacts', 'Not an address book.');
+            contacts = contacts.concat(DB.loadContacts(book));
+          } finally { book.close(); }
+        } catch (error) {
+          skipped.push(files[i].name);
+        }
+      }
+      return { contacts: contacts, skipped: skipped };
+    }
+
+    /** The group chats of the open database, named with the contacts held now. */
+    function listChats() {
+      var listing = DB.listGroupChats(state.handle, { contacts: state.contacts, me: 'Me' });
+      state.chats = listing.chats;
       // Who is in each chat, for telling chats apart in the list. People without
       // a contact name are given as the raw number or address: this line is shown
       // on this device only and is never part of a recap.
-      var names = new Engine._internals.Names('', Engine.buildContactLookup(contacts));
+      var names = new Engine._internals.Names('', Engine.buildContactLookup(state.contacts));
       function local(handle) {
         var who = identify(handle, names);
         return who.named ? who.name : handle;
@@ -348,9 +372,29 @@
           };
         }),
         diagnostics: listing.diagnostics,
-        warnings: listing.warnings.concat(warnings),
-        contacts: contacts.length,
-        info: handle.info
+        warnings: listing.warnings
+      };
+    }
+
+    /**
+     * More contact names for the database that is already open, without reading
+     * it again: the chat list and the people of the chosen chat are named anew.
+     */
+    async function addContacts(id, request) {
+      if (!state.handle) throw failure('no_chat', 'No database is open.');
+      var files = request.contacts || [];
+      var books = await readBooks(id, files);
+      if (files.length && books.skipped.length === files.length) {
+        throw failure('not_contacts', 'None of these files is an address book.', { files: books.skipped });
+      }
+      state.contacts = state.contacts.concat(books.contacts);
+      var listing = listChats();
+      return {
+        chats: listing.chats,
+        people: state.rows ? describePeople() : [],
+        contacts: state.contacts.length,
+        added: books.contacts.length,
+        skipped: books.skipped
       };
     }
 
@@ -432,6 +476,7 @@
         people: people,
         chat_name: built.chat_name,
         named: true,
+        owner: built.owner,
         year: built.year,
         summary: {
           messages: people.reduce(function (total, p) { return total + p.messages; }, 0),
@@ -490,7 +535,8 @@
       return { stats: Engine.computeStats(rows, options) };
     }
 
-    var handlers = new Map([['open', open], ['chat', chooseChat], ['paste', paste], ['sample', sample], ['compute', compute]]);
+    var handlers = new Map([['open', open], ['chat', chooseChat], ['paste', paste], ['sample', sample], ['contacts', addContacts],
+      ['compute', compute]]);
 
     function receive(request) {
       request = request || {};

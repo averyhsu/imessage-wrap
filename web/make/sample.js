@@ -8,7 +8,10 @@
  * A classic script with no dependencies: WrappedSample in a page or worker,
  * module.exports in Node.
  *
- *   WrappedSample.build({now}) -> {rows, chat_name, participants, me, year}
+ *   WrappedSample.build({now}) -> {rows, chat_name, participants, me, owner, year}
+ *
+ * `owner` is a first name for the person whose chat this pretends to be, so that
+ * the sample recap reads like a real one ("Marisol", not "Me").
  *
  * `rows` are in the shape WrappedEngine.computeStats takes; the sender's
  * `handle` is simply a first name. The chat covers one calendar year: the
@@ -29,6 +32,7 @@
   'use strict';
 
   var APPLE_EPOCH = 978307200;
+  var OWNER = 'Marisol';
   var CHAT_NAME = 'Lake Cabin Crew \uD83D\uDEF6';
 
   // name, share of the talking, attachment %, favourite hours shifted by
@@ -260,9 +264,10 @@
       chat_name: CHAT_NAME,
       participants: PEOPLE.filter(function (p) { return p.name; }).map(function (p) { return p.name; }),
       me: 'Me',
+      owner: OWNER,
       year: year
     };
   }
 
-  return { build: build, sampleYear: sampleYear, CHAT_NAME: CHAT_NAME };
+  return { build: build, sampleYear: sampleYear, CHAT_NAME: CHAT_NAME, OWNER: OWNER };
 });

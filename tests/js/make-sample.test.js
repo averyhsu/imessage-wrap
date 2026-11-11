@@ -66,6 +66,10 @@ test('everything in the sample is invented: first names only, no numbers or addr
   const handles = new Set(built.rows.map((r) => r.handle).filter(Boolean));
   assert.deepStrictEqual([...handles].sort(), [...built.participants].sort());
   for (const name of handles) assert.match(name, /^[A-Z][a-z]+$/, `${name} is a bare first name`);
+  // The sample's owner has a first name too, so the sample recap does not call anyone "Me".
+  assert.match(built.owner, /^[A-Z][a-z]+$/, 'the owner has an invented first name');
+  assert.equal(built.owner, Sample.OWNER);
+  assert.ok(!handles.has(built.owner), 'which is nobody else\'s');
   const text = built.rows.map((r) => r.text || '').join('\n');
   assert.doesNotMatch(text, /@|https?:|\d{3}/, 'no addresses, links or numbers in the messages');
 });
