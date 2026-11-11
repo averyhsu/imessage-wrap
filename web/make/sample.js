@@ -29,7 +29,7 @@
   'use strict';
 
   var APPLE_EPOCH = 978307200;
-  var CHAT_NAME = 'Lake Cabin Crew 🛶';
+  var CHAT_NAME = 'Lake Cabin Crew \uD83D\uDEF6';
 
   // name, share of the talking, attachment %, favourite hours shifted by
   var PEOPLE = [
@@ -241,7 +241,7 @@
             continue;
           }
           var photo = rng.below(100) < person.photos;
-          var text = photo && rng.below(100) < 55 ? '￼' : sentence(rng, person);
+          var text = photo && rng.below(100) < 55 ? '\uFFFC' : sentence(rng, person);
           var row = message(stamp[0], stamp[1], text, photo);
           var roll = rng.below(100);
           var funny = stamp[1] === 2;                     // Kenji gets the laughs

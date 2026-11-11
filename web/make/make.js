@@ -5,7 +5,7 @@
  * export, or the invented sample chat), choose the chat, tune it, and get the recap link.
  * The heavy work (SQLite, counting) happens in worker.js; this file is the interface and
  * builds the links with the engine's own fitLink(), so the 4,800-character budget and the
- * "no quotes" rule are the ones in docs/SCHEMA.md §5.
+ * "no quotes" rule are the ones in docs/SCHEMA.md section 5.
  *
  * Privacy rules this file keeps:
  *  - nothing is requested from any other origin, and nothing is stored;
@@ -65,7 +65,7 @@
     bigPaste: null      // an export file too large to show in the box
   };
 
-  // ── small helpers ────────────────────────────────────────────────────────────────────
+  // -- small helpers --------------------------------------------------------------------
 
   function $(id) { return doc.getElementById(id); }
 
@@ -117,7 +117,7 @@
     var a = isoDay(start);
     var b = isoDay(end);
     if (start.slice(0, 4) === end.slice(0, 4)) a = a.replace(/, \d{4}$/, '');
-    return a + ' – ' + b;
+    return a + ' \u2013 ' + b;
   }
 
   /** Today's {year, month} in the chosen time zone. */
@@ -142,7 +142,7 @@
   }
 
   function initial(name) {
-    var chars = Array.from(String(name || '').replace(/^[\s…+(]+/, ''));
+    var chars = Array.from(String(name || '').replace(/^[\s\u2026+(]+/, ''));
     var first = chars[0] || '#';
     return /[0-9]/.test(first) ? '#' : first.toUpperCase();
   }
@@ -154,7 +154,7 @@
     $('status').textContent = text;
   }
 
-  // ── icons (constants; see also ../js/glyphs.js) ──────────────────────────────────────
+  // -- icons (constants; see also ../js/glyphs.js) --------------------------------------
 
   var LINE = ' fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"';
   function svg(body) {
@@ -190,7 +190,7 @@
     holder.setAttribute('aria-hidden', 'true');
   }
 
-  // ── the worker ───────────────────────────────────────────────────────────────────────
+  // -- the worker -----------------------------------------------------------------------
 
   var worker = null;
   var nextId = 1;
@@ -245,7 +245,7 @@
     });
   }
 
-  // ── "working" and error boxes ────────────────────────────────────────────────────────
+  // -- "working" and error boxes --------------------------------------------------------
 
   function working(slot, text, fraction) {
     var box = $('work-' + slot);
@@ -276,15 +276,15 @@
   /** Progress messages from the worker, in plain words. */
   function progressFor(slot) {
     return function (stage, detail) {
-      if (stage === 'engine') working(slot, 'Loading the database reader…');
-      else if (stage === 'read') working(slot, 'Reading ' + detail.file + ' (' + detail.size + ')…', detail.fraction);
-      else if (stage === 'open') working(slot, 'Opening the database…');
-      else if (stage === 'contacts') working(slot, 'Reading contact names…');
-      else if (stage === 'list') working(slot, 'Finding your group chats…');
-      else if (stage === 'rows') working(slot, 'Reading ' + plural(detail.messages, 'message') + '…');
-      else if (stage === 'parse') working(slot, 'Reading your export…');
-      else if (stage === 'sample') working(slot, 'Making up a group chat…');
-      else if (stage === 'count') working(slot, 'Counting ' + plural(detail.rows, 'message and tapback', 'messages and tapbacks') + '…');
+      if (stage === 'engine') working(slot, 'Loading the database reader\u2026');
+      else if (stage === 'read') working(slot, 'Reading ' + detail.file + ' (' + detail.size + ')\u2026', detail.fraction);
+      else if (stage === 'open') working(slot, 'Opening the database\u2026');
+      else if (stage === 'contacts') working(slot, 'Reading contact names\u2026');
+      else if (stage === 'list') working(slot, 'Finding your group chats\u2026');
+      else if (stage === 'rows') working(slot, 'Reading ' + plural(detail.messages, 'message') + '\u2026');
+      else if (stage === 'parse') working(slot, 'Reading your export\u2026');
+      else if (stage === 'sample') working(slot, 'Making up a group chat\u2026');
+      else if (stage === 'count') working(slot, 'Counting ' + plural(detail.rows, 'message and tapback', 'messages and tapbacks') + '\u2026');
     };
   }
 
@@ -344,8 +344,8 @@
       return {
         title: 'This iPhone backup is encrypted',
         body: [
-          'An encrypted backup cannot be read in a browser. Make one without encryption: connect the iPhone, open Finder (on a Mac) or Apple Devices (on Windows), untick “Encrypt local backup” and back up again. Then choose the new backup here.',
-          'On a Mac that is signed in to Messages you do not need a backup at all: use “A Mac” instead.'
+          'An encrypted backup cannot be read in a browser. Make one without encryption: connect the iPhone, open Finder (on a Mac) or Apple Devices (on Windows), untick \u201CEncrypt local backup\u201D and back up again. Then choose the new backup here.',
+          'On a Mac that is signed in to Messages you do not need a backup at all: use \u201CA Mac\u201D instead.'
         ],
         actions: [{ label: 'Use a Mac instead', run: function () { clearError('source'); selectTab('mac', true); } }]
       };
@@ -354,7 +354,7 @@
       return {
         title: 'That is not a Messages database',
         body: [[{ b: file }, ' is not the kind of file this page can read. On a Mac the one you want is called ', { code: 'chat.db' },
-          ' and sits in ', { code: '~/Library/Messages' }, '. In an iPhone backup it is ', { code: '3d/3d0d7e5f…3d28' }, '.']]
+          ' and sits in ', { code: '~/Library/Messages' }, '. In an iPhone backup it is ', { code: '3d/3d0d7e5f\u20263d28' }, '.']]
       };
     }
     if (code === 'is_contacts') {
@@ -376,7 +376,7 @@
         title: 'This database is too big for a browser tab',
         body: [
           [{ b: file }, ' is ' + num(Math.round((detail.size || 0) / 1048576)) + ' MB. The limit here is ' +
-            num(Math.round(DB.MAX_DB_BYTES / 1048576)) + ' MB, because the whole file has to fit in this tab’s memory.'],
+            num(Math.round(DB.MAX_DB_BYTES / 1048576)) + ' MB, because the whole file has to fit in this tab\u2019s memory.'],
           ['The command-line tool has no such limit. Install it on your Mac, then run ', { code: 'wrapped link "Your chat name"' },
             ' in Terminal to get the same link. ', { link: HELP_URL, text: 'How to install it' }, '.']
         ]
@@ -420,7 +420,7 @@
     };
   }
 
-  // ── steps ────────────────────────────────────────────────────────────────────────────
+  // -- steps ----------------------------------------------------------------------------
 
   function setStep(name, state) {
     var section = $('step-' + name);
@@ -463,7 +463,7 @@
     }
     if (hasChat) {
       var c = S.chat;
-      bubble($('chat-summary'), c.name, plural(c.members, 'person', 'people') + ' · ' + plural(c.messages, 'message'));
+      bubble($('chat-summary'), c.name, plural(c.members, 'person', 'people') + ' \u00B7 ' + plural(c.messages, 'message'));
       $('chat-meta').textContent = c.single ? (S.source.kind === 'sample' ? 'The sample has one chat.' : 'An export holds one chat.') : '';
     }
     var single = !hasChat || S.chat.single;
@@ -551,7 +551,7 @@
     focusStep('chat');
   }
 
-  // ── step 1: tabs ─────────────────────────────────────────────────────────────────────
+  // -- step 1: tabs ---------------------------------------------------------------------
 
   var TABS = ['mac', 'backup', 'paste'];
 
@@ -579,7 +579,7 @@
     selectTab(TABS[to], true);
   }
 
-  // ── step 1: files ────────────────────────────────────────────────────────────────────
+  // -- step 1: files --------------------------------------------------------------------
 
   function baseName(file) {
     var parts = String(file.webkitRelativePath || file.name || '').split(/[\\/]/);
@@ -673,7 +673,7 @@
     if (found.kind === 'backup') {
       showError('source', {
         title: 'No messages in that folder',
-        body: [['This looks like part of an iPhone backup, but the file with the messages (', { code: '3d/3d0d7e5f…3d28' },
+        body: [['This looks like part of an iPhone backup, but the file with the messages (', { code: '3d/3d0d7e5f\u20263d28' },
           ') is not in it. Choose the folder with the long name of letters and numbers inside the Backup folder. If the backup is still running, wait until it has finished.']]
       });
     } else if (wals.length && !found.contacts.length) {
@@ -708,7 +708,7 @@
     reset(1);
     startWorker();
     render();
-    working('source', 'Getting ready…');
+    working('source', 'Getting ready\u2026');
     ask('open', { db: files.db, wal: files.wal, contacts: files.contacts, kind: files.kind }, progressFor('source'))
       .then(function (result) {
         idle('source');
@@ -739,7 +739,7 @@
         notes.push({
           code: 'wal_missing',
           text: files.kind === 'backup'
-            ? 'Recent messages may be missing: this backup keeps its newest messages in a second file. Add cd/cd47480f…3a59 from the same backup folder too.'
+            ? 'Recent messages may be missing: this backup keeps its newest messages in a second file. Add cd/cd47480f\u20263a59 from the same backup folder too.'
             : 'Recent messages may be missing: your newest messages are in a second file. Add chat.db-wal too (it sits right next to chat.db).',
           action: {
             label: files.kind === 'backup' ? 'Add the second file' : 'Add chat.db-wal',
@@ -900,7 +900,7 @@
     $('drop-backup').classList.toggle('is-over', on);
   }
 
-  // ── step 1: paste and sample ─────────────────────────────────────────────────────────
+  // -- step 1: paste and sample ---------------------------------------------------------
 
   var FORMATS = { columnar: 'two lists', jsonl: 'one message per line', json: 'a JSON list', csv: 'CSV', tsv: 'TSV' };
 
@@ -971,7 +971,7 @@
     reset(1);
     startWorker();
     render();
-    working('source', 'Reading your export…');
+    working('source', 'Reading your export\u2026');
     ask('paste', { text: text, tz: S.tz }, progressFor('source')).then(function (result) {
       idle('source');
       var s = result.summary;
@@ -995,7 +995,7 @@
         var warnings = ((error.detail && error.detail.warnings) || []).slice(0, 3);
         showError('source', {
           title: 'No messages could be read from that',
-          body: warnings.concat(['Each message needs a date and a sender. Open “What can I paste?” below to see the shapes that work.'])
+          body: warnings.concat(['Each message needs a date and a sender. Open \u201CWhat can I paste?\u201D below to see the shapes that work.'])
         });
         var help = $('panel-paste').querySelector('details');
         if (help) help.open = true;
@@ -1011,7 +1011,7 @@
     reset(1);
     startWorker();
     render();
-    working('source', 'Making up a group chat…');
+    working('source', 'Making up a group chat\u2026');
     ask('sample', {}, progressFor('source')).then(function (result) {
       idle('source');
       var s = result.summary;
@@ -1031,7 +1031,7 @@
     });
   }
 
-  // ── step 2: chats ────────────────────────────────────────────────────────────────────
+  // -- step 2: chats --------------------------------------------------------------------
 
   function renderChats() {
     var list = $('chats');
@@ -1055,7 +1055,7 @@
       var main = el('span', 'mk-chat__main');
       main.appendChild(el('span', 'mk-chat__name', chat.name));
       main.appendChild(el('span', 'mk-chat__meta', plural(chat.members, 'person', 'people') +
-        (chat.last_unix ? ' · last active ' + day(chat.last_unix) : '')));
+        (chat.last_unix ? ' \u00B7 last active ' + day(chat.last_unix) : '')));
       if (chat.people.length) {
         main.appendChild(el('span', 'mk-chat__with', 'With ' + chat.people.join(', ') +
           (chat.people_more ? ' and ' + chat.people_more + ' more' : '')));
@@ -1084,7 +1084,7 @@
       buttons[i].disabled = true;
       buttons[i].classList.toggle('is-picked', buttons[i].getAttribute('data-chat-id') === String(id));
     }
-    working('chat', 'Reading ' + plural(chat.messages, 'message') + '…');
+    working('chat', 'Reading ' + plural(chat.messages, 'message') + '\u2026');
     ask('chat', { chat: id }, progressFor('chat')).then(function (result) {
       idle('chat');
       S.chat = { id: chat.id, name: chat.name, named: chat.named, members: chat.members, messages: chat.messages, last_unix: chat.last_unix, single: false };
@@ -1098,7 +1098,7 @@
     });
   }
 
-  // ── step 3: tune ─────────────────────────────────────────────────────────────────────
+  // -- step 3: tune ---------------------------------------------------------------------
 
   /** Open step 3 for S.chat. `year` (optional): the calendar year the chat is known to cover. */
   function startTune(year) {
@@ -1123,7 +1123,7 @@
     name.placeholder = S.chat.name;
     $('chat-name-hint').textContent = S.chat.named
       ? 'The title of the recap.'
-      : 'This chat has no name of its own. Leave this empty to use its members’ names, or give it one.';
+      : 'This chat has no name of its own. Leave this empty to use its members\u2019 names, or give it one.';
     $('period-start').value = '';
     $('period-end').value = '';
     fillPeriod();
@@ -1213,7 +1213,7 @@
     hint.hidden = !unnamed;
     if (unnamed) {
       hint.textContent = (unnamed === 1 ? 'One person has' : unnamed + ' people have') +
-        ' no name yet, so they would show as the last four digits of their number, like “…1234”. Type a name to replace it. ' +
+        ' no name yet, so they would show as the last four digits of their number, like \u201C\u20261234\u201D. Type a name to replace it. ' +
         'The full numbers below are only here to help you: they never go into the recap.';
     }
     peopleTags();
@@ -1338,7 +1338,7 @@
     clearTimeout(computeTimer);
     var run = ++computeRun;
     computePending = true;
-    if (!S.stats) working('recap', 'Counting…');
+    if (!S.stats) working('recap', 'Counting\u2026');
     ask('compute', { options: computeOptions() }, function (stage, detail) {
       if (run === computeRun && !S.stats) progressFor('recap')(stage, detail);
     }).then(function (result) {
@@ -1356,7 +1356,7 @@
     });
   }
 
-  // ── step 4: the recap ────────────────────────────────────────────────────────────────
+  // -- step 4: the recap ----------------------------------------------------------------
 
   function fit(stats, quotes) {
     try {
@@ -1402,7 +1402,7 @@
       showError('recap', {
         title: 'This recap does not fit in a link',
         body: ['A link can hold ' + num(MAX_LINK) + ' characters, and even the shortest version of this recap is longer. ' +
-          'Very long names are the usual reason: shorten the chat name or people’s names in step 3.']
+          'Very long names are the usual reason: shorten the chat name or people\u2019s names in step 3.']
       });
       return;
     }
@@ -1518,8 +1518,8 @@
     var quotesOn = S.quotes && !!S.fits.on;
 
     $('recap-title').textContent = stats.chat.name;
-    $('recap-facts').textContent = plural(stats.totals.messages, 'message') + ' · ' +
-      plural(stats.chat.members, 'person', 'people') + ' · ' + span(stats.period.start, stats.period.end);
+    $('recap-facts').textContent = plural(stats.totals.messages, 'message') + ' \u00B7 ' +
+      plural(stats.chat.members, 'person', 'people') + ' \u00B7 ' + span(stats.period.start, stats.period.end);
 
     $('link').value = link.url;
     $('open').href = link.url;
@@ -1537,7 +1537,7 @@
     var list = $('inside-list');
     list.textContent = '';
     var names = namesIn(link.stats);
-    insideItem(list, 'bubble', ['The chat’s name: ', { b: link.stats.chat.name }]);
+    insideItem(list, 'bubble', ['The chat\u2019s name: ', { b: link.stats.chat.name }]);
     insideItem(list, 'people', [{ b: plural(names.length, 'name') }, ': ' + names.join(', ')]);
     insideItem(list, 'chart', [{ b: 'Counts, not conversations' }, ': messages, words, photos and tapbacks per person and by hour, weekday and month, plus the busiest day, streaks and awards.']);
     if (quotesOn) {
@@ -1546,7 +1546,7 @@
     } else {
       insideItem(list, 'check', [{ b: 'No message text' }, '. Not a word anyone wrote.']);
     }
-    var masked = names.some(function (name) { return name.charAt(0) === '…'; });
+    var masked = names.some(function (name) { return name.charAt(0) === '\u2026'; });
     insideItem(list, 'lock', [{ b: 'No phone numbers or e-mail addresses' }, masked
       ? '. People without a name show as the last four digits of their number; name them in step 3 if you like.'
       : '.']);
@@ -1563,7 +1563,7 @@
     meta.textContent = '';
     if (text) { meta.textContent = text; return; }
     if (!link) return;
-    rich(meta, ['This is the message you send · ', { b: num(link.length) }, ' of ' + num(MAX_LINK) + ' characters']);
+    rich(meta, ['This is the message you send \u00B7 ', { b: num(link.length) }, ' of ' + num(MAX_LINK) + ' characters']);
     meta.setAttribute('data-length', link.length);
   }
 
@@ -1586,7 +1586,7 @@
       : 'Off. The link says how many tapbacks these messages got, but not what they said. Switch it on to include the words below, exactly as shown.';
     (S.fits.on.stats.most_reacted || []).forEach(function (m) {
       var item = el('li', 'mk-quote');
-      item.appendChild(el('span', 'mk-quote__who', m.sender + ' · ' + isoDay(m.date) + ' · ' + plural(m.reactions, 'tapback')));
+      item.appendChild(el('span', 'mk-quote__who', m.sender + ' \u00B7 ' + isoDay(m.date) + ' \u00B7 ' + plural(m.reactions, 'tapback')));
       var text = el('span', 'mk-quote__text' + (m.text ? '' : ' is-empty'), m.text || 'A photo or attachment, with no words');
       item.appendChild(text);
       list.appendChild(item);
@@ -1624,7 +1624,7 @@
       if (!ok) {
         field.focus();
         field.select();
-        linkMeta('Copying did not work here. The link is selected below: press ⌘C or Ctrl+C.');
+        linkMeta('Copying did not work here. The link is selected below: press \u2318C or Ctrl+C.');
         say('Copying did not work. The link is selected: copy it by hand.');
         return;
       }
@@ -1678,7 +1678,7 @@
     });
   }
 
-  // ── start ────────────────────────────────────────────────────────────────────────────
+  // -- start ----------------------------------------------------------------------------
 
   function fillStatic() {
     var brands = doc.querySelectorAll('[data-brand]');

@@ -27,7 +27,7 @@
  *     [{key, name, named, handles, messages, me}]
  * `name` is what the person is called by default: a contact name, the name in
  * an export, or (for someone with no name) the masked form of their number or
- * address, "…1234". `handles` are the raw numbers and addresses behind the
+ * address, "...1234". `handles` are the raw numbers and addresses behind the
  * entry. They are a hint for the person at the keyboard and exist only on
  * this device: they never go into the stats, the link or the preview.
  * `names` in compute maps a person's key to the name to show instead. Keys
