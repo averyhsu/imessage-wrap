@@ -59,6 +59,24 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     private var currentPayload: String?
     private var restarts = 0
 
+    // How the last `play` went, for the bridge status that tests and logs read.
+    private var askedAt = Date()
+    private var wasLoadedWhenAsked = false
+    private var handedOverAfter: TimeInterval?
+    private var scriptBackAfter: TimeInterval?
+    private var scriptNote = ""
+
+    /// "warm, handed over +0.00s, script back +0.31s [direct 290 ms], restarts 0": whether
+    /// the page was already loaded when the story was asked for, when the recap was
+    /// handed to it, when the page had finished starting the story (and how long that
+    /// took inside the page), and how often the web process had to be started again.
+    var timingNote: String {
+        let source = wasLoadedWhenAsked ? "warm" : "cold"
+        let handed = handedOverAfter.map { String(format: "%.2f", $0) } ?? "-"
+        let back = scriptBackAfter.map { String(format: "%.2f", $0) } ?? "-"
+        return "\(source), handed over +\(handed)s, script back +\(back)s [\(scriptNote)], restarts \(restarts)"
+    }
+
     override init() {
         let location = RecapLink.bundledStoryLocation(payload: nil)
         readAccessURL = location?.directory
@@ -154,6 +172,11 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     /// is handed over as soon as the page finishes loading.
     func play(payload: String) {
         currentPayload = payload
+        askedAt = Date()
+        wasLoadedWhenAsked = isPageLoaded
+        handedOverAfter = nil
+        scriptBackAfter = nil
+        scriptNote = ""
         if isBroken {
             owner?.storyWebView(self, didFailWith: "The story files are missing from this build.")
             return
@@ -167,25 +190,48 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
     private func handOver(_ payload: String) {
         pendingPayload = nil
-        // The page listens for `hashchange` and plays what the fragment carries. The
-        // fragment travels as a JSON string, never spliced into the script as text.
+        handedOverAfter = Date().timeIntervalSince(askedAt)
+        // The recap goes into the page address as its #fragment, then the page is asked to
+        // read the address, once. Writing the fragment with replaceState is not a
+        // navigation, so the page's own hashchange and popstate listeners do not start the
+        // story a second time. If that is refused, a plain fragment change does the job.
+        // The fragment travels as a JSON string, never spliced into the script as text.
         let fragment = RecapLink.storyFragment(payload: payload)
         guard let json = try? JSONSerialization.data(withJSONObject: [fragment], options: []),
               let literal = String(data: json, encoding: .utf8) else {
             owner?.storyWebView(self, didFailWith: "The recap could not be handed to the story.")
             return
         }
+        // SCRIPT: hand-over
         let script = """
         (function (list) {
           var fragment = list[0];
-          if (window.location.hash === '#' + fragment) {
-            if (window.WrappedApp && window.WrappedApp.route) { window.WrappedApp.route(); }
+          var began = Date.now();
+          var direct = false;
+          try {
+            window.history.replaceState(window.history.state, '', '#' + fragment);
+            direct = window.location.hash === '#' + fragment;
+          } catch (e) {
+            direct = false;
+          }
+          var canRoute = !!(window.WrappedApp && window.WrappedApp.route);
+          if (canRoute && window.location.hash === '#' + fragment) {
+            window.WrappedApp.route();
           } else {
+            direct = false;
             window.location.hash = fragment;
           }
+          return (direct ? 'direct ' : 'fragment ') + (Date.now() - began) + ' ms';
         })(\(literal));
         """
-        webView.evaluateJavaScript(script, completionHandler: nil)
+        let asked = askedAt
+        webView.evaluateJavaScript(script) { [weak self] (result: Any?, _: Error?) in
+            guard let self = self, self.askedAt == asked else {
+                return
+            }
+            self.scriptBackAfter = Date().timeIntervalSince(asked)
+            self.scriptNote = (result as? String) ?? "no result"
+        }
     }
 
     /// Stops the story and returns the page to its waiting state, ready for the next recap.
@@ -197,13 +243,20 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         guard isPageLoaded else {
             return
         }
+        // SCRIPT: reset
         let script = """
         (function () {
+          try {
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+          } catch (e) {}
           if (window.location.hash && window.location.hash !== '#') {
             window.location.hash = '';
-          } else if (window.WrappedApp && window.WrappedApp.route) {
+            return 'fragment';
+          }
+          if (window.WrappedApp && window.WrappedApp.route) {
             window.WrappedApp.route();
           }
+          return 'direct';
         })();
         """
         webView.evaluateJavaScript(script, completionHandler: nil)
@@ -350,26 +403,62 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     """
 }
 
-/// Keeps one story web view warm, so the first story of a session does not wait for a web
-/// process to start and the page to load.
+/// Keeps one story web view warm, so a story does not wait for a web process to start and
+/// the page to load.
+///
+/// The waiting web view sits, invisible, inside a view that is on screen (the home screen,
+/// the launcher), so that WebKit treats its page as on screen rather than as a background
+/// page, and so that the page is already laid out at a real size.
 @MainActor
 enum StoryWebViewPool {
     private static var idle: StoryWebView?
+    private static weak var host: UIView?
 
-    /// Creates the web view and loads the story page ahead of time. Cheap to call again.
-    static func prewarm() {
+    /// True when a web view with the story page loaded is waiting.
+    static var isWarm: Bool {
+        return idle?.isPageLoaded ?? false
+    }
+
+    /// Creates the web view and loads the story page ahead of time. `view`, when given,
+    /// is where the waiting web view sits from now on. Cheap to call again.
+    static func prewarm(in view: UIView? = nil) {
+        if let view = view {
+            host = view
+        }
         if idle == nil {
             let story = StoryWebView()
             if !story.isBroken {
                 idle = story
             }
         }
+        park()
+    }
+
+    private static func park() {
+        guard let story = idle, let host = host, host.window != nil else {
+            return
+        }
+        let web = story.webView
+        guard web.superview !== host else {
+            return
+        }
+        web.removeFromSuperview()
+        web.transform = .identity
+        web.frame = host.bounds
+        web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        web.alpha = 0
+        web.isUserInteractionEnabled = false
+        host.insertSubview(web, at: 0)
     }
 
     /// The warm web view if there is one, otherwise a new one.
     static func take() -> StoryWebView {
         if let story = idle {
             idle = nil
+            let web = story.webView
+            web.removeFromSuperview()
+            web.alpha = 1
+            web.isUserInteractionEnabled = true
             // One whose web process died for good while it waited is not handed out.
             if !story.isBroken {
                 return story
@@ -388,5 +477,28 @@ enum StoryWebViewPool {
         }
         story.reset()
         idle = story
+        park()
+    }
+}
+
+/// A view that, once it is on screen, warms the story web view up and gives it a place to
+/// wait. The containing app puts one behind its home screen.
+final class StoryWarmUpView: UIView {
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil else {
+            return
+        }
+        // Not during the first frame: let the screen come up first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.warmUp()
+        }
+    }
+
+    private func warmUp() {
+        guard window != nil else {
+            return
+        }
+        StoryWebViewPool.prewarm(in: self)
     }
 }

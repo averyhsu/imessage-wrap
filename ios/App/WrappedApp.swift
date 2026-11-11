@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct WrappedApp: App {
@@ -42,10 +43,24 @@ struct RootView: View {
             })
             .ignoresSafeArea()
         }
-        .onAppear {
-            // Start the story's web view while the person reads the home screen, so the
-            // first story opens without waiting for a web process and a page load.
-            StoryWebViewPool.prewarm()
+        // Behind everything: where the story's web view is started and waits while the
+        // person reads the home screen, so a story opens without waiting for a web
+        // process and a page load.
+        .background {
+            StoryWarmUp()
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
+    }
+}
+
+/// Hosts `StoryWarmUpView` in SwiftUI.
+private struct StoryWarmUp: UIViewRepresentable {
+    func makeUIView(context: Context) -> StoryWarmUpView {
+        return StoryWarmUpView(frame: .zero)
+    }
+
+    func updateUIView(_ uiView: StoryWarmUpView, context: Context) {
     }
 }

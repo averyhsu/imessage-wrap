@@ -27,6 +27,13 @@ struct HomeView: View {
                 .frame(maxWidth: 560, alignment: .leading)
                 .frame(maxWidth: .infinity)
             }
+            // A blurred strip under the status bar, so scrolled content does not run
+            // into the clock.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                Color.clear
+                    .frame(height: 0)
+                    .background(.ultraThinMaterial)
+            }
         }
     }
 

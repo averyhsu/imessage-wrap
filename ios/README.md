@@ -62,9 +62,10 @@ opened from a link, is played and not kept; the sample is never kept.
 While a story gets ready the screen is never black: the recap's own cover (brand gradient,
 chat name, "2026 in review", message count) is drawn natively at once and cross-fades into
 the story when the page reports `ready`. The web view is created early (when the home
-screen or the launcher appears), loads the story page and waits; opening a story hands it
-the recap through the page's `#w1=` fragment, and closing it returns the web view to the
-pool (`StoryWebViewPool`).
+screen or the launcher appears), loads the story page and waits, invisible, at the back of
+that screen; opening a story hands it the recap through the page's `#w1=` fragment
+(written with `history.replaceState`, so the story starts exactly once), and closing it
+returns the web view to the pool (`StoryWebViewPool`).
 
 One brand mark everywhere: the purple speech bubble with three bars of the app icon, the
 iMessage app icon, the home screen and the launcher (`scripts/make-icons.py` draws them all).

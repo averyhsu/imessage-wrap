@@ -36,7 +36,19 @@ final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureR
     private var statusLabel: UILabel?
     private var failureLabel: UILabel?
     private var playStartedAt = Date()
-    private var readyNote = ""
+    private var readyElapsed = ""
+    /// How often the page reported `ready` again after the first time (it should not).
+    private(set) var readyAgainCount = 0
+
+    /// " (ready in 0.3s; warm, …)": appended to the bridge status once the story is ready.
+    private var readyNote: String {
+        guard !readyElapsed.isEmpty else {
+            return ""
+        }
+        let timing = story?.timingNote ?? ""
+        let again = readyAgainCount > 0 ? "; started again \(readyAgainCount)x" : ""
+        return " (ready in \(readyElapsed)s; \(timing)\(again))"
+    }
 
     private(set) var slideCount = 0
     private(set) var currentSlide = 0
@@ -213,11 +225,15 @@ final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureR
             isReady = true
             revealStory()
             slideCount = intValue(body["slides"]) ?? slideCount
-            // "(ready in 0.3s)": from asking for the story to the story being on screen.
-            let elapsed = String(format: "%.1f", Date().timeIntervalSince(playStartedAt))
-            readyNote = " (ready in \(elapsed)s)"
+            // "ready in 0.3s": from asking for the story to the story being on screen.
+            // Only the first report counts, should the page ever start the story again.
+            if readyElapsed.isEmpty {
+                readyElapsed = String(format: "%.1f", Date().timeIntervalSince(playStartedAt))
+            } else {
+                readyAgainCount += 1
+            }
             setStatus("ready \(slideCount)\(readyNote)")
-            NSLog("[story] ready after %@ s, %ld slides", elapsed, slideCount)
+            NSLog("[story] ready after %@ s, %ld slides", readyElapsed, slideCount)
         case "slide":
             revealStory()
             currentSlide = intValue(body["index"]) ?? currentSlide

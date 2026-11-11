@@ -218,7 +218,8 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         guard presentationStyle != .transcript else {
             return
         }
-        StoryWebViewPool.prewarm()
+        // It waits, invisible, at the back of this view until a story takes it.
+        StoryWebViewPool.prewarm(in: view)
     }
 
     private func clearRecents() {

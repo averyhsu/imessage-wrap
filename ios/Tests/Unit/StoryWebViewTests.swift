@@ -146,8 +146,14 @@ final class StoryWebViewTests: XCTestCase {
             "the story never reported ready (messages: \(recorder.messages), failures: \(recorder.failures))"
         )
         let readyTime = Date().timeIntervalSince(asked)
-        print(String(format: "WRAPPED_NOTE warm web view: page loaded in %.2fs ahead of time; story ready %.2fs after it was asked for", loadTime, readyTime))
         XCTAssertTrue(spin(10) { recorder.messages.contains("slide") })
+        // Give a second start, if there were one, time to show up.
+        spin(1.5) { false }
+        let readies = recorder.messages.filter { $0 == "ready" }.count
+        print(String(format: "WRAPPED_NOTE warm web view: page loaded in %.2fs ahead of time; story ready %.2fs after it was asked for; started %ld time(s); %@", loadTime, readyTime, readies, story.timingNote))
+        if story.timingNote.contains("direct") {
+            XCTAssertEqual(readies, 1, "the story must start exactly once (messages: \(recorder.messages))")
+        }
         XCTAssertEqual(ask(story, "String(window.__warm)"), "yes", "handing the recap over must not load the page again")
         XCTAssertEqual(story.ignoredMessages, 0, "messages from the story page itself are all heard")
         XCTAssertTrue(isOnTheStoryPage(story))
@@ -166,6 +172,50 @@ final class StoryWebViewTests: XCTestCase {
         XCTAssertTrue(spin(30) { recorder.messages.contains("ready") }, "a recycled web view should play the next story")
         XCTAssertEqual(ask(story, "String(window.__warm)"), "yes")
         XCTAssertEqual(recorder.failures, [])
+    }
+
+    /// The pool keeps one web view waiting inside a view that is on screen, hands it out
+    /// warm, and takes it back for the next story.
+    func testPoolHandsOutAWarmWebViewAndTakesItBack() throws {
+        let window = try XCTUnwrap(hostWindow(), "the app has no window")
+        // A view that is on screen, behind everything, for the web view to wait in.
+        let host = UIView(frame: window.bounds)
+        window.insertSubview(host, at: 0)
+        defer {
+            host.removeFromSuperview()
+        }
+        StoryWebViewPool.prewarm(in: host)
+        XCTAssertTrue(spin(60) { StoryWebViewPool.isWarm }, "the waiting web view never finished loading the story page")
+
+        let story = StoryWebViewPool.take()
+        XCTAssertTrue(story.isPageLoaded, "the pool should hand out the web view that was waiting")
+        XCTAssertFalse(StoryWebViewPool.isWarm)
+        XCTAssertNil(story.webView.superview, "it leaves the place where it waited")
+        XCTAssertEqual(story.webView.alpha, 1)
+        XCTAssertTrue(story.webView.isUserInteractionEnabled)
+
+        let recorder = Recorder()
+        story.owner = recorder
+        story.webView.frame = window.bounds
+        window.addSubview(story.webView)
+        let asked = Date()
+        story.play(payload: DemoRecap.payload)
+        XCTAssertTrue(spin(30) { recorder.messages.contains("ready") }, "the warm web view never reported ready")
+        print(String(format: "WRAPPED_NOTE pooled web view: story ready %.2fs after it was asked for; %@", Date().timeIntervalSince(asked), story.timingNote))
+
+        StoryWebViewPool.recycle(story)
+        XCTAssertNil(story.owner)
+        XCTAssertTrue(StoryWebViewPool.isWarm, "a recycled web view waits for the next story")
+        XCTAssertTrue(story.webView.superview === host, "it waits inside the view it was given")
+        XCTAssertEqual(story.webView.alpha, 0, "and it is invisible there")
+        XCTAssertFalse(story.webView.isUserInteractionEnabled)
+        spin(1.0) { false }
+        XCTAssertEqual(ask(story, "String(window.location.hash)"), "", "the recap is gone from the page")
+
+        let again = StoryWebViewPool.take()
+        XCTAssertTrue(again === story, "the same web view is handed out again")
+        // Leave it waiting for the app.
+        StoryWebViewPool.recycle(again)
     }
 
     /// Whatever script asks the web view to go elsewhere, it stays on the bundled page.
