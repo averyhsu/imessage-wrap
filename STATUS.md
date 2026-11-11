@@ -44,6 +44,13 @@ the real API).
 CI on this branch: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`. Results:
 [Actions](https://github.com/averyhsu/imessage-wrap/actions).
 
+State of CI when this was written: every workflow is green on the last commit that touched
+its code, with one exception. The final story fix (`072bdc3`, one small change to how the
+page reacts to a new link) triggered `Web story`, `Make page` and `iOS` runs that GitHub had
+still not started more than an hour later. All suites were run on that exact commit here and
+passed (story 3,081 browser checks, maker 565, Python 447, JavaScript 220). If those three
+runs are not green when you read this, re-run them from the Actions page.
+
 ## What is not proven
 
 None of this has been claimed as working. It needs real devices, or your yes.
