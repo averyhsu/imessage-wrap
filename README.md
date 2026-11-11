@@ -3,9 +3,14 @@
 **Your group chat's year in review.** Like Spotify Wrapped, for iMessage group chats: one
 person makes the recap, drops a link in the chat, and everyone taps through the same story.
 
+<p align="center">
+  <img src="docs/media/demo-story.gif" width="300" alt="The recap playing: a cover, the message count, the 24-hour clock, the chat's personality, the busiest month, the message of the year and the awards">
+</p>
+
 ![Twelve slides of the story: total messages, the 24-hour clock, the chat's personality, top senders, message of the year, awards and the share card](docs/screenshots/web/overview.png)
 
-Every name, number and message in this repository is invented.
+Every name, number and message in this repository is invented. The full recording is
+[docs/media/demo-story.mp4](docs/media/demo-story.mp4).
 
 ## What you get
 
