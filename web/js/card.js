@@ -44,7 +44,8 @@
     if (!name) return '?';
     if (name.indexOf('@') > 0) return Array.from(name)[0].toUpperCase() + '…';
     var digits = name.replace(/\D/g, '');
-    if (digits.length >= 7 && digits.length >= name.replace(/\s/g, '').length - 4) return '…' + digits.slice(-2);
+    // Same shape as the engines' mask (docs/SCHEMA.md 2): an ellipsis and the last four digits.
+    if (digits.length >= 7) return '…' + digits.slice(-4);
     var first = name.split(/\s+/)[0];
     return F.truncate(first, 16);
   }

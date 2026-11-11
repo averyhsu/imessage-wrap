@@ -31,9 +31,10 @@ test('cardName: people who arrive masked stay as they are (SCHEMA §2)', () => {
 });
 
 test('cardName: a raw handle from older data never reaches the card', () => {
-  assert.equal(Card.cardName('+1 (555) 010-0001'), '…01');
-  assert.equal(Card.cardName('+15550100001'), '…01');
-  assert.equal(Card.cardName('555 010 0001'), '…01');
+  assert.equal(Card.cardName('+1 (555) 010-0001'), '…0001');
+  assert.equal(Card.cardName('+15550100001'), '…0001');
+  assert.equal(Card.cardName('555 010 0001'), '…0001');
+  assert.equal(Card.cardName('Maya +15550100123'), '…0123', 'a number inside a label is masked too');
   assert.equal(Card.cardName('someone@example.com'), 'S…');
   for (const raw of ['+1 (555) 010-0001', '+15550100001', 'someone@example.com']) {
     const shown = Card.cardName(raw);
