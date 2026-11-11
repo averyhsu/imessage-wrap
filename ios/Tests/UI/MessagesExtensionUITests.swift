@@ -1,17 +1,21 @@
+import UIKit
 import XCTest
 
 /// The REAL extension inside the Simulator's Messages app.
 ///
-/// `testLiveBubble…`: open a conversation, open the app drawer, launch the extension, stage
-/// and send the demo recap, check the live bubble, tap it and watch the story play in the
-/// expanded style, then close it.
-/// `testTemplateCard…`: the same with the template layout only, which is the card people
-/// without the app (and Macs) see.
+/// `testCardFlowInsideMessages` is the product: open a conversation, open the app drawer,
+/// launch the extension, paste a recap link, send the card, tap it and watch the story play
+/// in the expanded style, close it, see the recap under "Your recaps", play the sample
+/// (which stages nothing) and clear the list. Its screenshots are named `messages-…`.
+///
+/// `testExperimentalLiveLayoutInsideMessages` exercises the live bubble layout, which is
+/// experimental and off by default (`WrappedConfig.useLiveLayout`). Its screenshots are
+/// named `experimental-live-…` and are not part of the product.
 ///
 /// Apple documents no automation for Messages, so these drive `com.apple.MobileSMS` by its
 /// accessibility tree as found on iOS 26 (the "add" button, the drawer list, "sendButton").
-/// Every step is screenshotted and its hierarchy dumped; CI runs this class in its own
-/// step that is allowed to fail, and the main test run skips it.
+/// Every step is screenshotted and its hierarchy dumped; CI runs each test in its own step
+/// that is allowed to fail, and the main test run skips this class.
 final class MessagesExtensionUITests: XCTestCase {
     private let messages = XCUIApplication(bundleIdentifier: "com.apple.MobileSMS")
     private let productName = "Threadback"
@@ -26,9 +30,10 @@ final class MessagesExtensionUITests: XCTestCase {
         Thread.sleep(forTimeInterval: seconds)
     }
 
+    /// Screenshot plus accessibility dump, both under the same name.
     private func checkpoint(_ name: String) {
-        UIArtifacts.snap("messages-" + name, in: self)
-        UIArtifacts.dumpToFile(messages, name: "messages-" + name)
+        UIArtifacts.snap(name, in: self)
+        UIArtifacts.dumpToFile(messages, name: name)
     }
 
     private func anyElement(labelContaining text: String) -> XCUIElement {
@@ -64,7 +69,7 @@ final class MessagesExtensionUITests: XCTestCase {
         }
     }
 
-    /// The story's bridge status inside Messages ("ready 12 (ready in 2.1s)", "slide 2/12 …",
+    /// The story's bridge status inside Messages ("ready 12 (ready in 0.6s)", "slide 2/12 …",
     /// "loaded, not ready: …", "error: …"). Debug builds of the extension expose it as
     /// the invisible label `story.bridge`.
     private func waitForStory(timeout: TimeInterval, until matches: (String) -> Bool) -> String {
@@ -121,7 +126,7 @@ final class MessagesExtensionUITests: XCTestCase {
                 break
             }
         }
-        checkpoint(prefix + "1-conversation-list")
+        checkpoint(prefix + "01-conversation-list")
 
         let cell = messages.cells.element(boundBy: index)
         guard cell.waitForExistence(timeout: 8) else {
@@ -142,7 +147,7 @@ final class MessagesExtensionUITests: XCTestCase {
             messages.buttons["browserButton"]
         ], timeout: 8)
         guard openedDrawer else {
-            checkpoint(prefix + "2-no-app-drawer")
+            checkpoint(prefix + "02-no-app-drawer")
             XCTFail("could not open the Messages app drawer")
             return false
         }
@@ -158,49 +163,48 @@ final class MessagesExtensionUITests: XCTestCase {
             ours = anyElement(labelContaining: productName)
         }
         guard ours.exists else {
-            checkpoint(prefix + "2-app-drawer-without-us")
+            checkpoint(prefix + "02-app-drawer-without-us")
             XCTFail("'\(productName)' is not in the Messages app drawer")
             return false
         }
         UIArtifacts.note("messages: our app in the drawer: id='\(ours.identifier)' label='\(ours.label)' after \(swipes) swipe(s)")
-        checkpoint(prefix + "2-app-drawer")
+        checkpoint(prefix + "02-app-drawer")
         if ours.isHittable {
             ours.tap()
         } else {
             ours.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
 
-        let sawLauncher = messages.buttons["launcher.sendDemo"].waitForExistence(timeout: 25)
+        let sawLauncher = messages.buttons["launcher.paste"].waitForExistence(timeout: 25)
         UIArtifacts.note("messages: launcher visible=\(sawLauncher)")
         XCTAssertTrue(sawLauncher, "our launcher did not appear inside Messages")
         pause(1)
-        checkpoint(prefix + "3-launcher-compact")
+        checkpoint(prefix + "03-launcher")
         return sawLauncher
     }
 
-    /// Waits for the staged bubble (Messages shows its send button), screenshots it, sends.
-    private func sendStagedBubble(prefix: String) -> Bool {
-        let sendButton = messages.buttons["sendButton"]
-        let staged = sendButton.waitForExistence(timeout: 15)
-        UIArtifacts.note("messages: bubble staged (send button present)=\(staged)")
-        XCTAssertTrue(staged, "no bubble was staged in the input field")
+    /// Whether Messages shows a staged bubble (its send button appears).
+    private func waitForStagedBubble(timeout: TimeInterval) -> Bool {
+        return messages.buttons["sendButton"].waitForExistence(timeout: timeout)
+    }
+
+    /// Screenshots the staged bubble and sends it.
+    private func sendStagedBubble(named name: String) {
         pause(2)
-        checkpoint(prefix + "4-bubble-staged")
-        if staged {
-            sendButton.tap()
-        }
-        return staged
+        checkpoint(name)
+        messages.buttons["sendButton"].tap()
     }
 
     /// Waits for the story to report over the bridge, screenshots it, taps through two
-    /// more slides and uses the page's close control.
-    private func watchStoryPlay(prefix: String) {
+    /// more slides and uses the page's close control. `names` are the four checkpoints:
+    /// story, next slide, another slide, after close.
+    private func watchStoryPlay(names: [String]) {
         let status = waitForStory(timeout: 90) { status in
             return self.isPlaying(status) || status.hasPrefix("error")
         }
         UIArtifacts.note("messages: story bridge status after the tap: \(status)")
         pause(2.5)
-        checkpoint(prefix + "6-story-expanded")
+        checkpoint(names[0])
         XCTAssertTrue(isPlaying(status), "the story never reported ready inside Messages (last status: \(status))")
         guard isPlaying(status) else {
             return
@@ -215,25 +219,150 @@ final class MessagesExtensionUITests: XCTestCase {
             seen.append(waitForStory(timeout: 3) { _ in
                 return true
             })
-            checkpoint(prefix + (step == 1 ? "7-story-next-slide" : "8-story-another-slide"))
+            checkpoint(names[step])
         }
         UIArtifacts.note("messages: story bridge statuses while tapping: \(seen)")
-
-        // The page's own close control (top right) asks native to return to compact.
-        messages.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.151)).tap()
-        let backToCompact = messages.buttons["launcher.sendDemo"].waitForExistence(timeout: 12)
-        UIArtifacts.note("messages: the story's close control returned to the compact launcher=\(backToCompact)")
+        closeStory()
         pause(1.5)
-        checkpoint(prefix + "9-after-close")
+        checkpoint(names[3])
     }
 
-    // MARK: Tests
+    /// The page's own close control (top right) asks native to return to compact.
+    @discardableResult
+    private func closeStory() -> Bool {
+        messages.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.151)).tap()
+        let backToCompact = messages.buttons["launcher.paste"].waitForExistence(timeout: 12)
+        UIArtifacts.note("messages: the story's close control returned to the compact launcher=\(backToCompact)")
+        return backToCompact
+    }
 
-    func testLiveBubbleInsideMessages() throws {
-        guard openLauncherInConversation(0, prefix: "live-") else {
+    // MARK: The product: paste a recap link, send the card, tap it
+
+    func testCardFlowInsideMessages() throws {
+        // What a person does first: copy their recap link somewhere else.
+        UIPasteboard.general.string = TestRecap.link
+        defer {
+            UIPasteboard.general.string = ""
+        }
+        guard openLauncherInConversation(0, prefix: "messages-") else {
             return
         }
-        // A debug-only control stages the demo as a live bubble whatever the default
+
+        // Paste it. iOS asks before an app reads what another app copied.
+        messages.buttons["launcher.paste"].tap()
+        let asked = PastePermission.allowIfAsked(app: messages, in: self, snapshotName: "messages-04-ios-asks-before-pasting")
+        UIArtifacts.note("messages: iOS asked for permission to paste=\(asked)")
+        let pasted = waitForStagedBubble(timeout: 15)
+        UIArtifacts.note("messages: card staged by pasting the link=\(pasted)")
+        if !pasted {
+            checkpoint("messages-05-paste-did-not-stage")
+            let notice = messages.staticTexts["launcher.notice"]
+            UIArtifacts.note("messages: launcher notice after paste='\(notice.exists ? notice.label : "(none)")'")
+            XCTFail("pasting the recap link did not stage a card")
+            // Carry on with the sample card, staged by a debug-only control, so the rest
+            // of the flow is still exercised.
+            let hook = messages.buttons["launcher.sendDemoTemplate"]
+            guard hook.waitForExistence(timeout: 5) else {
+                return
+            }
+            hook.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+            guard waitForStagedBubble(timeout: 15) else {
+                XCTFail("no card was staged in the input field")
+                return
+            }
+        }
+        sendStagedBubble(named: "messages-05-card-staged")
+        pause(5)
+        checkpoint("messages-06-card-sent")
+
+        // The card is Messages' own bubble; its label carries our caption and subcaption
+        // ("Sunday Hikers · 2026 in review, 13,018 messages · Tap to play, 1 image"). The
+        // launcher below it lists the same recap, so match on both parts. The newest card
+        // is the last match.
+        let predicate = NSPredicate(
+            format: "label CONTAINS[c] %@ AND label CONTAINS[c] %@ AND identifier != %@",
+            "in review", "Tap to play", "bubble.recap"
+        )
+        let cards = messages.descendants(matching: .any).matching(predicate)
+        let sawCard = cards.firstMatch.waitForExistence(timeout: 10)
+        if sawCard {
+            let card = cards.element(boundBy: max(0, cards.count - 1))
+            UIArtifacts.note("messages: card: \(cards.count) match(es), tapping type=\(card.elementType.rawValue) id='\(card.identifier)' label='\(card.label)'")
+            if pasted {
+                XCTAssertTrue(card.label.contains(TestRecap.chatName), "the card should carry the pasted recap's caption, but reads '\(card.label)'")
+                XCTAssertFalse(card.label.contains("Sample"), "a person's own recap is not labelled as a sample")
+            }
+            if card.isHittable {
+                card.tap()
+            } else {
+                card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
+            }
+        } else {
+            // No element carries the caption: tap the newest bubble in the transcript.
+            let bubbles = messages.collectionViews["TranscriptCollectionView"].cells
+            let count = bubbles.count
+            UIArtifacts.note("messages: card not found by its caption; tapping the last of \(count) transcript cell(s)")
+            XCTAssertGreaterThan(count, 0, "the card did not appear in the transcript")
+            guard count > 0 else {
+                return
+            }
+            bubbles.element(boundBy: count - 1).coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.4)).tap()
+        }
+        watchStoryPlay(names: [
+            "messages-07-story-plays",
+            "messages-08-story-next-slide",
+            "messages-09-story-another-slide",
+            "messages-10-closed-recap-is-kept"
+        ])
+
+        // The recap the person pasted and sent is now under "Your recaps".
+        let row = messages.buttons["recents.play"]
+        if pasted {
+            let listed = row.waitForExistence(timeout: 8)
+            UIArtifacts.note("messages: the sent recap is listed under Your recaps=\(listed) label='\(listed ? row.label : "")'")
+            XCTAssertTrue(listed, "the recap that was pasted and sent should be listed in the launcher")
+        }
+
+        // "See a sample" plays the built-in sample and puts nothing into the conversation.
+        let sample = messages.buttons["launcher.seeSample"]
+        guard sample.waitForExistence(timeout: 8) else {
+            XCTFail("the launcher has no 'See a sample' control")
+            return
+        }
+        sample.tap()
+        let sampleStatus = waitForStory(timeout: 90) { status in
+            return self.isPlaying(status) || status.hasPrefix("error")
+        }
+        UIArtifacts.note("messages: sample story bridge status: \(sampleStatus)")
+        pause(2.5)
+        checkpoint("messages-11-sample-plays")
+        XCTAssertTrue(isPlaying(sampleStatus), "the sample did not play (last status: \(sampleStatus))")
+        closeStory()
+        pause(1.5)
+        let stagedBySample = messages.buttons["sendButton"].exists
+        UIArtifacts.note("messages: seeing the sample staged a message=\(stagedBySample)")
+        XCTAssertFalse(stagedBySample, "seeing the sample must not put anything into the conversation")
+
+        // Clear forgets the recaps.
+        let clear = messages.buttons["recents.clear"]
+        if pasted, clear.waitForExistence(timeout: 5) {
+            clear.tap()
+            pause(1.5)
+            let stillListed = messages.buttons["recents.play"].exists
+            UIArtifacts.note("messages: a recap is still listed after Clear=\(stillListed)")
+            XCTAssertFalse(stillListed, "Clear should forget the recaps")
+            checkpoint("messages-12-your-recaps-cleared")
+        }
+    }
+
+    // MARK: Experimental (off by default): the live bubble layout
+
+    func testExperimentalLiveLayoutInsideMessages() throws {
+        let prefix = "experimental-live-"
+        guard openLauncherInConversation(0, prefix: prefix) else {
+            return
+        }
+        // A debug-only control stages the sample as a live bubble whatever the default
         // layout is (`WrappedConfig.useLiveLayout`).
         let hook = messages.buttons["launcher.sendDemoLive"]
         guard hook.waitForExistence(timeout: 5) else {
@@ -241,14 +370,18 @@ final class MessagesExtensionUITests: XCTestCase {
             return
         }
         hook.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        guard sendStagedBubble(prefix: "live-") else {
+        let staged = waitForStagedBubble(timeout: 15)
+        UIArtifacts.note("messages: live bubble staged (send button present)=\(staged)")
+        XCTAssertTrue(staged, "no bubble was staged in the input field")
+        guard staged else {
             return
         }
+        sendStagedBubble(named: prefix + "04-bubble-staged")
 
         let bubble = messages.buttons["bubble.recap"]
         let sawBubble = bubble.waitForExistence(timeout: 20)
         pause(4)
-        checkpoint("live-5-bubble-sent")
+        checkpoint(prefix + "05-bubble-sent")
         XCTAssertTrue(sawBubble, "the live recap bubble did not appear in the transcript")
         guard sawBubble else {
             return
@@ -262,7 +395,12 @@ final class MessagesExtensionUITests: XCTestCase {
         )
 
         bubble.tap()
-        watchStoryPlay(prefix: "live-")
+        watchStoryPlay(names: [
+            prefix + "06-story-plays",
+            prefix + "07-story-next-slide",
+            prefix + "08-story-another-slide",
+            prefix + "09-after-close"
+        ])
 
         // The Simulator's two conversations are the two ends of one simulated chat: what
         // was sent in one arrives in the other. That bubble is drawn by a transcript
@@ -286,69 +424,23 @@ final class MessagesExtensionUITests: XCTestCase {
         UIArtifacts.note("messages: other end of the chat: opening '\(other.label)'")
         other.tap()
         pause(5)
-        checkpoint("live-91-other-end-of-the-chat")
+        checkpoint(prefix + "10-other-end-of-the-chat")
         let received = messages.buttons["bubble.recap"]
         let sawReceived = received.waitForExistence(timeout: 10)
-        UIArtifacts.note("messages: received bubble present=\(sawReceived)")
+        UIArtifacts.note("messages: received live bubble present=\(sawReceived)")
         guard sawReceived else {
             return
         }
         pause(6)
-        UIArtifacts.note("messages: received bubble label='\(received.label)'")
-        UIArtifacts.note("messages: received bubble notes='\(String(describing: received.value))'")
-        checkpoint("live-92-received-bubble")
+        UIArtifacts.note("messages: received live bubble label='\(received.label)'")
+        UIArtifacts.note("messages: received live bubble notes='\(String(describing: received.value))'")
+        checkpoint(prefix + "11-received-bubble")
         received.tap()
         let status = waitForStory(timeout: 90) { status in
             return self.isPlaying(status) || status.hasPrefix("error")
         }
-        UIArtifacts.note("messages: received bubble tapped, story bridge status: \(status)")
+        UIArtifacts.note("messages: received live bubble tapped, story bridge status: \(status)")
         pause(2.5)
-        checkpoint("live-93-received-bubble-plays")
-    }
-
-    func testTemplateCardInsideMessages() throws {
-        guard openLauncherInConversation(1, prefix: "template-") else {
-            return
-        }
-        // A debug-only control stages the demo as a template card whatever the default is.
-        let hook = messages.buttons["launcher.sendDemoTemplate"]
-        guard hook.waitForExistence(timeout: 5) else {
-            XCTFail("the debug control for template cards is missing")
-            return
-        }
-        hook.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-        guard sendStagedBubble(prefix: "template-") else {
-            return
-        }
-        pause(5)
-        checkpoint("template-5-card-sent")
-
-        // The card is Messages' own bubble; its caption carries our text
-        // ("Dinner Club 🍝 · 2026 in review").
-        // Live bubbles from the other test may be in the transcript too; they carry the
-        // identifier "bubble.recap", the card does not. The newest card is the last match.
-        let predicate = NSPredicate(format: "label CONTAINS[c] %@ AND identifier != %@", "2026 in review", "bubble.recap")
-        let cards = messages.descendants(matching: .any).matching(predicate)
-        let sawCard = cards.firstMatch.waitForExistence(timeout: 10)
-        if sawCard {
-            let card = cards.element(boundBy: max(0, cards.count - 1))
-            UIArtifacts.note("messages: template card: \(cards.count) match(es), tapping type=\(card.elementType.rawValue) id='\(card.identifier)' label='\(card.label)'")
-            if card.isHittable {
-                card.tap()
-            } else {
-                card.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.4)).tap()
-            }
-        } else {
-            // No element carries the caption: tap the newest bubble in the transcript.
-            let bubbles = messages.collectionViews["TranscriptCollectionView"].cells
-            let count = bubbles.count
-            UIArtifacts.note("messages: template card not found by its caption; tapping the last of \(count) transcript cell(s)")
-            XCTAssertGreaterThan(count, 0, "the template card did not appear in the transcript")
-            guard count > 0 else {
-                return
-            }
-            bubbles.element(boundBy: count - 1).coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.4)).tap()
-        }
-        watchStoryPlay(prefix: "template-")
+        checkpoint(prefix + "12-received-bubble-plays")
     }
 }

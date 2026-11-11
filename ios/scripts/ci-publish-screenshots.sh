@@ -63,21 +63,41 @@ main() {
     echo "- Story shown in the app: the **${WEB_SOURCE:-unknown}** web story"
     echo "- Test results and notes of that run: [TEST-RESULTS.txt](TEST-RESULTS.txt)"
     echo "- Screen recordings: every run uploads full-size ones as the \`ios-video\` artifact."
-    echo "  Compressed copies (\`app-demo-story.mp4\`, the demo story in the app, and"
-    echo "  \`messages-extension-3x.mp4\`, the walkthrough inside Messages at 3x speed) are"
+    echo "  Compressed copies (\`app-demo-story.mp4\`, the sample story in the app, and"
+    echo "  \`messages-card-flow-3x.mp4\`, the walkthrough inside Messages at 3x speed) are"
     echo "  committed here only when a run is asked to, so they can be older than the images."
     echo ""
     echo "What the file names mean:"
     echo ""
     echo "| Prefix | What it is |"
     echo "|--------|------------|"
+    echo "| \`messages-\` | The real Messages app in the Simulator, in order: paste a recap link, send the card, tap it, the story plays, close, play the sample, clear. This is the product. |"
     echo "| \`app-\` | The containing app on the Simulator, captured by UI tests. |"
     echo "| \`simctl-\` | The containing app, launched and captured with \`xcrun simctl\`. |"
     echo "| \`gallery-\` | The extension's native views hosted in the app's debug gallery. **Not Messages.** |"
-    echo "| \`render-\` | Offscreen renders from unit tests (share card, live bubble). **Not Messages.** |"
-    echo "| \`messages-\` | The real Messages app in the Simulator (automation attempt; see the test results for how far it got). |"
+    echo "| \`render-\` | The share card, drawn offscreen by unit tests. **Not Messages.** |"
+    echo "| \`experimental-\` | The live bubble layout: experimental, **off by default, not part of the product**. Listed last, under its own heading. |"
     echo ""
-    for file in "$stage"/*.jpg; do
+    echo "All chats, names, numbers and messages shown are invented."
+    echo ""
+    for file in "$stage"/messages-*.jpg "$stage"/app-*.jpg "$stage"/simctl-*.jpg "$stage"/gallery-*.jpg "$stage"/render-*.jpg; do
+      name="$(basename "$file")"
+      echo "### ${name%.jpg}"
+      echo ""
+      echo "<img src=\"$name\" width=\"300\" alt=\"${name%.jpg}\">"
+      echo ""
+    done
+    local experimental=0
+    for file in "$stage"/experimental-*.jpg; do
+      if [ "$experimental" -eq 0 ]; then
+        echo "## Experimental: the live bubble layout (off by default, not part of the product)"
+        echo ""
+        echo "The app sends a card (above). A live, native bubble is an experiment kept behind a"
+        echo "switch that is off: in the Simulator a received live bubble is handed no message by"
+        echo "Messages, so it cannot show the recap. These captures only track that experiment."
+        echo ""
+        experimental=1
+      fi
       name="$(basename "$file")"
       echo "### ${name%.jpg}"
       echo ""
@@ -97,6 +117,10 @@ main() {
     keep="$(mktemp -d)"
     if [ "$have_recordings" -eq 0 ] && [ -d "$dest" ]; then
       for file in "$dest"/*.mp4; do
+        # An older walkthrough that also showed the experimental live bubble is not kept.
+        if [ "$(basename "$file")" = "messages-extension-3x.mp4" ]; then
+          continue
+        fi
         cp "$file" "$keep/"
       done
     fi

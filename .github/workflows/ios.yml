@@ -173,18 +173,19 @@ jobs:
           xcrun simctl spawn "$UDID" pluginkit -m -v -p com.apple.message-payload-provider 2>&1 | grep -i "averyhsu" || echo "our extension is NOT registered with pluginkit"
           ls -la "$SHOTS" "$OUT/video"
 
-      # Stretch goal: the real extension inside the Simulator's Messages app. Apple documents
-      # no automation for this, so the step may fail without failing the job; whatever it
-      # manages to capture is published with a "messages-" prefix.
-      - name: "Stage 3 (stretch): the extension inside Messages"
+      # The real extension inside the Simulator's Messages app: paste a recap link, send the
+      # card, tap it, watch the story play. Apple documents no automation for Messages, so
+      # the step may fail without failing the job; whatever it manages to capture is
+      # published with a "messages-" prefix.
+      - name: "The extension inside Messages: the card flow"
         id: messages
         continue-on-error: true
-        timeout-minutes: 18
+        timeout-minutes: 15
         env:
           UDID: ${{ steps.sim.outputs.udid }}
           TEST_RUNNER_WRAPPED_ARTIFACTS_DIR: ${{ github.workspace }}/build/out/screenshots
         run: |
-          xcrun simctl io "$UDID" recordVideo --codec h264 --force "$OUT/video/messages-extension.mp4" &
+          xcrun simctl io "$UDID" recordVideo --codec h264 --force "$OUT/video/messages-card-flow.mp4" &
           RECORDER=$!
           STATUS=0
           ios/scripts/ci-xcodebuild.sh "$OUT/logs/messages.log" \
@@ -194,11 +195,36 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" \
             -derivedDataPath "$DERIVED" \
             -resultBundlePath "$OUT/Messages.xcresult" \
-            -only-testing:WrappedUITests/MessagesExtensionUITests || STATUS=$?
+            -only-testing:WrappedUITests/MessagesExtensionUITests/testCardFlowInsideMessages || STATUS=$?
           kill -INT "$RECORDER" || true
           wait "$RECORDER" || true
           if ! ls "$SHOTS"/messages-*.png > /dev/null 2>&1 && [ -d "$OUT/Messages.xcresult" ]; then
             python3 ios/scripts/ci-export-attachments.py "$OUT/Messages.xcresult" "$SHOTS" || true
+          fi
+          exit "$STATUS"
+
+      # Not the product: the live bubble layout is experimental and off by default. This
+      # keeps an eye on how Messages treats it; its screenshots carry an "experimental-"
+      # prefix and no recording of it is published.
+      - name: "Experimental (off by default): the live bubble layout inside Messages"
+        id: experimental
+        continue-on-error: true
+        timeout-minutes: 15
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+          TEST_RUNNER_WRAPPED_ARTIFACTS_DIR: ${{ github.workspace }}/build/out/screenshots
+        run: |
+          STATUS=0
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/experimental.log" \
+            test-without-building \
+            -project ios/Wrapped.xcodeproj \
+            -scheme Wrapped \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED" \
+            -resultBundlePath "$OUT/Experimental.xcresult" \
+            -only-testing:WrappedUITests/MessagesExtensionUITests/testExperimentalLiveLayoutInsideMessages || STATUS=$?
+          if ! ls "$SHOTS"/experimental-live-*.png > /dev/null 2>&1 && [ -d "$OUT/Experimental.xcresult" ]; then
+            python3 ios/scripts/ci-export-attachments.py "$OUT/Experimental.xcresult" "$SHOTS" || true
           fi
           exit "$STATUS"
 
@@ -220,18 +246,25 @@ jobs:
             fi
             echo ""
             echo "== Notes printed by tests"
-            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-600 || true
+            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-600 || true
             echo ""
-            echo "== Extension inside the Simulator's Messages app (automation attempt, allowed to fail)"
+            echo "== The extension inside the Simulator's Messages app: the card flow (automation of an undocumented UI, allowed to fail)"
             if [ -f "$OUT/logs/messages.log" ]; then
               grep -E "Test Case .* (passed|failed)|error:|\*\* TEST" "$OUT/logs/messages.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-400 || true
+            else
+              echo "not run"
+            fi
+            echo ""
+            echo "== Experimental, off by default, not the product: the live bubble layout inside Messages (allowed to fail)"
+            if [ -f "$OUT/logs/experimental.log" ]; then
+              grep -E "Test Case .* (passed|failed)|error:|\*\* TEST" "$OUT/logs/experimental.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-400 || true
             else
               echo "not run"
             fi
           } > "$SHOTS/TEST-RESULTS.txt"
           cat "$SHOTS/TEST-RESULTS.txt"
 
-      # A small copy of the demo-story recording for the repository. On demand only (the
+      # Small copies of the screen recordings for the repository. On demand only (the
       # commit message contains "publish-recording", or a manual run), because it needs
       # ffmpeg and adds a binary to the history.
       - name: Compress the screen recording (on demand)
@@ -250,10 +283,10 @@ jobs:
               -an -movflags +faststart "$OUT/recordings/app-demo-story.mp4" || true
           fi
           # The Messages walkthrough is minutes of mostly waiting: play it back at 3x.
-          if [ "$MESSAGES_OUTCOME" = "success" ] && [ -f "$OUT/video/messages-extension.mp4" ]; then
-            ffmpeg -loglevel error -y -i "$OUT/video/messages-extension.mp4" \
+          if [ "$MESSAGES_OUTCOME" = "success" ] && [ -f "$OUT/video/messages-card-flow.mp4" ]; then
+            ffmpeg -loglevel error -y -i "$OUT/video/messages-card-flow.mp4" \
               -vf "setpts=PTS/3,scale=420:-2,fps=20" -c:v libx264 -crf 33 -preset slow -pix_fmt yuv420p \
-              -an -movflags +faststart "$OUT/recordings/messages-extension-3x.mp4" || true
+              -an -movflags +faststart "$OUT/recordings/messages-card-flow-3x.mp4" || true
           fi
           ls -la "$OUT/recordings"
 
@@ -273,7 +306,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           cd "$OUT"
-          for bundle in Wrapped.xcresult Messages.xcresult; do
+          for bundle in Wrapped.xcresult Messages.xcresult Experimental.xcresult; do
             if [ -d "$bundle" ]; then
               ditto -c -k --keepParent "$bundle" "logs/$bundle.zip"
             fi
@@ -311,6 +344,7 @@ jobs:
           SIM_OS: ${{ steps.sim.outputs.os }}
           WEB_SOURCE: ${{ steps.web.outputs.source }}
           MESSAGES_OUTCOME: ${{ steps.messages.outcome }}
+          EXPERIMENTAL_OUTCOME: ${{ steps.experimental.outcome }}
         run: |
           {
             echo "## iOS build"
@@ -329,13 +363,14 @@ jobs:
             else
               echo "- Tests: not run"
             fi
-            echo "- Stage 3 (extension inside the Simulator's Messages app): ${MESSAGES_OUTCOME:-not run}"
+            echo "- The extension inside the Simulator's Messages app, card flow: ${MESSAGES_OUTCOME:-not run}"
+            echo "- Experimental live bubble layout inside Messages (off by default): ${EXPERIMENTAL_OUTCOME:-not run}"
             echo "- Screenshots: $(ls "$SHOTS" 2>/dev/null | grep -c '\.png$' || true) (published to \`docs/screenshots/ios/\`, full size in the \`ios-screenshots\` artifact)"
             echo "- Recordings: $(ls "$OUT/video" 2>/dev/null | tr '\n' ' ')"
             echo ""
             echo "### Notes printed by tests"
             echo ""
             echo '```'
-            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-400 | head -n 60 || true
+            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-400 | head -n 80 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

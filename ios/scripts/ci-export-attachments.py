@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-PREFIXES = ("app-", "gallery-", "render-", "messages-")
+PREFIXES = ("app-", "gallery-", "render-", "messages-", "experimental-")
 
 
 def main():

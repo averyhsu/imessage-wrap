@@ -1,7 +1,9 @@
+import UIKit
 import XCTest
 
 /// The containing app on the Simulator: home, the story (bundled web page in a WKWebView
-/// plus the native bridge), and the debug gallery of the extension's native views.
+/// plus the native bridge), which links it opens, what it keeps, and the debug gallery of
+/// the extension's native views.
 final class WrappedUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -15,7 +17,7 @@ final class WrappedUITests: XCTestCase {
     }
 
     /// Polls the invisible `story.bridge` label, which mirrors the last embed-bridge event
-    /// ("ready 5", "slide 2/5", "send", "close", "error: …").
+    /// ("ready 12 (ready in 0.4s)", "slide 2/12 …", "send", "close", "error: …").
     private func waitForBridge(
         _ app: XCUIApplication,
         timeout: TimeInterval,
@@ -36,8 +38,12 @@ final class WrappedUITests: XCTestCase {
         return last
     }
 
+    private func isPlaying(_ status: String) -> Bool {
+        return status.hasPrefix("ready") || status.hasPrefix("slide")
+    }
+
     private func slideIndex(_ status: String) -> Int? {
-        // "slide 2/5" → 2
+        // "slide 2/12 (ready in 0.4s)" → 2
         guard status.hasPrefix("slide ") else {
             return nil
         }
@@ -52,7 +58,7 @@ final class WrappedUITests: XCTestCase {
         let app = launch([])
         XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 30))
         XCTAssertEqual(app.staticTexts["home.title"].label, "Threadback")
-        XCTAssertTrue(app.buttons["home.playDemo"].exists)
+        XCTAssertTrue(app.buttons["home.playSample"].exists)
         XCTAssertTrue(app.buttons["home.paste"].exists)
         UIArtifacts.snap("app-01-home", in: self)
 
@@ -61,17 +67,14 @@ final class WrappedUITests: XCTestCase {
         UIArtifacts.snap("app-02-home-how-to", in: self)
     }
 
-    func testDemoStoryPlaysAndAdvances() throws {
+    func testSampleStoryPlaysAndAdvances() throws {
         let app = launch(["--autoplay-demo"])
 
         let first = waitForBridge(app, timeout: 45) { status in
-            return status.hasPrefix("ready") || status.hasPrefix("slide")
+            return self.isPlaying(status)
         }
         UIArtifacts.note("story bridge after load: \(first)")
-        XCTAssertTrue(
-            first.hasPrefix("ready") || first.hasPrefix("slide"),
-            "the story never reported ready over the embed bridge (last status: \(first))"
-        )
+        XCTAssertTrue(isPlaying(first), "the story never reported ready over the embed bridge (last status: \(first))")
         Thread.sleep(forTimeInterval: 1.2)
         UIArtifacts.snap("app-03-story-slide-1", in: self)
 
@@ -93,43 +96,43 @@ final class WrappedUITests: XCTestCase {
         XCTAssertGreaterThanOrEqual(highestIndex, 1, "tapping never advanced the story (statuses: \(seen))")
     }
 
-    func testPlayDemoFromHomeButton() throws {
+    /// From the home screen the story's web view has been warmed up, so the story is on
+    /// screen almost at once. What shows in between is the recap's own cover, never black.
+    func testPlaySampleFromHomeButton() throws {
         let app = launch([])
-        let play = app.buttons["home.playDemo"]
+        let play = app.buttons["home.playSample"]
         XCTAssertTrue(play.waitForExistence(timeout: 30))
+        // Give the warm-up a moment, as a person reading the home screen would.
+        Thread.sleep(forTimeInterval: 6)
         play.tap()
+        // Straight after the tap: the cover or already the story.
+        Thread.sleep(forTimeInterval: 0.25)
+        UIArtifacts.snap("app-10-just-after-tapping-play", in: self)
+
         let status = waitForBridge(app, timeout: 45) { status in
-            return status.hasPrefix("ready") || status.hasPrefix("slide")
+            return self.isPlaying(status)
         }
-        XCTAssertTrue(
-            status.hasPrefix("ready") || status.hasPrefix("slide"),
-            "the story did not start from the home button (last status: \(status))"
-        )
-        XCTAssertFalse(app.buttons["home.playDemo"].isHittable, "the story should cover the home screen")
+        UIArtifacts.note("story started from the home button: \(status)")
+        XCTAssertTrue(isPlaying(status), "the story did not start from the home button (last status: \(status))")
+        XCTAssertFalse(app.buttons["home.playSample"].isHittable, "the story should cover the home screen")
     }
 
-    /// An invented recap ("Link Test", 4,242 messages) encoded per docs/SCHEMA.md §5.
-    private static let linkTestPayload = "VY_BCsIwEER_Jew5SBurQm4qeBK89CYeUrva4CYpTVRK6b-bFCz0tvAeM7MDfEDmHO6NCiAHsMogSDhr-2Il-gAcDJoKOw9yPXJosdOuTiapCimqIhNbiCS4oMgnYtB79cR4F6IQEXm09ZRwnQv2tZqi_6bIsmzkMz64Bc03C3rsF3QXS27TNO-sIh36tCLoQEkuG2TTOydH5L5pB4eK3l0V4aVFizV7dM4wxShqKxjHHw"
-
     func testOpensARecapLinkPassedAtLaunch() throws {
-        let app = launch(["--open-url", "imessagewrapped://recap#w1=" + WrappedUITests.linkTestPayload])
+        let app = launch(["--open-url", "threadback://recap#w1=" + TestRecap.payload])
         let status = waitForBridge(app, timeout: 45) { status in
-            return status.hasPrefix("ready") || status.hasPrefix("slide")
+            return self.isPlaying(status)
         }
-        XCTAssertTrue(
-            status.hasPrefix("ready") || status.hasPrefix("slide"),
-            "a valid recap link should start the story (last status: \(status))"
-        )
+        XCTAssertTrue(isPlaying(status), "a valid recap link should start the story (last status: \(status))")
         Thread.sleep(forTimeInterval: 1.2)
         UIArtifacts.snap("app-08-story-opened-from-link", in: self)
     }
 
-    /// The registered custom scheme, routed by the system: iOS asks "Open in …?" first.
+    /// The registered custom scheme, routed by the system: iOS may ask "Open in …?" first.
     func testCustomURLSchemeOpensARecap() throws {
         let app = launch([])
         XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 30))
 
-        let link = try XCTUnwrap(URL(string: "imessagewrapped://recap#w1=" + WrappedUITests.linkTestPayload))
+        let link = try XCTUnwrap(URL(string: "threadback://recap#w1=" + TestRecap.payload))
         XCUIDevice.shared.system.open(link)
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -141,29 +144,92 @@ final class WrappedUITests: XCTestCase {
         }
 
         let status = waitForBridge(app, timeout: 45) { status in
-            return status.hasPrefix("ready") || status.hasPrefix("slide")
+            return self.isPlaying(status)
         }
-        XCTAssertTrue(
-            status.hasPrefix("ready") || status.hasPrefix("slide"),
-            "an imessagewrapped:// link should open the story (last status: \(status))"
-        )
+        XCTAssertTrue(isPlaying(status), "a threadback:// link should open the story (last status: \(status))")
         Thread.sleep(forTimeInterval: 1.2)
         UIArtifacts.snap("app-09-story-opened-by-url-scheme", in: self)
     }
 
     func testUnreadableLinkStaysOnHomeWithANotice() throws {
-        let app = launch(["--open-url", "imessagewrapped://recap#w1=not-a-real-payload"])
+        let app = launch(["--open-url", "threadback://recap#w1=not-a-real-payload"])
         XCTAssertTrue(app.staticTexts["home.notice"].waitForExistence(timeout: 30))
         XCTAssertEqual(app.staticTexts["home.notice"].label, "That link does not contain a recap.")
+        XCTAssertFalse(app.staticTexts["story.bridge"].exists, "no story should have started")
+    }
+
+    /// A perfectly good recap, but on a link the app does not accept (another host, another
+    /// part of the app's own scheme): it stays on Home.
+    func testLinksFromElsewhereAreNotOpened() throws {
+        for link in [
+            "https://example.com/imessage-wrap/#w1=" + TestRecap.payload,
+            "threadback://settings#w1=" + TestRecap.payload
+        ] {
+            let app = launch(["--open-url", link])
+            XCTAssertTrue(app.staticTexts["home.notice"].waitForExistence(timeout: 30), "expected a notice for \(link.prefix(40))")
+            XCTAssertEqual(app.staticTexts["home.notice"].label, "That link does not contain a recap.")
+            XCTAssertFalse(app.staticTexts["story.bridge"].exists, "no story should have started for \(link.prefix(40))")
+            app.terminate()
+        }
+    }
+
+    /// Pasting a recap link plays it and keeps it under "Your recaps"; Clear forgets it.
+    func testPastedRecapIsKeptAndCanBeCleared() throws {
+        UIPasteboard.general.string = TestRecap.link
+        let app = launch([])
+        let paste = app.buttons["home.paste"]
+        XCTAssertTrue(paste.waitForExistence(timeout: 30))
+        paste.tap()
+        let allowed = PastePermission.allowIfAsked(app: app, in: self)
+        UIArtifacts.note("app: iOS asked for permission to paste=\(allowed)")
+
+        let status = waitForBridge(app, timeout: 45) { status in
+            return self.isPlaying(status)
+        }
+        XCTAssertTrue(isPlaying(status), "pasting a recap link should start the story (last status: \(status))")
+        Thread.sleep(forTimeInterval: 1.0)
+
+        // Leave the story the way a person can at any time: drag it down.
+        let top = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let bottom = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        top.press(forDuration: 0.05, thenDragTo: bottom)
+        let row = app.buttons["recents.play"]
+        let closedByDragging = row.waitForExistence(timeout: 8)
+        UIArtifacts.note("app: dragging the story down closed it=\(closedByDragging)")
+        if !closedByDragging {
+            // The page's own close control (top right).
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.116)).tap()
+        }
+        XCTAssertTrue(row.waitForExistence(timeout: 15), "the pasted recap should be listed under Your recaps")
+        XCTAssertTrue(closedByDragging, "dragging the story down should close it")
+        XCTAssertTrue(row.label.contains(TestRecap.chatName), "unexpected row: \(row.label)")
+        Thread.sleep(forTimeInterval: 0.8)
+        app.swipeUp()
+        Thread.sleep(forTimeInterval: 0.8)
+        UIArtifacts.snap("app-11-home-your-recaps", in: self)
+
+        // It is still there after a relaunch, and Clear forgets it.
+        app.terminate()
+        let again = launch([])
+        XCTAssertTrue(again.buttons["recents.play"].waitForExistence(timeout: 30), "kept across launches")
+        again.swipeUp()
+        let clear = again.buttons["recents.clear"]
+        XCTAssertTrue(clear.waitForExistence(timeout: 5))
+        clear.tap()
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertFalse(again.buttons["recents.play"].exists, "Clear should forget the recap")
+        again.terminate()
+        let afterClear = launch([])
+        XCTAssertTrue(afterClear.buttons["home.paste"].waitForExistence(timeout: 30))
+        XCTAssertFalse(afterClear.buttons["recents.play"].exists, "nothing comes back after Clear")
+        UIPasteboard.general.string = ""
     }
 
     func testDebugGalleryOfExtensionViews() throws {
         let app = launch(["--gallery"])
         XCTAssertTrue(app.staticTexts["gallery.title"].waitForExistence(timeout: 30))
-        XCTAssertTrue(app.buttons["launcher.sendDemo"].waitForExistence(timeout: 5) || app.otherElements["gallery.bubble"].exists)
-        UIArtifacts.snap("gallery-01-card-and-bubble-NOT-MESSAGES", in: self)
-        app.swipeUp()
-        Thread.sleep(forTimeInterval: 0.6)
-        UIArtifacts.snap("gallery-02-launcher-NOT-MESSAGES", in: self)
+        XCTAssertTrue(app.buttons["launcher.paste"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["launcher.seeSample"].exists)
+        UIArtifacts.snap("gallery-01-card-and-launcher-NOT-MESSAGES", in: self)
     }
 }
