@@ -10,7 +10,6 @@ import re
 from typing import Dict, Iterable, List, Optional
 
 _WS = re.compile(r"\s+")
-_PHONE = re.compile(r"^\+?[\d\s().\-]{7,}$")
 
 MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
@@ -81,41 +80,57 @@ def short_date(iso: object) -> str:
     return f"{MONTHS[month - 1]} {day}"
 
 
-def first_name(name: object) -> str:
+def _is_phone(s: str) -> bool:
+    digits = re.sub(r"\D", "", s)
+    return len(digits) >= 7 and len(digits) >= len(re.sub(r"\s", "", s)) - 4
+
+
+def first_name(name: object, digits: int = 2) -> str:
     """The part of a sender name that is safe to print on a shared image.
 
-    - a contact name -> its first word
-    - a phone number -> its last four digits behind dots (never the full number)
-    - an e-mail address -> the part before the ``@``
+    The same rules as the web story's card (``cardName`` in web/js/card.js):
+    - a contact name -> its first word (at most 16 characters)
+    - a phone number -> its last two digits behind an ellipsis, never the number
+    - an e-mail address -> its first letter and an ellipsis
     """
     s = clean(name)
     if not s:
-        return "Someone"
-    if "@" in s and " " not in s:
-        return s.split("@", 1)[0][:20] or "Someone"
-    if _PHONE.match(s):
-        digits = re.sub(r"\D", "", s)
-        return "···" + digits[-4:]
-    return s.split(" ", 1)[0]
+        return "?"
+    if s.find("@") > 0:
+        return s[0].upper() + "…"
+    if _is_phone(s):
+        return "…" + re.sub(r"\D", "", s)[-digits:]
+    first = s.split(" ", 1)[0]
+    return first if len(first) <= 16 else first[:15] + "…"
 
 
 def display_names(names: Iterable[object]) -> Dict[str, str]:
-    """Map full sender names to short display names, keeping them distinguishable.
+    """Map full sender names to short display names that stay distinguishable.
 
-    Two people who share a first name get a last initial ("Sam K.", "Sam R.").
-    """
-    full: List[str] = [clean(n) for n in names]
-    firsts = [first_name(n) for n in full]
-    out: Dict[str, str] = {}
-    for name, first in zip(full, firsts):
-        shown = first
-        if firsts.count(first) > 1:
-            rest = name.split(" ")[1:] if not _PHONE.match(name) else []
-            initial = next((p[0] for p in rest if p[:1].isalpha()), "")
+    Two people who share a first name get a last initial ("Sam K.", "Sam R."),
+    two unknown numbers ending in the same digits show four digits, and
+    anything still identical gets a number."""
+    full: List[str] = list(dict.fromkeys(clean(n) for n in names))
+    shown = {name: first_name(name) for name in full}
+
+    def clashes() -> List[str]:
+        values = list(shown.values())
+        return [name for name in full if values.count(shown[name]) > 1]
+
+    for name in clashes():
+        if _is_phone(name) and name.find("@") <= 0:
+            shown[name] = first_name(name, digits=4)
+        else:
+            rest = name.split(" ")[1:]
+            initial = next((part[0] for part in rest if part[:1].isalpha()), "")
             if initial:
-                shown = f"{first} {initial.upper()}."
-        out[name] = shown
-    return out
+                shown[name] = f"{first_name(name)} {initial.upper()}."
+    seen: Dict[str, int] = {}
+    for name in clashes():
+        seen[shown[name]] = seen.get(shown[name], 0) + 1
+        if seen[shown[name]] > 1:
+            shown[name] = f"{shown[name]} {seen[shown[name]]}"
+    return shown
 
 
 def peak_hour(stats: dict) -> Optional[int]:

@@ -153,16 +153,22 @@ class CardRender(unittest.TestCase):
         stats["senders"][0]["name"] = "Maya Okafor-Lindqvist"
         stats["senders"][1]["name"] = "+1 (415) 555-0134"
         stats["senders"][2]["name"] = "priya.invented@example.invalid"
-        self.assertEqual([n for n, _s, _m in card._top_senders(stats)], ["Maya", "···0134", "priya.invented"])
+        self.assertEqual([n for n, _s, _m in card._top_senders(stats)], ["Maya", "…34", "P…"])
 
-    def test_hero_bubble_is_blue_and_background_is_not(self):
+    def test_palette_matches_the_web_card(self):
         out = render_card(sample_stats(), self.dir / "card.png")
         with Image.open(out) as im:
-            r, g, b = im.getpixel((560, 520))  # inside the hero bubble, between the digits and the caption
-            self.assertGreater(b, 220)
-            self.assertLess(r, 90)
-            r2, g2, b2 = im.getpixel((1040, 1320))  # bottom-right corner: warm end of the gradient
-            self.assertGreater(r2, 200)
+            def near(point, colour, tolerance=12):
+                got = im.getpixel(point)
+                self.assertTrue(all(abs(a - b) <= tolerance for a, b in zip(got, colour)), (point, got, colour))
+
+            near((640, 600), (255, 255, 255))  # the count sits in a white bubble
+            near((420, 1180), (48, 209, 88))  # top senders: system green
+            near((840, 1010), (255, 214, 10))  # peak hour: system yellow
+            near((700, 720), (11, 11, 15))  # personality: ink
+            r, g, b = im.getpixel((1040, 760))  # the blue world behind them
+            self.assertGreater(b, 200)
+            self.assertLess(r, 60)
 
     def test_creates_parent_folders_and_rejects_non_dicts(self):
         out = render_card(sample_stats(), self.dir / "deep" / "er" / "card.png", size=SMALL)
@@ -179,19 +185,26 @@ class FontsAndText(unittest.TestCase):
         cls.plain = FontBook(emoji=False)
 
     def test_bundled_fonts_and_licence_ship_with_the_package(self):
-        for name in card.FONT_FILES.values():
+        for name in list(card.FONT_FILES.values()) + [card.BUNDLED_FALLBACK]:
             self.assertTrue((card.FONT_DIR / name).is_file(), name)
-        licence = (card.FONT_DIR / "OFL.txt").read_text(encoding="utf-8")
-        self.assertIn("SIL Open Font License", licence)
-        self.assertIn("Inter", licence)
+        for family in ("Archivo", "Inter"):
+            licence = (card.FONT_DIR / f"OFL-{family}.txt").read_text(encoding="utf-8")
+            self.assertIn("SIL Open Font License", licence)
+            self.assertIn(family, licence)
+        shipped = {p.name for p in card.FONT_DIR.iterdir()}
+        self.assertEqual(shipped, set(card.FONT_FILES.values()) | {card.BUNDLED_FALLBACK, "OFL-Archivo.txt", "OFL-Inter.txt"})
 
     def test_cmap_reader(self):
-        ranges = card._cmap_ranges(str(card.FONT_DIR / card.FONT_FILES["bold"]))
+        ranges = card._cmap_ranges(str(card.FONT_DIR / card.FONT_FILES["black"]))
         self.assertGreater(len(ranges), 50)
-        for ch in "Az09é·…Жλ":
+        for ch in "Az09é·…&%,":
             self.assertTrue(card._covers(ranges, ord(ch)), ch)
-        for cp in (0x9031, 0x1F35D, 0x5D0):
+        for cp in (0x416, 0x9031, 0x1F35D, 0x5D0):
             self.assertFalse(card._covers(ranges, cp), hex(cp))
+        # Cyrillic and Greek come from the bundled fallback, so they never depend on the machine
+        bundled = str(card.FONT_DIR / card.BUNDLED_FALLBACK)
+        self.assertEqual(self.plain.fallback_for(0x416), bundled)
+        self.assertEqual(self.plain.fallback_for(0x3BB), bundled)
         self.assertEqual(card._cmap_ranges("/nonexistent/font.ttf"), [])
         self.assertEqual(card._cmap_ranges(__file__), [])  # not a font: no crash
 
@@ -224,14 +237,14 @@ class FontsAndText(unittest.TestCase):
 
     def test_fit_shrinks_then_truncates_with_an_ellipsis(self):
         canvas = card.Canvas(400, 400, 1.0, self.plain)
-        cl, size = canvas.fit("Short", "bold", 40, 300)
+        cl, size = canvas.fit("Short", "black", 40, 300)
         self.assertEqual(size, 40)
         self.assertEqual("".join(c[1] for c in cl), "Short")
-        cl, size = canvas.fit("A considerably longer piece of text than fits", "bold", 40, 300, 30)
+        cl, size = canvas.fit("A considerably longer piece of text than fits", "black", 40, 300, 30)
         self.assertEqual(size, 30)
         text = "".join(c[1] for c in cl)
         self.assertTrue(text.endswith("…"))
-        self.assertLessEqual(canvas.measure(cl, "bold", size), 300)
+        self.assertLessEqual(canvas.measure(cl, "black", size), 300)
         self.assertTrue(text.startswith("A cons"))
 
     def test_bubble_tail_sticks_out_at_the_bottom_only(self):
@@ -247,9 +260,36 @@ class FontsAndText(unittest.TestCase):
         left, _ = canvas.bubble_mask(300, 200, 60, "left")
         self.assertTrue(any(left.getpixel((x, height - 2)) > 128 for x in range(0, pad)))
 
-    def test_split_title(self):
-        self.assertEqual(card._split_title("The Always-On Group Chat"), ["The Always-On", "Group Chat"])
-        self.assertEqual(card._split_title("Single"), ["Single"])
+    def test_title_fitting(self):
+        canvas = card.Canvas(2160, 2700, 2.0, self.plain)
+        size, role, lines = card._fit_title(canvas, "Dinner Club", 936)
+        self.assertEqual((size, role, len(lines)), (116.0, "wide", 1))
+        size, role, lines = card._fit_title(canvas, "The Extremely Long Group Chat Name That Never Ends (official)", 936)
+        self.assertEqual(len(lines), 2)
+        self.assertGreaterEqual(size, 56)
+        for line in lines:
+            self.assertLessEqual(canvas.measure(line, role, size), 936)
+        size, role, lines = card._fit_title(canvas, "word " * 60, 936)
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[1][-1][1], "…")
+        self.assertLessEqual(canvas.measure(lines[1], role, size), 936)
+        self.assertEqual(len(card._fit_title(canvas, "", 936)[2]), 1)  # an empty name still draws something
+
+    def test_fit_roles_prefers_the_wider_cut(self):
+        canvas = card.Canvas(2160, 2700, 2.0, self.plain)
+        _cl, role, size = canvas.fit_roles("880", ("black", "cond"), 218, 780, 90)
+        self.assertEqual((role, size), ("black", 218))
+        _cl, role, size = canvas.fit_roles("1,234,567", ("black", "cond"), 218, 780, 90)
+        self.assertEqual(role, "cond")
+        cl, role, size = canvas.fit_roles("123,456,789,012", ("black", "cond"), 218, 780, 90)
+        self.assertLess(size, 218)
+        self.assertLessEqual(canvas.measure(cl, role, size), 780)
+
+    def test_test_image_renders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = card.render_test_image(Path(tmp) / "t.png")
+            with Image.open(out) as im:
+                self.assertEqual(im.size, (720, 480))
 
 
 if __name__ == "__main__":

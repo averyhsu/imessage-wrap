@@ -76,12 +76,13 @@ class Payload(unittest.TestCase):
         stats["senders"][0]["note"] = "INVENTED-PRIVATE"
         payload, back = build_payload(stats)
         blob = json.dumps(payload, ensure_ascii=False)
-        for leaked in ("Okafor", "555-0134", "4155550134", "example.invalid", "INVENTED-PRIVATE", "wrapped/1"):
+        for leaked in ("Okafor", "555", "0134", "example.invalid", "priya", "INVENTED-PRIVATE", "wrapped/1"):
             self.assertNotIn(leaked, blob)
-        self.assertEqual([s["name"] for s in payload["senders"]], ["Maya", "···0134", "priya.invented", "Jonah"])
+        self.assertEqual([s["name"] for s in payload["senders"]], ["Maya", "…34", "P…", "Jonah"])
         self.assertEqual(back["Maya"], "Maya Okafor-Lindqvist")
-        self.assertEqual(back["···0134"], "+1 (415) 555-0134")
-        self.assertEqual(payload["late_night"]["top"]["name"], "···0134")
+        self.assertEqual(back["…34"], "+1 (415) 555-0134")
+        self.assertEqual(back["P…"], "priya.invented@example.invalid")
+        self.assertEqual(payload["late_night"]["top"]["name"], "…34")
         self.assertEqual(payload["reactions"]["top_giver"]["name"], "Maya")
         self.assertNotIn("awards", payload)
         self.assertNotIn("meta", payload)

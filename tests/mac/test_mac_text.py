@@ -92,9 +92,11 @@ class RecapText(unittest.TestCase):
         self.assertIn("🥇 Maya ", text)
         self.assertNotIn("Okafor", text)
         self.assertNotIn("555", text)
-        self.assertIn("···0134", text)
+        self.assertIn("…34", text)
+        self.assertNotIn("0134", text)
         self.assertNotIn("example.invalid", text)
-        self.assertIn("priya.invented", text)
+        self.assertNotIn("priya.invented", text)
+        self.assertIn("🥉 P… ", text)
 
 
 class Formatting(unittest.TestCase):
@@ -120,6 +122,12 @@ class Formatting(unittest.TestCase):
         self.assertEqual(names["Sam Kowalski"], "Sam K.")
         self.assertEqual(names["Sam Rivera"], "Sam R.")
         self.assertEqual(names["Lena Park"], "Lena")
+        phones = fmt.display_names(["+1 415 555 0134", "+1 628 555 9934", "Sam", "Sam"])
+        self.assertEqual(phones["+1 415 555 0134"], "…0134")
+        self.assertEqual(phones["+1 628 555 9934"], "…9934")
+        self.assertEqual(len(set(fmt.display_names(["a@x.invalid", "a@y.invalid", "Al"]).values())), 3)
+        self.assertEqual(fmt.first_name("Bartholomew-Alexander Montgomery"), "Bartholomew-Ale…")
+        self.assertEqual(fmt.first_name(""), "?")
 
     def test_peak_hour_fallbacks(self):
         self.assertEqual(fmt.peak_hour({"personality": {"peak_hour": 7}}), 7)

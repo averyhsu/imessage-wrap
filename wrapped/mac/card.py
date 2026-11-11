@@ -4,13 +4,19 @@
 first names only. No message text ever goes on the card.
 
 Design notes
-- One bundled typeface (Inter, SIL OFL 1.1, in ``assets/``) so the output looks the
-  same on every machine. Emoji come from the platform colour-emoji font when one
-  exists (Apple Color Emoji on macOS, Noto Color Emoji on Linux) and are dropped
-  cleanly otherwise. Characters Inter lacks fall back to a system font.
+- Same world as the web story's share card (``web/js/card.js``): a Messages-blue
+  background, the chat name as the headline, and one slightly tilted speech
+  bubble per fact (white for the count, ink for the personality, green for the
+  top senders, yellow for the peak hour), in the same order and colours.
+- Bundled type (``assets/``, both SIL OFL 1.1): Archivo, the display face the web
+  uses, plus one cut of Inter for scripts Archivo lacks (Cyrillic, Greek). The
+  output therefore looks the same on every machine. Emoji come from the
+  platform colour-emoji font when one exists (Apple Color Emoji on macOS, Noto
+  Color Emoji on Linux) and are dropped cleanly otherwise; other scripts fall
+  back to a system font.
 - Everything is drawn at 2x and downsampled, so shapes are anti-aliased.
-- The motifs are Messages-flavoured (speech bubbles with tails, tapback badges)
-  but drawn here from primitives: no Apple or Spotify artwork.
+- The motifs (bubbles with tails, a tapback badge) are drawn here from
+  primitives: no Apple or Spotify artwork.
 """
 
 from __future__ import annotations
@@ -27,20 +33,23 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from . import PRODUCT_NAME
-from .fmt import by_hour as _by_hour
 from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, peak_hour
 
 DESIGN_W, DESIGN_H = 1080, 1350
+EMOJI_SCALE = 0.92  # emoji height relative to the type size
 SUPERSAMPLE = 2
-FOOTER = f"{PRODUCT_NAME} · made on this Mac, nothing uploaded"
+FOOTER_TAIL = "· made on this Mac, nothing uploaded"
+FOOTER = f"{PRODUCT_NAME} {FOOTER_TAIL}"
 
 FONT_DIR = Path(__file__).resolve().parent / "assets"
 FONT_FILES = {
-    "black": "Inter-Display-Black.ttf",
-    "bold": "Inter-Display-Bold.ttf",
-    "semibold": "Inter-SemiBold.ttf",
-    "medium": "Inter-Medium.ttf",
+    "wide": "Archivo-Black-Expanded.ttf",  # headline, units
+    "black": "Archivo-Black.ttf",  # numbers, names
+    "cond": "Archivo-Black-Condensed.ttf",  # the same, when space is tight
+    "label": "Archivo-ExtraBold-SemiExpanded.ttf",  # small caps labels
+    "text": "Archivo-SemiBold.ttf",  # footer
 }
+BUNDLED_FALLBACK = "Inter-Display-Bold.ttf"  # Cyrillic, Greek and other Latin-adjacent scripts
 
 EMOJI_FONTS = (
     "/System/Library/Fonts/Apple Color Emoji.ttc",
@@ -67,18 +76,16 @@ FALLBACK_FONTS = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
 
-# Palette: a saturated dusk gradient, Messages blue for the hero bubble.
-MESH = (
-    ("#170A52", "#2A1CB0", "#1C55E8"),
-    ("#3E13AA", "#6B20DA", "#8E2BE6"),
-    ("#A2169A", "#D51F7C", "#FF4F6E"),
-)
-BLUE_TOP = "#2EA1FF"
-BLUE_BOTTOM = "#0A6CFF"
+# Palette: the web story's (web/css/base.css), i.e. the iOS system colours.
+BG_TOP, BG_MID, BG_BOTTOM = "#2a9bff", "#0a7aff", "#0042d6"
+BG_BUBBLE_LIGHT, BG_BUBBLE_DEEP = "#46a6ff", "#0036c2"
+NUMBER_BLUE = "#0a6cff"
+GREEN = "#30d158"
+GREEN_INK = (3, 32, 12)
 WHITE = (255, 255, 255, 255)
-INK = (18, 12, 48, 255)
+INK = (11, 11, 15, 255)
 YELLOW = (255, 214, 10, 255)
-PINK = (255, 55, 95, 255)
+PINK = (255, 45, 85, 255)
 
 
 class CardError(RuntimeError):
@@ -180,13 +187,14 @@ class FontBook:
         self.font_dir = Path(font_dir)
         self.engine = _layout_engine()
         self.shaping = self.engine == ImageFont.Layout.RAQM
-        missing = [f for f in FONT_FILES.values() if not (self.font_dir / f).is_file()]
+        wanted = list(FONT_FILES.values()) + [BUNDLED_FALLBACK]
+        missing = [f for f in wanted if not (self.font_dir / f).is_file()]
         if missing:
             raise CardError(
                 f"The bundled card font is missing ({', '.join(missing)} in {self.font_dir}). "
                 "Reinstall Threadback; the package must include wrapped/mac/assets/*."
             )
-        self._primary_ranges = _cmap_ranges(str(self.font_dir / FONT_FILES["bold"]))
+        self._primary_ranges = _cmap_ranges(str(self.font_dir / FONT_FILES["black"]))
         self._faces = {}
         self._fallbacks: Optional[List[Tuple[str, List[Tuple[int, int]]]]] = None
         self.emoji_path: Optional[str] = None
@@ -242,7 +250,7 @@ class FontBook:
     def fallback_for(self, cp: int) -> Optional[str]:
         if self._fallbacks is None:
             self._fallbacks = []
-            for path in FALLBACK_FONTS:
+            for path in [str(self.font_dir / BUNDLED_FALLBACK)] + list(FALLBACK_FONTS):
                 if os.path.isfile(path):
                     ranges = _cmap_ranges(path)
                     if ranges:
@@ -354,11 +362,6 @@ def _rgba(color) -> Tuple[int, int, int, int]:
     return tuple(color)  # type: ignore[return-value]
 
 
-def _with_alpha(color, alpha: float) -> Tuple[int, int, int, int]:
-    r, g, b, _a = _rgba(color)
-    return (r, g, b, int(round(255 * alpha)))
-
-
 class Canvas:
     """A drawing surface in *design units* (1080x1350); pixels are k times larger."""
 
@@ -372,44 +375,41 @@ class Canvas:
 
     # background ----------------------------------------------------------------
 
-    def mesh(self, rows: Sequence[Sequence[str]]) -> None:
-        """A smooth mesh gradient: control colours on a grid, eased between, then
-        scaled up bicubically from a small image."""
-        gw, gh = 36, 45
-        cols, rws = len(rows[0]) - 1, len(rows) - 1
-        grid = [[_rgba(col)[:3] for col in row] for row in rows]
+    def linear(self, stops: Sequence[Tuple[float, str]], x1: float, y1: float) -> None:
+        """A linear gradient from the origin to (x1, y1), like a canvas gradient."""
+        gw, gh = 54, 68
+        colours = [(t, _rgba(col)[:3]) for t, col in stops]
         small = Image.new("RGB", (gw, gh))
         px = small.load()
+        vx, vy = x1 * self.k, y1 * self.k
+        norm = float(vx * vx + vy * vy) or 1.0
         for y in range(gh):
-            fy = y / (gh - 1) * rws
-            y0 = min(int(fy), rws - 1)
-            ty = fy - y0
-            ty = ty * ty * (3 - 2 * ty)
             for x in range(gw):
-                fx = x / (gw - 1) * cols
-                x0 = min(int(fx), cols - 1)
-                tx = fx - x0
-                tx = tx * tx * (3 - 2 * tx)
-                c00, c10 = grid[y0][x0], grid[y0][x0 + 1]
-                c01, c11 = grid[y0 + 1][x0], grid[y0 + 1][x0 + 1]
-                px[x, y] = tuple(
-                    int(round((c00[i] * (1 - tx) + c10[i] * tx) * (1 - ty) + (c01[i] * (1 - tx) + c11[i] * tx) * ty))
-                    for i in range(3)
-                )
+                fx, fy = x / (gw - 1) * self.w, y / (gh - 1) * self.h
+                t = max(0.0, min(1.0, (fx * vx + fy * vy) / norm))
+                for (t0, c0), (t1, c1) in zip(colours, colours[1:]):
+                    if t <= t1 or (t1, c1) == colours[-1]:
+                        u = 0.0 if t1 == t0 else max(0.0, min(1.0, (t - t0) / (t1 - t0)))
+                        px[x, y] = tuple(int(round(c0[i] + (c1[i] - c0[i]) * u)) for i in range(3))
+                        break
         self.img.paste(small.resize((self.w, self.h), Image.BICUBIC).convert("RGBA"))
 
-    def glow(self, cx: float, cy: float, radius: float, color, alpha: float) -> None:
-        """A soft radial light."""
-        r = self.px(radius)
-        if r <= 0:
-            return
-        # radial_gradient is 0 at the centre and reaches 128 at the middle of each
-        # edge; ease it so the light is fully gone before the layer's square edge
-        falloff = [int(255 * alpha * max(0.0, 1.0 - v / 126.0) ** 2) for v in range(256)]
-        mask = Image.radial_gradient("L").point(falloff).resize((2 * r, 2 * r), Image.BICUBIC)
-        layer = Image.new("RGBA", (2 * r, 2 * r), _rgba(color))
-        layer.putalpha(mask)
-        self.img.alpha_composite(layer, (self.px(cx) - r, self.px(cy) - r))  # type: ignore[arg-type]
+    def sub(self, w: float, h: float) -> "Canvas":
+        """A transparent canvas of w x h design units sharing this one's fonts."""
+        layer = Canvas(max(1, self.px(w)), max(1, self.px(h)), self.k, self.book)
+        layer.img = Image.new("RGBA", layer.img.size, (0, 0, 0, 0))
+        layer._emoji_cache = self._emoji_cache
+        return layer
+
+    def stamp(self, layer: "Canvas", x: float, y: float, degrees: float = 0.0) -> None:
+        """Composite a sub-canvas with its top-left at (x, y), tilted about its centre
+        (positive = clockwise, as on an HTML canvas)."""
+        img = layer.img
+        cx = self.px(x) + img.width / 2.0
+        cy = self.px(y) + img.height / 2.0
+        if degrees:
+            img = img.rotate(-degrees, resample=Image.BICUBIC, expand=True)
+        self._safe_composite(img, int(round(cx - img.width / 2.0)), int(round(cy - img.height / 2.0)))
 
     def grain(self, amount: int = 5, seed: int = 20261111) -> None:
         """Deterministic fine noise: hides gradient banding in an 8-bit PNG."""
@@ -540,33 +540,32 @@ class Canvas:
             pts.append((self.px(cx + hx * size / 34.0), self.px(cy - (hy + 2.5) * size / 34.0)))
         ImageDraw.Draw(self.img).polygon(pts, fill=_rgba(fill))
 
-    def tapback(self, cx: float, cy: float, r: float, kind: str, side: str = "left") -> None:
+    def tapback(self, cx: float, cy: float, r: float, kind: str = "heart", side: str = "right",
+                fill=PINK, glyph=WHITE) -> None:
         """A tapback badge: a small bubble with two trailing dots and a glyph."""
-        fill = (255, 255, 255, 255)
         sign = -1 if side == "left" else 1
         blur = self.px(10)
         size = self.px(2 * r) + 6 * blur
         sh = Image.new("L", (size, size), 0)
-        ImageDraw.Draw(sh).ellipse((3 * blur, 3 * blur, size - 3 * blur, size - 3 * blur), fill=110)
-        layer = Image.new("RGBA", (size, size), (10, 4, 40, 255))
+        ImageDraw.Draw(sh).ellipse((3 * blur, 3 * blur, size - 3 * blur, size - 3 * blur), fill=90)
+        layer = Image.new("RGBA", (size, size), (0, 20, 80, 255))
         layer.putalpha(sh.filter(ImageFilter.GaussianBlur(blur)))
         self._safe_composite(layer, self.px(cx) - size // 2, self.px(cy) - size // 2 + self.px(6))
         self.circle(cx + sign * r * 0.80, cy + r * 0.86, r * 0.26, fill)
-        self.circle(cx + sign * r * 1.20, cy + r * 1.26, r * 0.12, fill)
+        self.circle(cx + sign * r * 1.22, cy + r * 1.28, r * 0.12, fill)
         self.circle(cx, cy, r, fill)
         if kind == "heart":
-            self.heart(cx, cy, r * 1.12, PINK)
+            self.heart(cx, cy, r * 1.12, glyph)
         elif kind == "haha":
-            self.text(cx, cy - r * 0.02, "HA", "black", r * 0.56, (120, 124, 140, 255), anchor="mb")
-            self.text(cx, cy + r * 0.48, "HA", "black", r * 0.56, (120, 124, 140, 255), anchor="mb")
-        elif kind == "bang":
-            self.text(cx, cy + r * 0.42, "!!", "black", r * 1.18, (120, 124, 140, 255), anchor="mb")
+            self.text(cx, cy - r * 0.02, "HA", "black", r * 0.56, glyph, anchor="ms")
+            self.text(cx, cy + r * 0.48, "HA", "black", r * 0.56, glyph, anchor="ms")
         else:
-            self.text(cx, cy + r * 0.42, "?", "black", r * 1.18, (120, 124, 140, 255), anchor="mb")
+            self.text(cx, cy + r * 0.42, "!!" if kind == "bang" else "?", "black", r * 1.18, glyph, anchor="ms")
 
     # text ------------------------------------------------------------------------
 
     def _emoji_image(self, seq: str, px: int) -> Optional[Image.Image]:
+        """The emoji run as an image whose height is ``px`` pixels."""
         key = (seq, px)
         if key in self._emoji_cache:
             return self._emoji_cache[key]
@@ -583,7 +582,7 @@ class Canvas:
                 box = None
             if box:
                 glyph = tmp.crop(box)
-                scale = px / float(strike)
+                scale = px / float(max(glyph.height, strike * 0.8))
                 size = (max(1, int(round(glyph.width * scale))), max(1, int(round(glyph.height * scale))))
                 result = glyph.resize(size, Image.LANCZOS)
         self._emoji_cache[key] = result
@@ -595,8 +594,8 @@ class Canvas:
         total = 0.0
         for kind, text, path in _runs(cl):
             if kind == "emoji":
-                img = self._emoji_image(text, int(px * 1.06))
-                total += (img.width if img else 0) + px * 0.06
+                img = self._emoji_image(text, int(px * EMOJI_SCALE))
+                total += (img.width if img else 0) + px * 0.08
             else:
                 total += self.book.face(role, px, path).getlength(text)
         return total / self.k
@@ -618,6 +617,51 @@ class Canvas:
                     cl = cl[:-1]
             cl = cl + ell
         return cl, s
+
+    def fit_roles(
+        self, text: str, roles: Sequence[str], size: float, max_width: float, min_size: float
+    ) -> Tuple[List[Cluster], str, float]:
+        """Widest cut that fits at full size; otherwise the narrowest cut, shrunk
+        (and as a last resort truncated) to fit. Returns (clusters, role, size)."""
+        cl = clusters(text, self.book)
+        for role in roles:
+            if self.measure(cl, role, size) <= max_width:
+                return cl, role, size
+        role = roles[-1]
+        width = self.measure(cl, role, size) or 1.0
+        shrunk = float(max(min_size, math.floor(size * max_width / width)))
+        cl, shrunk = self.fit(text, role, shrunk, max_width, shrunk)
+        return cl, role, shrunk
+
+    def wrap(self, cl: Sequence[Cluster], role: str, size: float, width: float) -> List[List[Cluster]]:
+        """Greedy word wrap of clusters; a word wider than the line is broken."""
+        words: List[List[Cluster]] = [[]]
+        for c in cl:
+            if c[0] == "text" and c[1] == " ":
+                if words[-1]:
+                    words.append([])
+            else:
+                words[-1].append(c)
+        space: Cluster = ("text", " ", None)
+        lines: List[List[Cluster]] = []
+        line: List[Cluster] = []
+        for word in (w for w in words if w):
+            candidate = line + [space] + word if line else list(word)
+            if self.measure(candidate, role, size) <= width:
+                line = candidate
+                continue
+            if line:
+                lines.append(line)
+            line = list(word)
+            while len(line) > 1 and self.measure(line, role, size) > width:
+                cut = len(line) - 1
+                while cut > 1 and self.measure(line[:cut], role, size) > width:
+                    cut -= 1
+                lines.append(line[:cut])
+                line = line[cut:]
+        if line:
+            lines.append(line)
+        return lines
 
     def text(
         self,
@@ -655,11 +699,11 @@ class Canvas:
         draw = ImageDraw.Draw(self.img, "RGBA")
         for kind, run, path in _runs(cl):
             if kind == "emoji":
-                img = self._emoji_image(run, int(px * 1.06))
+                img = self._emoji_image(run, int(px * EMOJI_SCALE))
                 if img is not None:
-                    top = base - int(px * 0.36) - img.height // 2
-                    self._safe_composite(img, int(round(cursor + px * 0.03)), top)
-                    cursor += img.width + px * 0.06
+                    top = base - int(px * 0.35) - img.height // 2
+                    self._safe_composite(img, int(round(cursor + px * 0.04)), top)
+                    cursor += img.width + px * 0.08
                 continue
             font = self.book.face(role, px, path)
             if colour[3] == 255:
@@ -678,6 +722,7 @@ class Canvas:
         px = self.px(size)
         font = self.book.face(role, px)
         gap = px * tracking
+        text = "".join(ch for ch in text if ch == " " or self.book.in_primary(ord(ch)))
         widths = [font.getlength(ch) for ch in text]
         total = sum(widths) + gap * max(0, len(text) - 1)
         cursor = float(self.px(x))
@@ -720,20 +765,6 @@ def _top_senders(stats: dict, limit: int = 3) -> List[Tuple[str, float, int]]:
     return out
 
 
-def _split_title(title: str) -> List[str]:
-    """Break a long title into two balanced lines at a space."""
-    words = title.split(" ")
-    if len(words) < 2:
-        return [title]
-    best = None
-    for i in range(1, len(words)):
-        a, b = " ".join(words[:i]), " ".join(words[i:])
-        score = abs(len(a) - len(b))
-        if best is None or score < best[0]:
-            best = (score, [a, b])
-    return best[1] if best else [title]
-
-
 def render_card(stats: dict, out_path, size: Tuple[int, int] = (DESIGN_W, DESIGN_H), *, emoji: Optional[bool] = None):
     """Render the recap card for ``stats`` (docs/SCHEMA.md §1) to ``out_path`` (PNG).
 
@@ -766,14 +797,12 @@ def render_test_image(out_path, size: Tuple[int, int] = (720, 480)):
     k = (width / 720.0) * SUPERSAMPLE
     c = Canvas(width * SUPERSAMPLE, height * SUPERSAMPLE, k, book)
     W, H = 720.0, height / (width / 720.0)
-    c.mesh(MESH)
-    c.glow(W * 0.9, H * 0.1, 360, "#2F8CFF", 0.5)
-    c.grain(4)
-    c.bubble(60, H / 2 - 92, 600, 150, 56, BLUE_TOP, fill_bottom=BLUE_BOTTOM, tail="right", shadow=0.4)
-    c.text(360, H / 2 - 10, f"{PRODUCT_NAME} test image", "black", 46, WHITE, anchor="ms", max_width=540)
-    c.text(360, H / 2 + 34, "If you can see this, attachments work.", "medium", 24, (255, 255, 255, 235),
-           anchor="ms", max_width=540)
-    c.tapback(70, H / 2 - 88, 30, "heart", side="left")
+    c.linear(((0.0, BG_TOP), (0.4, BG_MID), (1.0, BG_BOTTOM)), W * 0.55, H)
+    c.grain(3)
+    c.bubble(60, H / 2 - 92, 600, 156, 56, WHITE, tail="left", shadow=0.25)
+    c.text(360, H / 2 - 12, f"{PRODUCT_NAME} test image", "black", 44, NUMBER_BLUE, anchor="ms", max_width=540)
+    c.text(360, H / 2 + 34, "If you can see this, attachments work.", "text", 24, INK, anchor="ms", max_width=540)
+    c.tapback(652, H / 2 - 90, 30, "heart", side="right")
     final = c.img.convert("RGB").resize((width, height), Image.LANCZOS)
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -786,6 +815,48 @@ def _book(emoji: Optional[bool]) -> FontBook:
     return FontBook(emoji=emoji)
 
 
+PAD = 72.0
+MARGIN = 70.0  # room around a tilted block for its tail, shadow and rotation
+PERSONA_EMOJI = {
+    "quiet_ones": "🤫", "night_owls": "🦉", "weekend_warriors": "🎉", "always_on": "🔋", "early_birds": "🐦",
+    "morning_meeting": "☕", "lunch_break": "🥪", "afternoon_slackers": "😎", "dinner_table": "🍽️",
+    "after_hours": "🌙",
+}
+
+
+def _tilted(c: Canvas, x: float, y: float, w: float, h: float, degrees: float, draw) -> None:
+    """Draw a block on its own layer (origin at the block's top-left) and stamp it tilted."""
+    layer = c.sub(w + 2 * MARGIN, h + 2 * MARGIN)
+    draw(layer, MARGIN, MARGIN)
+    c.stamp(layer, x - MARGIN, y - MARGIN, degrees)
+
+
+def _fit_title(c: Canvas, text: str, width: float) -> Tuple[float, str, List[List[Cluster]]]:
+    """The chat name: one line if it can stay big, otherwise the biggest two-line setting."""
+    cl = clusters(text, c.book)
+    if not cl:
+        cl = clusters("Group chat", c.book)
+    for size in range(116, 87, -4):
+        for role in ("wide", "black", "cond"):
+            if c.measure(cl, role, size) <= width:
+                return float(size), role, [cl]
+    for size in range(108, 55, -6):
+        for role in ("wide", "black", "cond"):
+            lines = c.wrap(cl, role, size, width)
+            if len(lines) <= 2:
+                return float(size), role, lines
+    lines = c.wrap(cl, "cond", 56, width)
+    rest: List[Cluster] = []
+    for line in lines[1:]:
+        rest += ([("text", " ", None)] if rest else []) + line
+    ell: List[Cluster] = [("text", "…", None)]
+    while rest and c.measure(rest + ell, "cond", 56) > width:
+        rest = rest[:-1]
+        while rest and rest[-1][1] == " ":
+            rest = rest[:-1]
+    return 56.0, "cond", [lines[0], rest + ell]
+
+
 def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:
     chat = stats.get("chat") or {}
     period = stats.get("period") or {}
@@ -795,126 +866,141 @@ def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:
     chat_name = clean(chat.get("name")) or "Group chat"
     label = clean(period.get("label"), 18)
     messages = max(0, _int(totals.get("messages")))
-    members = max(0, _int(chat.get("members")))
     title = clean(personality.get("title"), 48)
+    persona_id = str(personality.get("id") or "")
     peak = peak_hour(stats)
-    hours = _by_hour(stats)
     top = _top_senders(stats)
+    inner = W - 2 * PAD
 
-    M = 72.0  # side margin
-    inner = W - 2 * M
+    # background: the story cover's blue world with two oversized bubbles ------------------
+    c.linear(((0.0, BG_TOP), (0.4, BG_MID), (1.0, BG_BOTTOM)), W * 0.55, H)
+    _tilted(c, W - 520, -210, 760, 520, 14,
+            lambda s, x, y: s.bubble(x, y, 760, 520, 170, BG_BUBBLE_LIGHT, tail="right"))
+    _tilted(c, -330, H - 340, 820, 600, -10,
+            lambda s, x, y: s.bubble(x, y, 820, 600, 180, BG_BUBBLE_DEEP, tail="left"))
+    c.grain(3)
 
-    # background -----------------------------------------------------------------
-    c.mesh(MESH)
-    c.glow(W * 0.95, H * 0.10, 560, "#2F8CFF", 0.50)
-    c.glow(W * 0.00, H * 0.55, 460, "#8A2BFF", 0.35)
-    c.glow(W * 1.00, H * 1.00, 600, "#FF8A4C", 0.50)
-    c.grain(4)
+    # header: the period in a pill, then the chat name ------------------------------------
+    y = 78.0
+    pill_text = (f"{label} in review" if label else "In review").upper()
+    probe = c.sub(10, 10)
+    text_w = probe.tracked(0, 0, pill_text, "label", 26, WHITE, tracking=0.115)
+    pill_w = min(inner, text_w + 56)
+    c.pill(PAD, y, pill_w, 58, (255, 255, 255, 51))
+    c.tracked(PAD + 28, y + 39, pill_text, "label", 26, WHITE, tracking=0.115)
+    y += 58 + 34
 
-    # header: the chat name as an incoming bubble ----------------------------------
-    y = 62.0
-    cl, used = c.fit(chat_name, "bold", 42, inner - 150, 32)
-    name_w = c.measure(cl, "bold", used)
-    bub_h = 84.0
-    bub_w = max(150.0, name_w + 72)
-    c.bubble(M, y, bub_w, bub_h, 42, (255, 255, 255, 255), tail="left", shadow=0.30)
-    c.text(M + 36, y + bub_h / 2 + used * 0.36, cl, "bold", used, INK)
-    c.tapback(M + bub_w - 4, y, 28, "haha", side="right")
+    size, role, lines = _fit_title(c, chat_name, inner)
+    for i, line in enumerate(lines):
+        c.text(PAD - 4, y + size * 0.8 + i * size * 0.94, line, role, size, WHITE)
+    y += size * 0.94 * len(lines) + 10
 
-    headline = f"{label} in review" if label else "In review"
-    head_base = y + bub_h + 96
-    c.text(M, head_base, headline, "black", 68, WHITE, max_width=inner, min_size=44)
+    # blocks ---------------------------------------------------------------------------------
+    blocks: List[Tuple[float, object]] = []
 
-    # hero: the message count in an outgoing bubble ---------------------------------
     count = fmt_int(messages)
     unit = "message" if messages == 1 else "messages"
-    ncl, num_size = c.fit(count, "black", 204.0, inner - 150, 90)
-    num_w = c.measure(ncl, "black", num_size)
-    cap = num_size * 0.727
-    hero_w = min(inner, max(500.0, num_w + 112))
-    hero_h = cap + 158
-    hero_y = head_base + 54
-    hero_x = W - M - hero_w
-    c.bubble(hero_x, hero_y, hero_w, hero_h, 72, BLUE_TOP, fill_bottom=BLUE_BOTTOM, tail="right", shadow=0.45)
-    c.text(hero_x + hero_w - 54, hero_y + 44 + cap, ncl, "black", num_size, WHITE, anchor="rs")
-    sub = unit if not members else f"{unit} · {fmt_int(members)} {'person' if members == 1 else 'people'}"
-    c.text(hero_x + hero_w - 58, hero_y + hero_h - 40, sub, "semibold", 40, (255, 255, 255, 235), anchor="rs",
-           max_width=hero_w - 110, min_size=28)
-    c.tapback(hero_x + 8, hero_y + 4, 42, "heart", side="left")
-    y = hero_y + hero_h
 
-    # the remaining blocks share the space between the hero and the footer -----------
-    footer_base = H - 48
-    limit = footer_base - 52
-    blocks: List[Tuple[str, float]] = []
-    two_line = bool(title) and c.measure(clusters(title, c.book), "black", 70) > inner
-    if title or peak is not None:
-        block_h = (108.0 + (72.0 if two_line else 0.0)) if title else 0.0
-        if peak is not None:
-            block_h += 130.0
-        blocks.append(("personality", block_h))
-    if top:
-        blocks.append(("senders", 48.0 + 76.0 * len(top) - 12.0))
-    if blocks:
-        free = limit - y - sum(h for _n, h in blocks)
-        gap = max(22.0, min(74.0, free / (len(blocks) + 0.4)))
-        cursor = y + gap + max(0.0, (free - gap * (len(blocks) + 0.4)) / 2)
-        for name, block_h in blocks:
-            if name == "personality":
-                _personality(c, M, cursor, inner, title, two_line, peak, hours)
-            else:
-                _senders(c, M, cursor, inner, top)
-            cursor += block_h + gap
+    def total_block(top_y: float) -> None:
+        ncl, nrole, nsize = c.fit_roles(count, ("black", "cond"), 218, 780, 90)
+        num_w = c.measure(ncl, nrole, nsize)
+        unit_w = c.measure(clusters(unit, c.book), "wide", 50)
+        w = max(num_w, unit_w) + 108
 
-    # footer ---------------------------------------------------------------------------
-    c.text(W / 2, footer_base, FOOTER, "medium", 24, (255, 255, 255, 205), anchor="ms", max_width=inner, min_size=17)
+        def draw(s: Canvas, x: float, y0: float) -> None:
+            s.bubble(x, y0, w, 306, 76, WHITE, tail="left", shadow=0.22)
+            s.text(x + 50, y0 + 192, ncl, nrole, nsize, NUMBER_BLUE)
+            s.text(x + 54, y0 + 280, unit, "wide", 50, INK)
+            s.tapback(x + w - 14, y0 + 8, 40, "heart", side="right")
 
+        _tilted(c, PAD, top_y, w, 306, -2, draw)
 
-def _personality(
-    c: Canvas, x: float, y: float, w: float, title: str, two_line: bool, peak: Optional[int], hours: List[int]
-) -> None:
-    label_colour = (255, 255, 255, 205)
+    blocks.append((306.0, total_block))
+
     if title:
-        c.tracked(x, y + 24, "THIS CHAT IS", "semibold", 24, label_colour)
-        lines = _split_title(title) if two_line else [title]
-        size = 78.0 if two_line else 90.0
-        for i, line in enumerate(lines[:2]):
-            c.text(x, y + 108 + i * 72, line, "black", size, WHITE, max_width=w, min_size=40)
-        y += 108 + (72 if two_line else 0)
-    if peak is None:
-        return
-    # peak hour: a big value on the left, the shape of the day on the right
-    top = y + 30
-    row_h = 100.0
-    c.tracked(x, top + 24, "PEAK HOUR", "semibold", 24, label_colour)
-    c.text(x, top + row_h - 2, hour12(peak), "black", 66, YELLOW)
-    if len(hours) == 24 and max(hours) > 0:
-        chart_w = min(560.0, w - 300)
-        chart_x = x + w - chart_w
-        slot = chart_w / 24.0
-        bar_w = slot * 0.60
-        top_val = float(max(hours))
-        for h, v in enumerate(hours):
-            bar_h = max(bar_w, row_h * (v / top_val))
-            bx = chart_x + h * slot + (slot - bar_w) / 2
-            colour = YELLOW if h == peak else (255, 255, 255, 110)
-            c.pill(bx, top + row_h - bar_h, bar_w, bar_h, colour)
+        emoji = PERSONA_EMOJI.get(persona_id, "💬")
+        emoji_cl = clusters(emoji, c.book)
+        has_emoji = bool(emoji_cl) and emoji_cl[0][0] == "emoji"
+        text_x = 148.0 if has_emoji else 52.0
 
+        def persona_block(top_y: float) -> None:
+            tcl, trole, tsize = c.fit_roles(title, ("black", "cond"), 62, 640, 34)
+            text_w = c.measure(tcl, trole, tsize)
+            w = max(text_w, 250.0) + text_x + 52
+            x0 = W - PAD - w
 
-def _senders(c: Canvas, x: float, y: float, w: float, top: List[Tuple[str, float, int]]) -> None:
-    c.tracked(x, y + 24, "WHO TALKED THE MOST", "semibold", 24, (255, 255, 255, 205))
-    row_h = 64.0
-    pct_col = 148.0
-    lead = max(s for _n, s, _m in top) or 1.0
-    for i, (name, share, _messages) in enumerate(top):
-        ry = y + 48 + i * 76
-        c.pill(x, ry, w, row_h, (255, 255, 255, 46))
-        bar_w = (w - pct_col) * (0.44 + 0.56 * (share / lead))
-        c.pill(x, ry, bar_w, row_h, WHITE)
-        c.circle(x + row_h / 2, ry + row_h / 2, 22, INK)
-        c.text(x + row_h / 2, ry + row_h / 2 + 10.5, str(i + 1), "black", 29, WHITE, anchor="ms")
-        c.text(x + row_h + 8, ry + row_h / 2 + 14.5, name, "bold", 40, INK, max_width=bar_w - row_h - 34, min_size=27)
-        c.text(x + w - 26, ry + row_h / 2 + 13.5, fmt_pct(share), "black", 37, WHITE, anchor="rs")
+            def draw(s: Canvas, x: float, y0: float) -> None:
+                s.bubble(x, y0, w, 178, 64, INK, tail="right", shadow=0.22)
+                if has_emoji:
+                    s.text(x + 36, y0 + 92 + 96 * 0.35, emoji_cl, "black", 96, WHITE)
+                s.tracked(x + text_x + 2, y0 + 62, "PERSONALITY", "label", 25, YELLOW, tracking=0.12)
+                s.text(x + text_x, y0 + 62 + 20 + tsize * 0.74, tcl, trole, tsize, WHITE)
+
+            _tilted(c, x0, top_y, w, 178, 2, draw)
+
+        blocks.append((178.0, persona_block))
+
+    has_peak = peak is not None
+    if top or has_peak:
+        row_h = 58.0
+        senders_h = (104 + len(top) * row_h + 30) if top else 0.0
+        block_h = max(senders_h, 214.0)
+
+        def facts_block(top_y: float) -> None:
+            bottom = top_y + block_h
+            left_w = 574.0 if has_peak else inner
+            if top:
+                sy = bottom - senders_h
+
+                def draw_senders(s: Canvas, x: float, y0: float) -> None:
+                    s.bubble(x, y0, left_w, senders_h, 64, GREEN, tail="left", shadow=0.22)
+                    s.tracked(x + 44, y0 + 66, "TOP SENDERS" if len(top) > 1 else "TOP SENDER", "label", 25,
+                              GREEN_INK + (158,), tracking=0.12)
+                    for i, (name, share, _messages) in enumerate(top):
+                        ry = y0 + 104 + i * row_h + 36
+                        s.text(x + 44, ry, str(i + 1), "black", 40, GREEN_INK + (128,))
+                        pct = fmt_pct(share)
+                        pct_w = s.measure(clusters(pct, s.book), "black", 34)
+                        s.text(x + left_w - 44, ry, pct, "black", 34, GREEN_INK, anchor="rs")
+                        name_w = left_w - 44 - 52 - 44 - pct_w - 24
+                        ncl, nrole, nsize = s.fit_roles(name, ("black", "cond"), 44, name_w, 36)
+                        s.text(x + 96, ry, ncl, nrole, nsize, GREEN_INK)
+
+                _tilted(c, PAD, sy, left_w, senders_h, -1.5, draw_senders)
+            if has_peak:
+                pw = (inner - left_w - 30) if top else 380.0
+                px0 = W - PAD - pw
+                ph = 214.0
+                py0 = bottom - ph - (18 if top else 0)
+
+                def draw_peak(s: Canvas, x: float, y0: float) -> None:
+                    s.bubble(x, y0, pw, ph, 64, YELLOW, tail="right", shadow=0.22)
+                    s.tracked(x + 40, y0 + 66, "PEAK HOUR", "label", 25, (11, 11, 15, 153), tracking=0.12)
+                    hcl, hrole, hsize = s.fit_roles(hour12(peak), ("black", "cond"), 112, pw - 80, 60)
+                    s.text(x + 38, y0 + 66 + 24 + hsize * 0.74, hcl, hrole, hsize, INK)
+
+                _tilted(c, px0, py0, pw, ph, 3, draw_peak)
+
+        blocks.append((block_h, facts_block))
+
+    # distribute the blocks between the title and the footer (as the web card does) ---------------
+    footer_top = H - 104
+    used = sum(h for h, _f in blocks)
+    space = footer_top - y - used
+    n = len(blocks)
+    gap = max(18.0, min(64.0, space / (n + 0.5)))
+    cursor = y + max(0.0, (space - gap * (n - 1)) / 2)
+    cursor = min(cursor, y + 70)
+    if space - gap * (n - 1) > 140:
+        gap = min(84.0, (footer_top - cursor - used - 20) / max(1, n - 1))
+    for h, draw_block in blocks:
+        draw_block(cursor)  # type: ignore[operator]
+        cursor += h + gap
+
+    # footer ------------------------------------------------------------------------------------
+    name_w, _ = c.text(PAD, H - 56, PRODUCT_NAME, "label", 30, WHITE)
+    c.text(PAD + name_w + 14, H - 56, FOOTER_TAIL, "text", 26, (255, 255, 255, 199),
+           max_width=inner - name_w - 14, min_size=18)
 
 
 def main(argv: Optional[Iterable[str]] = None) -> int:  # pragma: no cover - tiny manual entry point
