@@ -18,9 +18,11 @@ on:
 permissions:
   contents: read
 
+# Several agents push to the same branch: let a run finish instead of cancelling it on
+# every push (GitHub keeps only the newest queued run per group).
 concurrency:
   group: web-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -39,10 +41,24 @@ jobs:
         run: npm ci
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Install fonts used in screenshots
-        run: sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji
+        run: |
+          # Preferred: the browser plus its system packages and fonts. That needs the Ubuntu
+          # package mirrors, and when a runner cannot resolve them apt retries for many
+          # minutes. So probe first and fall back to the browser alone (the hosted image
+          # already carries the shared libraries Chromium needs).
+          if timeout 20 getent hosts azure.archive.ubuntu.com >/dev/null || timeout 20 getent hosts archive.ubuntu.com >/dev/null; then
+            if timeout 300 npx playwright install --with-deps chromium; then
+              timeout 120 sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji \
+                || echo "::warning::extra fonts unavailable; screenshots use fallback fonts"
+              exit 0
+            fi
+            sudo pkill -x apt-get || true
+          fi
+          echo "::warning::Ubuntu package mirrors are unreachable; installing Chromium without --with-deps"
+          if ! npx playwright install chromium; then
+            echo "::warning::could not download Chromium; using the Chrome that ships with the runner image"
+            echo "PW_CHANNEL=chrome" >> "$GITHUB_ENV"
+          fi
 
       - name: Unit tests
         run: npm test

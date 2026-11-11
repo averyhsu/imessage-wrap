@@ -57,7 +57,9 @@ export async function startServer(dir = WEB) {
 }
 
 export async function launch() {
-  return chromium.launch({ args: ['--font-render-hinting=none', '--disable-lcd-text'] });
+  // PW_CHANNEL=chrome uses an installed Google Chrome instead of Playwright's Chromium.
+  const channel = process.env.PW_CHANNEL || undefined;
+  return chromium.launch({ channel, args: ['--font-render-hinting=none', '--disable-lcd-text'] });
 }
 
 /** Wait until the story is running and the display font is in. */

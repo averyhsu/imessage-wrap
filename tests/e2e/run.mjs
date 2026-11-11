@@ -62,6 +62,7 @@ async function open(opts = {}) {
     isMobile: !!vp.mobile,
     reducedMotion: opts.reducedMotion || 'no-preference',
     acceptDownloads: true,
+    bypassCSP: !!opts.wideFont,
     ...(opts.context || {}),
   });
   const problems = [];
@@ -75,6 +76,19 @@ async function open(opts = {}) {
     if (!allowed) foreign.push(url);
   });
   if (opts.init) await context.addInitScript(opts.init);
+  if (opts.wideFont) {
+    // Stand-in for devices whose system font is wider than SF/Inter (needs bypassCSP).
+    await context.addInitScript(() => {
+      const add = () => {
+        if (!document.documentElement) return false;
+        const style = document.createElement('style');
+        style.textContent = ':root{--font-text:"DejaVu Sans",Verdana,sans-serif !important}';
+        document.documentElement.appendChild(style);
+        return true;
+      };
+      if (!add()) new MutationObserver((_, o) => { if (add()) o.disconnect(); }).observe(document, { childList: true });
+    });
+  }
   const page = await context.newPage();
   page.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
@@ -478,10 +492,13 @@ await section('file', 'Runs from file:// under the page CSP', async () => {
 });
 
 // ── 6. robustness matrix ───────────────────────────────────────────────────────────────
-await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × ${Object.keys(viewports).length} viewports, nothing overflows`, async () => {
+await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × ${Object.keys(viewports).length} viewports (+2 with a wide system font), nothing overflows`, async () => {
   let slides = 0;
-  for (const [vpName, vp] of Object.entries(viewports)) {
-    const s = await open({ viewport: vp });
+  const runs = Object.entries(viewports).map(([name, vp]) => [name, vp, false]);
+  // The two tightest phones again with a much wider body font than the one we design with.
+  runs.push(['se-320x568 wide-font', viewports['se-320x568'], true], ['phone-390x844 wide-font', viewports['phone-390x844'], true]);
+  for (const [vpName, vp, wideFont] of runs) {
+    const s = await open({ viewport: vp, wideFont });
     const { page } = s;
     for (const [name, stats] of Object.entries(fixtures)) {
       await page.goto(link(stats));
@@ -490,6 +507,10 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
       const st = await state(page);
       const normal = Data.normalize(stats);
       eq(await page.locator('.slide.is-active .cover__name').innerText(), normal.chat.name, `[${vpName}] ${name}: cover shows the chat name`);
+      if (wideFont && name === 'demo') {
+        const family = await page.evaluate(() => getComputedStyle(document.querySelector('.total__facts .bubble')).fontFamily);
+        ok(/^"?DejaVu Sans/.test(family), `[${vpName}] the wide font override is in effect (${family})`);
+      }
       for (let i = 0; i < st.total; i++) {
         await showSettled(page, i);
         const issues = await findOverflow(page);
