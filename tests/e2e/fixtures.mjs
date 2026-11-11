@@ -122,6 +122,10 @@ const unbroken = makeStats({ name: 'Llanfairpwllgwyngyllgogerychwyrndrobwllllant
 
 const emojiName = makeStats({ name: '🍕🍕🍕 pizza fam 👨‍👩‍👧‍👦✨ ¡olé!', members: 7, total: 12345, label: '2026', names: emojiNames });
 
+// Names outside Latin: CJK without spaces, right-to-left scripts, combining marks.
+const intl = makeStats({ name: '周末火锅小分队🔥ولائم نهاية الأسبوع', members: 6, total: 15230, label: '2026年', names: ['小明', 'محمد علي', 'Zoë', 'אורי', 'Ngọc Ánh', 'Åsa'] });
+intl.most_reacted[0].text = '今晚谁带锅？我只负责吃。😋 من سيحضر الطبق الرئيسي؟';
+
 // Only what a v1 consumer may rely on: everything optional is gone.
 const bare = { v: 1, chat: { name: 'Bare Minimum', members: 5 }, period: { label: '2026' }, totals: { messages: 812 } };
 
@@ -166,7 +170,7 @@ const legacy = {
 
 export const fixtures = {
   demo: clone(vector.stats),
-  tiny, huge, duo, dozen, longName, unbroken, emojiName, bare, sparse, noQuotes, zeroNight, legacy,
+  tiny, huge, duo, dozen, longName, unbroken, emojiName, intl, bare, sparse, noQuotes, zeroNight, legacy,
 };
 
 export const viewports = {

@@ -134,13 +134,15 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   ok(!st.paused && st.index === 1 && st.time > held2.time, 'releasing resumes on the same slide');
 
   // Count-up: the big number is mid-flight early on and lands on the exact total.
-  await page.evaluate(() => WrappedStory.goTo(1));
-  await wait(page, 700);
+  // (Read on the player's own clock, so a slow machine cannot blur the two samples.)
+  await page.evaluate(() => { WrappedStory.goTo(1); WrappedStory.seek(650); });
   const mid = await page.locator('.slide.is-active .total__num').innerText();
-  await wait(page, 1800);
+  await page.evaluate(() => WrappedStory.seek(2600));
   const end = await page.locator('.slide.is-active .total__num').innerText();
-  ok(mid !== end, `the total counts up (saw "${mid}" on the way to "${end}")`);
+  ok(mid !== end && Number(mid.replace(/,/g, '')) > 0, `the total counts up (saw "${mid}" on the way to "${end}")`);
   eq(end, '48,213', 'the count-up lands on the exact total');
+  await page.evaluate(() => WrappedStory.resume());
+  ok(!(await state(page)).paused, 'handing the clock back resumes playback');
 
   // Tap right through every slide.
   const seen = ['cover', 'total'];

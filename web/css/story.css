@@ -682,7 +682,6 @@
   letter-spacing: -0.03em;
   word-break: break-word;
   overflow-wrap: anywhere;
-  text-shadow: 0 calc(var(--u) * 2) calc(var(--u) * 24) rgba(0, 20, 90, 0.25);
   padding-bottom: 0.06em;
 }
 

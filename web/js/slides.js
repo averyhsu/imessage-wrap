@@ -484,7 +484,8 @@
       bar.style.height = pct.toFixed(2) + '%';
       var track = h('div', 'col__track', bar);
       if (i === peak) {
-        var val = h('span', 'col__val', A(h('span', '', format(v)), 'pop', startDelay + values.length * step + 250));
+        // The whole pill pops in (its position uses `translate`, so `transform` is free).
+        var val = A(h('span', 'col__val', h('span', '', format(v))), 'pop', startDelay + values.length * step + 250);
         css(val, { bottom: 'calc(' + pct.toFixed(2) + '% + ' + u(7) + ')' });
         if (i === 0) css(val, { left: '0', translate: '0 0' });
         else if (i === values.length - 1) css(val, { left: 'auto', right: '0', translate: '0 0' });
