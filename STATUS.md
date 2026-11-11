@@ -1,76 +1,110 @@
 # Status
 
-_Last updated: 2026-11-11. All pieces built; fixes from the first independent review are in progress._
+_Last updated: 2026-11-11._
 
-Everything below was built and tested without a real iPhone or Mac at hand: on Linux, and on
-GitHub's macOS runners for the Apple parts. "Seen working" means it ran here, or in a CI run
-that passed and whose output was looked at. Nothing is listed on a build agent's word alone.
+**In one paragraph.** The recap story, the browser maker, the command-line tool, the Mac
+helper and the iPhone app with its Messages extension are all built and pass their tests.
+Nobody outside this repository can use them yet, because two switches are yours: the public
+site is off, and the code is on a working branch rather than `main`. Everything was built
+without a real iPhone or Mac, so the things only a device can prove are listed below as
+unproven, each with a short check you can run.
+
+"Seen working" below means it ran here, or in a CI run that passed and whose output was
+looked at. Nothing is listed on a build agent's word alone.
+
+## How the result measures against the goal
+
+| Goal | Where it stands |
+|------|-----------------|
+| 1. Lives inside Messages | **Partly.** The recap arrives in the thread as a link; with the iPhone app it is a card in the Messages app drawer that plays the story inside Messages (seen in the Simulator, one-to-one chat). The app cannot be installed by other people until TestFlight. The typed `/wrapped` command needs one person's Mac to be running the helper. |
+| 2. Works on iPhone, no Mac | **Watching: yes. Making: unproven.** Apple gives apps no way to read message history. The only iPhone-only route is Apple's Shortcuts app plus the maker's paste box; it has never been run on a real phone (check E). Otherwise making a recap needs a Mac, or an iPhone backup on any computer. |
+| 3. Works for everyone in the chat | **Yes for watching**, in any browser, iPhone or Android. Unproven: how the link looks in a real thread. Where Messages shows no preview it is a long plain link. |
+| 4. Almost no setup | **None for viewers.** The maker of the recap has real setup: finding two files in a hidden folder (browser route), or Terminal and a permission (Mac helper). |
+| 5. Usable by strangers today | **Not yet: two owner switches away** (public site, merge to `main`). After that: demo and maker for anyone with a browser; installer for Mac owners. |
+| 6. Privacy | **Yes.** Counted on the device; no server; the recap travels in the part of the link that is never sent to a website; message text only if switched on; no phone numbers or addresses in a recap. Two independent reviews attacked this; what they found was fixed (see [DECISIONS](docs/DECISIONS.md) D13, D14). |
+| 7. LinkedIn-worthy | **The demo is.** A real recap made with the defaults is plainer: first names, `…1234` for people who are not in your contacts until you name them, and no message text. |
+
+Every required part of the recap is there: totals; activity by hour, weekday and month; the
+chat's personality; late-night messages; top senders; message of the year by tapbacks; a
+shareable summary card; and optional AI-written awards (Mac helper only, never run against
+the real API).
 
 ## What works
 
 | Piece | What has been seen working | Where |
 |-------|----------------------------|-------|
-| **Story** (the tap-through recap) | All 12 slides render and animate from invented data in a real browser; opened from a recap link built by the command-line tool with matching numbers; zero outside requests. Recorded as video. | `web/`, [screenshots](docs/screenshots/web/), [recording](docs/media/demo-story.mp4) |
-| **Stats engines** (Python + JavaScript) | Both give byte-identical results on every invented chat, period and time zone in the conformance suite, and match a chat whose numbers were worked out by hand. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
-| **Command-line tool** | `wrapped chats`, `wrapped stats`, `wrapped link` on the invented database. | `wrapped/cli.py` |
-| **Mac helper** (`/wrapped`) | Everything up to the moment of sending: finds the command, builds the card, text and link, verifies sends against the database (with a fake Messages). The send script compiles against the real Messages scripting dictionary on macOS 26. The installer runs for real on a clean macOS runner. | `wrapped/mac/`, [guide](docs/MAC.md) |
-| **iPhone app** | Builds on a macOS runner with no signing; 42 unit tests and 7 UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
-| **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, shows its launcher, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also checked from the receiving side of the simulated chat. | `ios/MessagesExtension/`, [run](https://github.com/averyhsu/imessage-wrap/actions/runs/43058727671) |
-| **Maker page** ("make your own" in the browser) | In a real browser (Chromium): the invented Mac database with its write-ahead log, an iPhone backup folder, pasted exports and the sample chat all go from file to chat list to link; the stats match the Python engine byte for byte; quotes off by default; no outside requests. | `web/make/`, [screenshots](docs/screenshots/web/) |
+| **Story** (the tap-through recap) | All 12 slides from invented data in a real browser (Chromium), 2,465 automated checks including 18 different recaps at 6 screen sizes; opened from a link built by the command-line tool with matching numbers; zero outside requests; hostile links do nothing. | `web/`, [screenshots](docs/screenshots/web/), [recording](docs/media/demo-story.mp4) |
+| **Maker page** | In Chromium, 399 checks: the invented Mac database with its write-ahead log, an iPhone backup folder, pasted exports and the sample chat all go from file to chat list to link; the numbers match the Python engine byte for byte; quotes off by default; the preview holds exactly what the link holds. | `web/make/`, [screenshots](docs/screenshots/web/) |
+| **Stats engines** (Python + JavaScript) | Byte-identical results on every invented chat, period and time zone in the conformance suite; match a chat whose numbers were worked out by hand and an independent recount by a reviewer. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
+| **Command-line tool** | `wrapped chats`, `stats`, `link` on the invented database; one plain sentence instead of an error trace on damaged files. | `wrapped/cli.py` |
+| **Mac helper** (`/wrapped`) | Everything up to the moment of sending, against a fake Messages: finds the command, replies only in chats approved by id, builds card, text and link, verifies sends. The send script compiles against the real Messages scripting dictionary on macOS 26; the installer runs for real on a clean macOS runner. | `wrapped/mac/`, [guide](docs/MAC.md) |
+| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
+| **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also from the receiving side of the simulated chat. | `ios/MessagesExtension/` |
 
-CI (GitHub Actions, on this branch): `Web story`, `Make page`, `engine`, `Mac helper` and `iOS` workflows.
-Latest results are on the [Actions page](https://github.com/averyhsu/imessage-wrap/actions).
+CI on this branch: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`. Results:
+[Actions](https://github.com/averyhsu/imessage-wrap/actions).
 
-## What does not work, or is not proven
+## What is not proven
 
-These cannot be checked without real devices. None has been claimed as working.
+None of this has been claimed as working. It needs real devices, or your yes.
 
-1. **Sending into a real chat from the Mac helper.** On macOS 26 and 27 AppleScript sending to
-   group chats is known to be fragile; the helper verifies every send and reports honestly,
-   but only a real Mac can say whether your chats accept it.
+1. **The maker page on a real Mac.** Whether Safari and Chrome let you pick or drag
+   `chat.db` out of `~/Library/Messages` without extra permissions is unknown (check A). The
+   page and the story have only been driven in Chromium, never Safari.
 2. **Reading a real Messages database.** The engines are tested against an invented
-   database built to Apple's format, and against real archived text, but not against a
-   database Messages itself wrote.
-3. **Link behaviour inside Messages on a real phone**: whether the preview card (and its
-   short video) appears, and whether the part of the link after `#` survives delivery.
-4. **The Messages extension between two real phones**, in a group, and for people without
+   database built to Apple's format and against real archived text, not against a database
+   Messages itself wrote.
+3. **Sending from the Mac helper.** On macOS 26 and 27 scripted sending to group chats is
+   known to be fragile. The helper checks every send and reports honestly; only your Mac can
+   say whether your chats accept it (check C).
+4. **The link inside Messages on a real phone**: whether a preview card (and its short
+   video) appears, whether the part after `#` survives delivery, and how a long link looks
+   in a group with Android phones (check B).
+5. **The Messages extension between two real phones**, in a group, and for people without
    the app. In the Simulator a *received* live bubble gets no data from Messages, so the app
-   sends a plain card instead (it always shows the chat's name and count); real phones may
-   differ.
-5. **The iPhone-only Shortcut route** ([docs/SHORTCUT.md](docs/SHORTCUT.md)): a recipe, never
-   run.
-6. **Encrypted iPhone backups** are detected and explained, not read.
-7. **AI-written awards** (`--ai`, optional, off by default): tested with a fake API; the
-   real API has never been called (that would spend money).
+   sends a plain card instead; real phones may differ (check D).
+6. **Making a recap with only an iPhone.** The Shortcut recipe has never been run; nobody
+   knows yet whether it reports who sent each message in a group (check E). The iPhone app
+   itself only shows and sends recaps; it does not make them.
+7. **Encrypted iPhone backups** are detected and explained, not read.
+8. **AI-written awards** (`--ai`, off by default): tested with a fake API only.
+9. **Large histories.** The biggest database tried is the invented one (thousands of
+   messages) plus synthetic runs of 500,000 rows in the engines; a real multi-year,
+   multi-hundred-megabyte database has not been through the browser.
 
-## Your two-minute checks
+## Your checks
 
-Each is independent. Do them in any order; skip what you do not have.
+Each is independent and takes about two minutes unless it says otherwise.
 
-**A. Mac, reading only (2 minutes, sends nothing)**
-1. Install: see [docs/MAC.md](docs/MAC.md) (one line in Terminal).
-2. Give Terminal Full Disk Access, reopen it, run `threadback doctor` then `threadback chats`.
-   Do your group chats appear, with names and plausible counts?
-3. `threadback preview --chat "<part of a chat name>" --open`. Do the card and the numbers
-   look right?
+**A. The maker on your Mac (sends nothing)**
+1. Get the pages running locally (README, "Try it"), open `http://127.0.0.1:4173/make/` in
+   Safari, then again in Chrome.
+2. In Finder: Go → Go to Folder… → `~/Library/Messages`. Drag `chat.db` and `chat.db-wal`
+   onto the page. Does your chat list appear? If the browser refuses, copy both files to
+   the Desktop and drag those.
+3. Pick a chat, name anyone shown as `…1234`, create the recap. Do the numbers look right
+   against what you know of the chat?
 
-**B. Mac, one real send (2 minutes, needs your yes below)**
-1. `threadback doctor --automation` and allow the prompt.
-2. `threadback send-test --chat "<a chat you choose>" --with-image`, type `send`.
-   Did it say DELIVERED, and did the message arrive on your phone?
-
-**C. iPhone, links (2 minutes, after the public site is on)**
+**B. Links on your iPhone (after the public site is on)**
 1. Text yourself the site link on its own line. Does a preview card appear? Does it move?
-2. On the maker page, tap "Try it with sample data", copy the link, text it to yourself,
-   tap it. Does the story open with the sample chat's numbers? (This proves the link
-   survives Messages.)
-3. On the last slide, tap **Share card**. Does the share sheet offer the image?
+2. Text yourself the link from check A (or the maker's sample-data link) and tap it. Does
+   the story open with the right numbers? That proves the link survives Messages.
+3. On the last slide tap **Share card**. Does the share sheet offer the image?
 
-**D. iPhone app on your own phone (about 10 minutes, free)**
-Follow "Run it on your own iPhone" in [ios/README.md](ios/README.md), then its checklist.
+**C. The Mac helper (reading: free; one real send: needs your yes)**
+1. Install it ([docs/MAC.md](docs/MAC.md)), give Terminal Full Disk Access, run
+   `threadback doctor`, then `threadback chats`, then
+   `threadback preview --chat "<part of a chat name>" --open`. Card and numbers right?
+2. `threadback doctor --automation`, allow the prompt, then
+   `threadback send-test --chat "<a chat you choose>" --with-image` and type `send`. Did it
+   say DELIVERED, and did the message arrive on your phone?
+
+**D. The iPhone app on your own phone (about 10 minutes, free)**
+"Run it on your own iPhone" in [ios/README.md](ios/README.md), then the checklist there.
 
 **E. The Shortcut experiment (about 10 minutes, iOS 26.4 or later)**
-[docs/SHORTCUT.md](docs/SHORTCUT.md), "The 10-minute device test".
+[docs/SHORTCUT.md](docs/SHORTCUT.md), "The 10-minute device test". If it reports senders in
+group chats, making a recap with only an iPhone becomes real.
 
 ## Decisions waiting for you
 
@@ -78,18 +112,22 @@ Nothing below has been done. Each needs your yes.
 
 | Decision | What happens if yes | Cost |
 |----------|--------------------|------|
-| **Turn on the public site** (GitHub Pages) | The demo, the maker page and recap links work at `https://averyhsu.github.io/imessage-wrap/`. You switch it on in the repo's Settings → Pages → Source: "GitHub Actions", then run the "Publish site" workflow. | Free. The site is public. |
-| **Merge this branch into `main`** | CI runs on `main`; the one-line installer works from `main`. | Free |
-| **Send into a real group chat** | Check B above, then the Mac helper can answer `/wrapped` in chats you name. | Free. Messages come from your Apple ID. |
-| **Apple Developer Program** | TestFlight for the iPhone app so other people can install it; later the App Store. | $99 a year |
+| **Turn on the public site** (GitHub Pages) | The demo, the maker and recap links work at `https://averyhsu.github.io/imessage-wrap/`. In the repo: Settings → Pages → Source: "GitHub Actions", then run the "Publish site" workflow. **Settle the address first**: a recap link contains the site's address, so links already shared would stop working if the repo were renamed or the site moved. | Free. The site is public. |
+| **Merge this branch into `main`** | CI runs on `main`; the one-line installer and the README's plain `git clone` work. | Free |
+| **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
+| **Apple Developer Program** | TestFlight, so other people can install the iPhone app; later the App Store. | $99 a year |
 | **Real AI awards** | `--ai` calls the Anthropic API with counts and first names only (no message text unless you add `--ai-quotes`). | A small API charge per recap; needs an API key |
+| **A licence** | People may reuse the code on stated terms. Until then it is public but not open-source. | Free |
 
 ## What's next
 
-1. Land the fixes from the independent review (see below), then a second review pass.
-2. With your yes: public site on, then checks C and B.
-3. With the developer program: TestFlight build, then real-phone checks of the extension.
-4. If the Shortcut test (E) shows senders in group chats: make it the main iPhone route.
+1. With your yes: public site on and branch merged; then checks A, B and C.
+2. Check E. If the Shortcut reports senders in group chats, build the last link for an
+   iPhone-only path: the app takes the Shortcut's output and makes the recap itself, so it
+   can be sent from the Messages drawer without a browser.
+3. With the developer program: a TestFlight build, then check D between two phones.
+4. Safari and Firefox runs of the story and the maker in CI.
+5. Reading encrypted iPhone backups in the browser (feasible; not built).
 
 ## Assumptions made along the way
 
@@ -102,6 +140,5 @@ Nothing below has been done. Each needs your yes.
   sample cards are invented.
 - Public name "Threadback", to stay clear of the "iMessage" and "Wrapped" trademarks; code
   and the `/wrapped` command keep the working name ([DECISIONS](docs/DECISIONS.md) D4).
-- Message text never leaves the device unless asked for, and unnamed members are shown as
-  `…1234`, never as a phone number (D11, D12).
-- No licence file has been added; choosing one is yours.
+- Message text never leaves the device unless asked for; people are shown by first name,
+  and anyone without a contact name as `…1234`, never as a phone number (D11, D12).

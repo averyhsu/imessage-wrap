@@ -32,19 +32,30 @@ A tap-through story, in the style of Instagram or Spotify stories, built from on
 | **Watch the demo** | The full story with an invented chat. | A browser. |
 | **Make your own in the browser** | Drop in your Messages database (from a Mac, or from an iPhone backup on a Mac or PC), pick a chat, get a link to send. | A computer that has your messages. Nothing is installed or uploaded. |
 | **Mac helper** | Anyone in the chat types `/wrapped`; the recap card, a short summary and the link appear in the thread. | A Mac signed in to Messages. [Guide](docs/MAC.md) |
-| **iPhone app** | Threadback in the Messages app drawer: send a recap as a bubble, play it full screen. | Xcode today; TestFlight later. [Guide](ios/README.md) |
+| **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight later. [Guide](ios/README.md) |
 
-The public site is not switched on yet (see [STATUS.md](STATUS.md)). Until it is, run the
-same pages locally:
+**Today the public site is not switched on and the code is on a working branch, not yet on
+`main`** (both are waiting for the owner; see [STATUS.md](STATUS.md)). Until then, run the
+same pages on your own computer:
 
 ```sh
-git clone https://github.com/averyhsu/imessage-wrap && cd imessage-wrap
+git clone -b claude/imessage-wrapped-build-84gdoo https://github.com/averyhsu/imessage-wrap
+cd imessage-wrap
 npm ci && npm run serve
 # demo story:     http://127.0.0.1:4173/?demo=1
-# make your own:  http://127.0.0.1:4173/make/
+# make your own:  http://127.0.0.1:4173/make/   (has a "Try it with sample data" button)
 ```
 
-Everyone *else* in the chat needs nothing at all. The link opens in any phone's browser.
+A link made on a local copy points at the public site, so other people can open it only
+once that site is on. "Open story" on the maker page plays it locally either way.
+
+Everyone *else* in the chat needs nothing at all: the link opens in any phone's browser,
+iPhone or Android. In a chat with green bubbles, or wherever Messages shows no preview, it
+arrives as a long plain link; it still opens the same story.
+
+A recap made with the defaults shows first names, shows people who are not in your contacts
+as `…1234` until you name them, and leaves the words of messages out. The pictures above
+are the invented demo with names and quotes switched on.
 
 With the iPhone app, the recap also lives in the Messages app drawer. These are from the
 real Messages app in the iOS Simulator, driven by the test suite
@@ -74,8 +85,9 @@ Threadback splits it:
 
 1. **One person computes the recap** where the history can be read: on a Mac
    (`~/Library/Messages/chat.db`), or from an iPhone backup, in the browser or with the
-   command-line tool. An iPhone-only route through the Shortcuts app is written up as an
-   [experiment](docs/SHORTCUT.md).
+   command-line tool. With only an iPhone there is one possible route, through Apple's
+   Shortcuts app; it is written up as an [experiment](docs/SHORTCUT.md) and has not been
+   run on a real phone yet.
 2. **The recap travels as a link.** No backend, nothing to keep running.
 3. **Everyone watches the same story**, in the browser, or natively in the Messages app
    drawer with the iPhone app.
@@ -87,7 +99,8 @@ is in [docs/DECISIONS.md](docs/DECISIONS.md) and the notes behind it in
 ## What is proven and what is not
 
 Everything was built and tested without a real iPhone or Mac at hand: on Linux, and on
-GitHub's macOS runners for the Apple parts. [STATUS.md](STATUS.md) lists exactly what has
+GitHub's macOS runners for the Apple parts. The web pages were driven in Chromium only, not
+Safari. [STATUS.md](STATUS.md) lists exactly what has
 been seen working, what has only been tested against invented data, and a two-minute
 checklist for the things only a real device can confirm (above all: sending into a real
 group chat).

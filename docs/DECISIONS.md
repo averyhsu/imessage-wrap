@@ -34,10 +34,11 @@ allows**:
    an iPhone + any computer (local backup, in the browser),
    or an iPhone alone on iOS 26.4+ (a Shortcut using Apple's "Find Messages" action —
    experimental, see D7).
-2. **Deliver into the thread** as a link whose `#fragment` *is* the recap. The link shows
-   an autoplaying video card in the conversation and opens a full-screen animated story for
-   **every** member — iPhone, Android or Mac — with nothing to install and no server ever
-   seeing the data.
+2. **Deliver into the thread** as a link whose `#fragment` *is* the recap. The link opens a
+   full-screen animated story for **every** member — iPhone, Android or Mac — with nothing
+   to install and no server ever seeing the data. Per Apple's documentation the link should
+   show as a card with a short looping video in the conversation; that has not been seen on
+   a real phone yet.
 3. **Upgrade paths that feel native**: an iOS iMessage app that sends the same recap as an
    interactive bubble and plays it inside Messages; and a Mac helper that answers a typed
    `/wrapped` in any group chat.
@@ -50,7 +51,7 @@ Scores are 0–5, higher is better (Cost: 5 = free. Risk: 5 = low App Store / te
 | # | Path | In Messages | iPhone only | Everyone in chat | Low setup | Strangers today | Privacy | Wow | Feasible | Cost | Time to demo | Risk | Verdict |
 |---|------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|---------|
 | 1 | iMessage app extension, alone | 5 | 5 | 2 | 2 | 1 | 4 | 4 | **1** | 4 | 2 | 3 | Cannot compute anything. **Kept as viewer + share surface.** |
-| 2 | On-iPhone history via Shortcuts "Find Messages" (iOS 26+) | 2 | 4 | 3 | 3 | 4 | 4 | 3 | 3 | 5 | 4 | 3 | **Built as experimental input**; group fidelity unverified. |
+| 2 | On-iPhone history via Shortcuts "Find Messages" (iOS 26+) | 2 | 4 | 3 | 3 | 2 | 4 | 3 | 2 | 5 | 4 | 3 | **Built as experimental input**, never run on a phone; the scores assume it reports senders in group chats, which is unverified. |
 | 3 | Link with `#fragment` payload → static web story | 2 | 3 | **5** | 4 | 4 | 4 | 3 | **5** | 5 | 5 | 4 | **Chosen as the universal delivery.** |
 | 4 | Mac helper: `chat.db` + AppleScript reply to `/wrapped` | 3 | 0 | 2 | 1 | 2 | 4 | 3 | 3 | 4 | 5 | 3 | **Built** (the original prototype, hardened). |
 | 5 | Native Mac menu-bar app, signed + notarized | 3 | 0 | 2 | 2 | 1 | 4 | 3 | 3 | 3 | 3 | 3 | Deferred: needs $99/yr; adds polish, not reach. |
@@ -66,13 +67,13 @@ How the hybrid does against each of the seven goals:
 
 | Goal | Where the hybrid lands | What is missing from the ideal |
 |------|------------------------|--------------------------------|
-| 1. Lives inside Messages | An autoplaying card in the thread → one tap → story. With the iOS app: an interactive bubble that plays inside Messages. On a Mac running the helper: typing `/wrapped` gets a reply in the thread. | Without the app, the story plays in Safari, not in the Messages sheet. |
+| 1. Lives inside Messages | A link in the thread (a card with a looping video, if Messages renders the preview as documented) → one tap → story. With the iOS app: an interactive bubble that plays inside Messages. On a Mac running the helper: typing `/wrapped` gets a reply in the thread. | Without the app, the story plays in Safari, not in the Messages sheet. |
 | 2. Works on iPhone, no Mac | Viewing: yes, always. Creating: iPhone alone via Shortcuts on iOS 26.4+ (experimental), or iPhone + Windows PC via a local backup. | No verified, effortless, iPhone-only creation path. |
-| 3. Works for everyone | Yes: any device with a browser, including Android and Mac members. | — |
-| 4. Almost no setup | Viewers: none. Creator: drop one file on a web page (Mac), or run one shortcut (iPhone), or one install command (Mac helper). | The creator still has one step. |
+| 3. Works for everyone | Yes for watching: any device with a browser, including Android and Mac members. | Where no preview renders (groups with Android phones, SMS) the link is a long plain URL of up to 4,800 characters. Shortening it would need a server, which D2 rules out. |
+| 4. Almost no setup | Viewers: none. Creator: find two files in a hidden folder and drop them on a web page (Mac), or make an unencrypted backup first (iPhone + computer), or one install command plus a permission (Mac helper). | The creator has real setup; only viewers have none. |
 | 5. Usable by strangers today | Yes, the moment GitHub Pages is switched on (owner's call). | The iOS app needs the $99 Apple Developer Program for TestFlight. |
 | 6. Privacy | Stats are computed on the member's own device. The recap travels inside the URL `#fragment`, which browsers never send to a server. No analytics, no third-party scripts, no backend. AI awards are off unless explicitly enabled. | The link *is* the data: anyone it is forwarded to can open it. A "no quotes" switch keeps message text out. |
-| 7. LinkedIn-worthy | A real animated story, a share card, and a thread that plays a video card by itself. | An in-Messages native sheet for everyone would be stronger; that is the App Clip step. |
+| 7. LinkedIn-worthy | A real animated story and a share card. | An in-Messages native sheet for everyone would be stronger; that is the App Clip step. A recap made with the defaults (first names, no quotes) is plainer than the demo. |
 
 ## Path findings in brief
 
@@ -296,4 +297,30 @@ Smaller items (a personality id that named a built-in property, numbers above 10
 embed mode opened in a normal browser, right-to-left names, focus order, reduced motion) were
 fixed in the story with tests. Not changed: `wrapped chats --json` still lists members' raw
 identifiers, because it is the owner's own local output and never part of a recap.
+
+### D14 — The second independent review: goal fit, the maker, the iPhone code
+A second reviewer scored the build against the seven goals, attacked the maker page, read
+the Swift, and re-checked the first review's fixes (all five held). Its scorecard is the
+basis of the table at the top of [`STATUS.md`](../STATUS.md); it judged the central argument
+(no single path can do the whole job) sound and sourced, and called out where this document
+had stated hopes as facts. Those passages are corrected above.
+
+| Finding | What was done |
+|---------|---------------|
+| A contact saved under an e-mail address or a number went into the link unmasked. | Names from the contact table go through the same mask as every other label, in both engines. |
+| The maker's background worker was not bound by the page's security policy and could have reached the network. Nothing did, but the promise was not enforced. | The worker is started from a blob so it inherits the page's policy; its network functions are also removed. A test proves requests from inside it are blocked. |
+| The maker hung when someone's name was a JavaScript built-in such as `constructor`. | Names never key plain objects; errors in a step are shown, not swallowed. |
+| Names had no length limit (a 100,000-character chat name made a 300,000-pixel page). | Capped in both engines: 80 characters for a chat, 40 for a person. |
+| Everyone read "Me 20.3%". | The maker asks for the owner's name; the command-line tool and the Mac helper take it from the Mac account. |
+| The iPhone app decompressed a recap before checking its size, accepted any link scheme, and remembered every recap it displayed. | Size is limited before and during decompression; only its own link forms are accepted; only recaps the person sent or pasted are remembered, with a Clear control. |
+| The extension's main button sent the invented demo into a real chat. | The main action is the person's own recap; the sample only plays. |
+| README's "try it" assumed the code was on `main`; STATUS had no check for the maker on a real Mac; the LinkedIn draft led with the unproven `/wrapped` flow and the demo's invented numbers. | All three rewritten. |
+
+**Leads not investigated.** (1) Apple's Shortcuts app has the same "Find Messages" action on
+macOS; if it reports senders there, a Mac owner could make a recap with no Terminal and no
+Full Disk Access by running the same shortcut and pasting into the maker. (2) Apple's
+privacy data export (privacy.apple.com) was not checked for message history. (3) Handing the
+Shortcut's output straight to the iPhone app (an App Intent) so that a recap could be made
+and sent from the Messages drawer with no browser: worth building only once the device test
+in [`SHORTCUT.md`](SHORTCUT.md) shows that the Shortcut reports senders in group chats.
 
