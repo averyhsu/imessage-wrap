@@ -51,6 +51,8 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     private var failureLabel: UILabel?
     private var loadingIndicator: UIActivityIndicatorView?
     private var reloadsAfterCrash = 0
+    private var loadStartedAt = Date()
+    private var readyNote = ""
 
     private(set) var slideCount = 0
     private(set) var currentSlide = 0
@@ -169,6 +171,7 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             showFailure("The story files are missing from this build.")
             return
         }
+        loadStartedAt = Date()
         webView?.loadFileURL(location.url, allowingReadAccessTo: location.directory)
     }
 
@@ -263,12 +266,16 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             isReady = true
             hideLoadingIndicator()
             slideCount = intValue(body["slides"]) ?? slideCount
-            setStatus("ready \(slideCount)")
+            // "ready 12 (1.4s)": the time from loading the page to the story being on screen.
+            let elapsed = String(format: "%.1f", Date().timeIntervalSince(loadStartedAt))
+            readyNote = " (ready in \(elapsed)s)"
+            setStatus("ready \(slideCount)\(readyNote)")
+            NSLog("[story] ready after %@ s, %ld slides", elapsed, slideCount)
         case "slide":
             hideLoadingIndicator()
             currentSlide = intValue(body["index"]) ?? currentSlide
             slideCount = intValue(body["total"]) ?? slideCount
-            setStatus("slide \(currentSlide)/\(slideCount)")
+            setStatus("slide \(currentSlide)/\(slideCount)\(readyNote)")
         case "haptic":
             playHaptic(style: (body["style"] as? String) ?? "light")
         case "share":
@@ -378,15 +385,27 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         }
     }
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        if !isReady {
+            setStatus("loading: navigation started")
+        }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if !isReady {
+            setStatus("loaded")
+        }
         // Fallback: a page that never reports "ready" must not keep the spinner forever.
+        // If it still has not reported by then, record what the page looks like from inside.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
             self?.hideLoadingIndicator()
+            self?.probePageIfNotReady()
         }
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         showFailure("The story could not be loaded.")
+        setStatus("error: navigation failed: \(StoryViewController.describe(error))")
     }
 
     func webView(
@@ -395,15 +414,62 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         withError error: Error
     ) {
         showFailure("The story could not be loaded.")
+        setStatus("error: provisional navigation failed: \(StoryViewController.describe(error))")
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         // The web process was killed (memory pressure is the usual cause): reload once.
         if reloadsAfterCrash < 1 {
             reloadsAfterCrash += 1
+            setStatus("loading: web process restarted")
             loadStory()
         } else {
             showFailure("The story stopped unexpectedly.")
+        }
+    }
+
+    private static func describe(_ error: Error) -> String {
+        let nsError = error as NSError
+        return "\(nsError.domain) \(nsError.code) \(nsError.localizedDescription)"
+    }
+
+    /// Diagnostics for a page that loaded but never reported "ready": puts the page's own
+    /// view of the world into the bridge status (and the log).
+    private func probePageIfNotReady() {
+        guard !isReady, let web = webView else {
+            return
+        }
+        let script = """
+        (function () {
+          try {
+            return [
+              'readyState=' + document.readyState,
+              'visibility=' + document.visibilityState,
+              'class=' + document.documentElement.className,
+              'story=' + (typeof window.WrappedStory),
+              'bridgeLog=' + ((window.WrappedBridge && window.WrappedBridge.log) ? window.WrappedBridge.log.length : -1),
+              'handler=' + !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.wrapped),
+              'size=' + window.innerWidth + 'x' + window.innerHeight
+            ].join(' ');
+          } catch (e) {
+            return 'probe failed: ' + e;
+          }
+        })()
+        """
+        web.evaluateJavaScript(script) { [weak self] (result: Any?, error: Error?) in
+            guard let self = self, !self.isReady else {
+                return
+            }
+            let text: String
+            if let value = result as? String {
+                text = value
+            } else if let error = error {
+                text = "js error: \(StoryViewController.describe(error))"
+            } else {
+                text = "no result"
+            }
+            NSLog("[story] not ready after load: %@", text)
+            self.setStatus("loaded, not ready: \(text)")
         }
     }
 

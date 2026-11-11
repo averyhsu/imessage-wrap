@@ -159,9 +159,9 @@ jobs:
           RECORDER=$!
           sleep 2
           xcrun simctl launch "$UDID" "$APP_ID" --autoplay-demo
-          sleep 10
+          sleep 18
           xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-02-demo-story.png"
-          sleep 14
+          sleep 12
           xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-03-demo-story-later.png"
           kill -INT "$RECORDER" || true
           wait "$RECORDER" || true
@@ -231,11 +231,38 @@ jobs:
           } > "$SHOTS/TEST-RESULTS.txt"
           cat "$SHOTS/TEST-RESULTS.txt"
 
+      # A small copy of the demo-story recording for the repository. On demand only (the
+      # commit message contains "publish-recording", or a manual run), because it needs
+      # ffmpeg and adds a binary to the history.
+      - name: Compress the screen recording (on demand)
+        if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'publish-recording')) }}
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+          MESSAGES_OUTCOME: ${{ steps.messages.outcome }}
+        run: |
+          brew install ffmpeg
+          mkdir -p "$OUT/recordings"
+          NAMES="app-demo-story"
+          if [ "$MESSAGES_OUTCOME" = "success" ]; then
+            NAMES="$NAMES messages-extension"
+          fi
+          for name in $NAMES; do
+            if [ -f "$OUT/video/$name.mp4" ]; then
+              ffmpeg -loglevel error -y -i "$OUT/video/$name.mp4" \
+                -vf "scale=420:-2,fps=24" -c:v libx264 -crf 31 -preset slow -pix_fmt yuv420p \
+                -an -movflags +faststart "$OUT/recordings/$name.mp4" || true
+            fi
+          done
+          ls -la "$OUT/recordings"
+
       # Only runs for native ("iOS …") commits publish, so a web-only push cannot overwrite
       # newer native screenshots with an older build's.
       - name: Publish screenshots to the branch
         if: ${{ !cancelled() && github.ref_type == 'branch' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'iOS')) }}
         env:
+          RECORDINGS: ${{ github.workspace }}/build/out/recordings
           BRANCH: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           WEB_SOURCE: ${{ steps.web.outputs.source }}

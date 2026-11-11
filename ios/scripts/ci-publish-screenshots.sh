@@ -43,6 +43,16 @@ main() {
     cp "$src/TEST-RESULTS.txt" "$stage/TEST-RESULTS.txt"
   fi
 
+  # Compressed screen recordings are produced only on demand (see the workflow). When this
+  # run has none, the ones already committed are kept.
+  local have_recordings=0
+  if [ -n "${RECORDINGS:-}" ] && [ -d "${RECORDINGS:-}" ]; then
+    for file in "$RECORDINGS"/*.mp4; do
+      cp "$file" "$stage/"
+      have_recordings=1
+    done
+  fi
+
   {
     echo "# iOS Simulator screenshots"
     echo ""
@@ -52,6 +62,8 @@ main() {
     echo "- Simulator: ${SIM_LABEL:-unknown}"
     echo "- Story shown in the app: the **${WEB_SOURCE:-unknown}** web story"
     echo "- Test results and notes of that run: [TEST-RESULTS.txt](TEST-RESULTS.txt)"
+    echo "- Screen recordings: every run uploads full-size ones as the \`ios-video\` artifact; a"
+    echo "  compressed \`app-demo-story.mp4\` is committed here only when a run is asked to."
     echo ""
     echo "What the file names mean:"
     echo ""
@@ -79,9 +91,19 @@ main() {
   for attempt in 1 2 3 4 5 6; do
     git fetch --quiet --depth 1 origin "$branch"
     git checkout --quiet --force --detach FETCH_HEAD
+    local keep
+    keep="$(mktemp -d)"
+    if [ "$have_recordings" -eq 0 ] && [ -d "$dest" ]; then
+      for file in "$dest"/*.mp4; do
+        cp "$file" "$keep/"
+      done
+    fi
     rm -rf "$dest"
     mkdir -p "$dest"
     cp -R "$stage"/. "$dest"/
+    for file in "$keep"/*.mp4; do
+      cp "$file" "$dest/"
+    done
     git add -A "$dest"
     if git diff --cached --quiet; then
       echo "publish: screenshots are unchanged"

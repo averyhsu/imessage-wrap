@@ -1,10 +1,13 @@
 import XCTest
 
-/// Stage 3 (stretch): drive the REAL extension inside the Simulator's Messages app.
+/// The REAL extension inside the Simulator's Messages app: open a conversation, open the
+/// app drawer, launch the extension, stage and send the demo recap, check the bubble, tap
+/// it and watch the story play in the expanded style.
 ///
-/// Apple documents no automation for this, so the test explores: it screenshots and
-/// dumps the accessibility hierarchy at every step and keeps going as far as it can.
-/// CI runs it in its own step that is allowed to fail; the main test run skips it.
+/// Apple documents no automation for Messages, so this drives `com.apple.MobileSMS` by its
+/// accessibility tree as found on iOS 26 (the "add" button, the drawer list, "sendButton").
+/// Every step is screenshotted and its hierarchy dumped; CI runs the test in its own step
+/// that is allowed to fail, and the main test run skips it.
 final class MessagesExtensionUITests: XCTestCase {
     private let messages = XCUIApplication(bundleIdentifier: "com.apple.MobileSMS")
     private let productName = "Threadback"
@@ -58,6 +61,28 @@ final class MessagesExtensionUITests: XCTestCase {
         }
     }
 
+    /// The story's bridge status inside Messages ("ready 12", "slide 2/12", "loaded, not
+    /// ready: …", "error: …"). Debug builds of the extension expose it as `story.bridge`.
+    private func waitForStory(timeout: TimeInterval, until matches: (String) -> Bool) -> String {
+        let label = messages.staticTexts["story.bridge"]
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = "(no story.bridge element)"
+        while Date() < deadline {
+            if label.exists {
+                last = label.label
+                if matches(last) {
+                    return last
+                }
+            }
+            pause(0.5)
+        }
+        return last
+    }
+
+    private func isPlaying(_ status: String) -> Bool {
+        return status.hasPrefix("ready") || status.hasPrefix("slide")
+    }
+
     // MARK: The walkthrough
 
     func testRecapBubbleInsideMessages() throws {
@@ -70,118 +95,126 @@ final class MessagesExtensionUITests: XCTestCase {
         messages.launch()
         let foreground = messages.wait(for: .runningForeground, timeout: 30)
         UIArtifacts.note("messages: foreground=\(foreground)")
-        pause(3)
-        checkpoint("01-launched")
+        pause(2)
         dismissInterruptions()
         pause(1)
-        checkpoint("02-conversation-list")
+        checkpoint("01-conversation-list")
 
-        // 1. Open a conversation (the Simulator ships a simulated one).
-        var inConversation = false
+        // 1. Open a conversation (the Simulator ships two simulated ones).
         let firstCell = messages.cells.firstMatch
-        if firstCell.waitForExistence(timeout: 6) {
-            UIArtifacts.note("messages: first cell label='\(firstCell.label)' id='\(firstCell.identifier)' count=\(messages.cells.count)")
+        let inConversation = firstCell.waitForExistence(timeout: 8)
+        if inConversation {
+            UIArtifacts.note("messages: opening conversation '\(firstCell.label)'")
             firstCell.tap()
-            inConversation = true
-        } else {
-            UIArtifacts.note("messages: no conversation cells; trying the compose button")
-            inConversation = tapFirst("compose", [
-                messages.buttons["composeButton"],
-                messages.buttons["Compose"],
-                messages.buttons["New Message"],
-                anyElement(labelContaining: "compose")
-            ])
         }
-        pause(2.5)
+        XCTAssertTrue(inConversation, "no conversation to open in the Simulator's Messages app")
+        pause(2)
         dismissInterruptions()
-        checkpoint("03-conversation")
+        _ = messages.textFields["messageBodyField"].waitForExistence(timeout: 10)
+        checkpoint("02-conversation")
 
-        // 2. Open the app drawer ("+" next to the text field on iOS 17 and later).
-        // On iOS 26 it is a button labelled "add" inside the element "MessageEntryView".
+        // 2. Open the app drawer: the "+" next to the text field (button "add" on iOS 26).
         let openedDrawer = tapFirst("app drawer", [
             messages.buttons["add"],
             messages.otherElements["MessageEntryView"].buttons.firstMatch,
             messages.buttons["Apps"],
-            messages.buttons["Add"],
             messages.buttons["browserButton"]
-        ])
-        pause(2.5)
-        checkpoint("04-app-drawer")
+        ], timeout: 8)
+        XCTAssertTrue(openedDrawer, "could not open the Messages app drawer")
+        pause(2)
+        checkpoint("03-app-drawer")
 
-        // 3. Find our app. Third-party apps can sit behind "More" or further down the list.
+        // 3. Find our app in the list; third-party apps sit below the built-in ones.
         var ours = anyElement(labelContaining: productName)
-        if !ours.waitForExistence(timeout: 3) {
-            UIArtifacts.note("messages: '\(productName)' not visible yet; trying More / swipe")
-            _ = tapFirst("more", [
-                messages.buttons["More"],
-                messages.staticTexts["More"],
-                messages.cells["More"],
-                anyElement(labelContaining: "More")
-            ], timeout: 2)
-            pause(1.5)
-            checkpoint("05-more")
+        var swipes = 0
+        while !(ours.exists && ours.isHittable) && swipes < 3 {
+            messages.swipeUp()
+            pause(1.2)
+            swipes += 1
             ours = anyElement(labelContaining: productName)
-            if !ours.waitForExistence(timeout: 2) {
-                messages.swipeUp()
-                pause(1.5)
-                checkpoint("05b-after-swipe")
-                ours = anyElement(labelContaining: productName)
-            }
         }
-        var launchedExtension = false
-        if ours.waitForExistence(timeout: 2) {
-            UIArtifacts.note("messages: found our app element type=\(ours.elementType.rawValue) id='\(ours.identifier)' label='\(ours.label)' hittable=\(ours.isHittable)")
+        let foundOurs = ours.exists
+        XCTAssertTrue(foundOurs, "'\(productName)' is not in the Messages app drawer")
+        if foundOurs {
+            UIArtifacts.note("messages: our app in the drawer: id='\(ours.identifier)' label='\(ours.label)' after \(swipes) swipe(s)")
+            checkpoint("04-app-drawer-our-app")
             if ours.isHittable {
                 ours.tap()
             } else {
                 ours.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
             }
-            launchedExtension = true
-        } else {
-            UIArtifacts.note("messages: '\(productName)' was not found in the app drawer")
         }
-        pause(4)
-        checkpoint("06-extension-compact")
 
-        // 4. Our launcher: "Send the demo recap" stages a bubble in the input field.
+        // 4. Our launcher in the compact style.
         let sendDemo = messages.buttons["launcher.sendDemo"]
-        let sawLauncher = sendDemo.waitForExistence(timeout: 8)
+        let sawLauncher = sendDemo.waitForExistence(timeout: 25)
         UIArtifacts.note("messages: launcher visible=\(sawLauncher)")
-        var staged = false
+        XCTAssertTrue(sawLauncher, "our launcher did not appear inside Messages")
+        pause(1)
+        checkpoint("05-launcher-compact")
+
+        // 5. "Send the demo recap" stages a bubble in the input field.
         if sawLauncher {
             sendDemo.tap()
-            staged = true
-        } else {
-            staged = tapFirst("send demo (by label)", [anyElement(labelContaining: "Send the demo recap")], timeout: 3)
         }
-        pause(3)
-        checkpoint("07-bubble-staged")
+        let sendButton = messages.buttons["sendButton"]
+        let staged = sendButton.waitForExistence(timeout: 15)
+        UIArtifacts.note("messages: bubble staged (send button present)=\(staged)")
+        XCTAssertTrue(staged, "tapping 'Send the demo recap' did not stage a bubble")
+        pause(2)
+        checkpoint("06-bubble-staged")
 
-        // 5. Send it.
-        let sent = tapFirst("send", [
-            messages.buttons["sendButton"],
-            messages.buttons["Send"],
-            anyElement(labelContaining: "Send")
-        ])
+        // 6. Send it.
+        if staged {
+            sendButton.tap()
+        }
+        let bubble = messages.buttons["bubble.recap"]
+        let sawBubble = bubble.waitForExistence(timeout: 20)
         pause(4)
-        checkpoint("08-bubble-sent")
+        checkpoint("07-bubble-sent")
+        XCTAssertTrue(sawBubble, "the live recap bubble did not appear in the transcript")
+        if sawBubble {
+            let bubbleLabel = bubble.label
+            UIArtifacts.note("messages: live bubble label='\(bubbleLabel)'")
+            UIArtifacts.note("messages: live bubble notes='\(String(describing: bubble.value))'")
+            XCTAssertTrue(
+                bubbleLabel.contains("Dinner Club") && bubbleLabel.contains("48,213"),
+                "the live bubble should show the recap itself, but it reads '\(bubbleLabel)'"
+            )
+        }
 
-        // 6. Tap the bubble to play the story in the expanded style.
-        let tappedBubble = tapFirst("recap bubble", [
-            messages.otherElements["bubble.recap"],
-            messages.buttons["bubble.recap"],
-            anyElement(labelContaining: "in review"),
-            anyElement(labelContaining: "Tap to play")
-        ], timeout: 6)
-        pause(6)
-        checkpoint("09-story-expanded")
+        // 7. Tap the bubble: the story must really play in the expanded style.
+        if sawBubble {
+            bubble.tap()
+        }
+        let status = waitForStory(timeout: 90) { status in
+            return self.isPlaying(status) || status.hasPrefix("error")
+        }
+        UIArtifacts.note("messages: story bridge status after the tap: \(status)")
+        pause(2.5)
+        checkpoint("08-story-expanded")
+        XCTAssertTrue(isPlaying(status), "the story never reported ready inside Messages (last status: \(status))")
 
-        UIArtifacts.note("messages: summary inConversation=\(inConversation) openedDrawer=\(openedDrawer) launchedExtension=\(launchedExtension) sawLauncher=\(sawLauncher) staged=\(staged) sent=\(sent) tappedBubble=\(tappedBubble)")
-        XCTAssertTrue(inConversation, "could not open a conversation in Messages")
-        XCTAssertTrue(openedDrawer, "could not open the Messages app drawer")
-        XCTAssertTrue(launchedExtension, "could not find our extension in the app drawer")
-        XCTAssertTrue(sawLauncher, "our launcher did not appear inside Messages")
-        XCTAssertTrue(sent, "could not send the staged bubble")
-        XCTAssertTrue(tappedBubble, "could not tap the recap bubble")
+        if isPlaying(status) {
+            // Tap the right side of the story to move on, as a person would.
+            let next = messages.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.55))
+            var seen: [String] = [status]
+            for step in 1...2 {
+                next.tap()
+                pause(2.2)
+                seen.append(waitForStory(timeout: 3) { _ in
+                    return true
+                })
+                checkpoint(step == 1 ? "09-story-next-slide" : "10-story-another-slide")
+            }
+            UIArtifacts.note("messages: story bridge statuses while tapping: \(seen)")
+
+            // The story's own close control (top right of the page) returns to compact.
+            messages.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.151)).tap()
+            let backToCompact = messages.buttons["launcher.sendDemo"].waitForExistence(timeout: 12)
+            UIArtifacts.note("messages: story close control returned to the compact launcher=\(backToCompact)")
+            pause(1.5)
+            checkpoint("11-after-close")
+        }
     }
 }

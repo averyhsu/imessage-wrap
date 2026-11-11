@@ -31,12 +31,21 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
     /// True once this activation has looked at `selectedMessage` / the hand-off.
     private var consumedLaunchRecap = false
     private var hasContent = false
+    private let createdAt = Date()
+    /// Which lifecycle call led to the current content (debug notes only).
+    private var updateReason = "initial"
+    private var bubbleNotes: [String] = []
 
     // MARK: View
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
+        #if DEBUG
+        // Debug builds expose the story's bridge status as an invisible accessibility
+        // label, so UI tests can tell that the story really plays inside Messages.
+        StoryViewController.showsBridgeStatusForTesting = true
+        #endif
 
         launcherModel.onSendDemo = { [weak self] in
             self?.compose(DemoRecap.recap)
@@ -56,8 +65,14 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         super.viewWillAppear(animated)
         // Safety net: if Messages showed the view without `willBecomeActive`, still draw.
         if !hasContent {
+            updateReason = "viewWillAppear"
             updateContent(for: presentationStyle, conversation: activeConversation)
         }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        refreshBubble(reason: "viewDidAppear")
     }
 
     // MARK: Conversation lifecycle
@@ -65,11 +80,13 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
     override func willBecomeActive(with conversation: MSConversation) {
         super.willBecomeActive(with: conversation)
         consumedLaunchRecap = false
+        updateReason = "willBecomeActive"
         updateContent(for: presentationStyle, conversation: conversation)
     }
 
     override func didBecomeActive(with conversation: MSConversation) {
         super.didBecomeActive(with: conversation)
+        refreshBubble(reason: "didBecomeActive")
         // A request made from `willBecomeActive` can come too early to be honoured.
         if storyRecap != nil, presentationStyle == .compact {
             requestPresentationStyle(.expanded)
@@ -100,11 +117,17 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         if presentationStyle == .compact {
             storyRecap = nil
         }
+        updateReason = "didTransition"
         updateContent(for: presentationStyle, conversation: activeConversation)
     }
 
-    /// Size of the live bubble. Only called in the transcript style.
+    /// Size of the live bubble. Only called in the transcript style, possibly several times.
     override func contentSizeThatFits(_ size: CGSize) -> CGSize {
+        if bubbleView != nil, bubbleRecap == nil {
+            DispatchQueue.main.async { [weak self] in
+                self?.refreshBubble(reason: "contentSizeThatFits")
+            }
+        }
         return RecapBubbleView.preferredSize(fitting: size)
     }
 
@@ -114,7 +137,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         hasContent = true
         switch style {
         case .transcript:
-            showBubble(for: conversation)
+            showBubble(for: conversation, reason: updateReason)
         case .expanded:
             if let recap = storyRecap ?? launchRecap(from: conversation) ?? store.takePendingPlay() {
                 showStory(recap)
@@ -180,9 +203,25 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         install(story, belowTopSafeArea: true)
     }
 
-    private func showBubble(for conversation: MSConversation?) {
+    /// The recap a live bubble should show: the one its message carries. If Messages gave
+    /// this instance no message at all and a recap was staged from this extension a moment
+    /// before the instance was created, it is the bubble of that staged recap.
+    private func recapForBubble(_ message: MSMessage?) -> Recap? {
+        if let recap = RecapMessageComposer.recap(from: message) {
+            return recap
+        }
+        if message == nil,
+           let composed = store.lastComposed(),
+           createdAt >= composed.date {
+            return composed.recap
+        }
+        return nil
+    }
+
+    private func showBubble(for conversation: MSConversation?, reason: String) {
         removeContent()
-        let recap = RecapMessageComposer.recap(from: conversation?.selectedMessage)
+        let message = conversation?.selectedMessage
+        let recap = recapForBubble(message)
         bubbleRecap = recap
         if let recap = recap {
             store.remember(recap)
@@ -196,9 +235,55 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         }
         view.addSubview(bubble)
         bubbleView = bubble
+        noteBubbleState(reason, message: message, recap: recap)
+
+        // Messages does not always hand a transcript instance its message by the time
+        // `willBecomeActive` runs, so keep looking for a little while.
+        if recap == nil {
+            let delays: [TimeInterval] = [0.15, 0.5, 1.2, 2.5, 5.0]
+            for delay in delays {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.refreshBubble(reason: "retry+\(delay)s")
+                }
+            }
+        }
+    }
+
+    /// Fills in a live bubble that was drawn before its message was available.
+    private func refreshBubble(reason: String) {
+        guard let bubble = bubbleView, bubbleRecap == nil else {
+            return
+        }
+        let message = activeConversation?.selectedMessage
+        let recap = recapForBubble(message)
+        noteBubbleState(reason, message: message, recap: recap)
+        guard let found = recap else {
+            return
+        }
+        bubbleRecap = found
+        bubble.configure(with: found.summary)
+        store.remember(found)
+    }
+
+    /// Debug builds record how a live bubble found (or did not find) its message, as the
+    /// bubble's accessibility value. UI tests and the debugger can read it.
+    private func noteBubbleState(_ reason: String, message: MSMessage?, recap: Recap?) {
+        #if DEBUG
+        let length = message?.url?.absoluteString.count ?? 0
+        let fromMessage = RecapMessageComposer.recap(from: message) != nil
+        let entry = "\(reason): conversation=\(activeConversation != nil) selected=\(message != nil)"
+            + " url=\(message?.url != nil) length=\(length) fragment=\(message?.url?.fragment != nil)"
+            + " recap=\(recap != nil) fromMessage=\(fromMessage)"
+        bubbleNotes.append(entry)
+        if bubbleNotes.count > 6 {
+            bubbleNotes.removeFirst()
+        }
+        bubbleView?.accessibilityValue = bubbleNotes.joined(separator: " | ")
+        #endif
     }
 
     private func bubbleTapped() {
+        refreshBubble(reason: "tap")
         if let recap = bubbleRecap {
             store.setPendingPlay(recap)
         }
@@ -258,6 +343,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         }
 
         store.remember(recap)
+        store.setLastComposed(recap)
         launcherModel.notice = nil
         conversation.insert(message) { [weak self] (error: Error?) in
             guard let error = error else {

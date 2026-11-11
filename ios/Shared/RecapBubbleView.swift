@@ -16,6 +16,10 @@ final class RecapBubbleView: UIView {
     private let unitLabel = UILabel()
     private let playLabel = UILabel()
 
+    /// The top-left area Messages covers with its app-icon badge: text starts to the right
+    /// of `width` on the first line and below `height` otherwise.
+    static let badgeClearance = CGSize(width: 46, height: 34)
+
     /// The bubble size for the space Messages offers. Never larger than `maximum`.
     static func preferredSize(fitting maximum: CGSize) -> CGSize {
         let width = min(maximum.width, 300)
@@ -74,23 +78,31 @@ final class RecapBubbleView: UIView {
         playLabel.layer.cornerRadius = 15
         playLabel.layer.masksToBounds = true
 
-        let textStack = UIStackView(arrangedSubviews: [eyebrowLabel, nameLabel, countLabel, unitLabel])
+        let textStack = UIStackView(arrangedSubviews: [nameLabel, countLabel, unitLabel])
         textStack.axis = .vertical
         textStack.alignment = .leading
         textStack.spacing = 1
         textStack.setCustomSpacing(3, after: nameLabel)
         textStack.setCustomSpacing(0, after: countLabel)
         textStack.translatesAutoresizingMaskIntoConstraints = false
+        eyebrowLabel.translatesAutoresizingMaskIntoConstraints = false
         playLabel.translatesAutoresizingMaskIntoConstraints = false
 
+        addSubview(eyebrowLabel)
         addSubview(textStack)
         addSubview(playLabel)
 
-        // Messages draws the bubble tail on the trailing side, so keep a little extra room there.
+        // Messages lays its app-icon badge over the top-left corner of a live bubble
+        // (roughly 38 x 30 pt, seen in the Simulator on iOS 26). The eyebrow therefore
+        // starts to the right of it and everything else starts below it.
+        // Messages also draws the bubble tail on the trailing side, so keep room there.
         let bottom = playLabel.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -14)
         bottom.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
-            textStack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            eyebrowLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
+            eyebrowLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: RecapBubbleView.badgeClearance.width),
+            eyebrowLabel.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
+            textStack.topAnchor.constraint(equalTo: topAnchor, constant: RecapBubbleView.badgeClearance.height),
             textStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             textStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -20),
             countLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -36),

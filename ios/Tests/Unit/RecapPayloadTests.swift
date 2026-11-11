@@ -1,3 +1,5 @@
+import Messages
+import UIKit
 import XCTest
 @testable import Wrapped
 
@@ -119,6 +121,44 @@ final class RecapPayloadTests: XCTestCase {
         XCTAssertThrowsError(try Recap(payload: unrelated)) { error in
             XCTAssertEqual(error as? RecapPayloadError, .notAStatsObject)
         }
+    }
+
+    /// Contract update: senders without a contact name arrive as "…0001" (never a full
+    /// number), and message text is opt-in, so `most_reacted[].text` is usually "".
+    func testHandlesMaskedSenderNamesAndEmptyQuotes() throws {
+        let text = "{\"v\":1,\"chat\":{\"name\":\"Flat 4B\",\"members\":3},\"period\":{\"label\":\"2026\"},"
+            + "\"totals\":{\"messages\":900},"
+            + "\"senders\":[{\"name\":\"…0001\",\"messages\":500},{\"name\":\"Ana\",\"messages\":300},{\"name\":\"…0002\",\"messages\":100}],"
+            + "\"most_reacted\":[{\"sender\":\"…0001\",\"reactions\":9,\"date\":\"2026-03-01\",\"text\":\"\"}]}"
+        let recap = try Recap(statsJSON: Data(text.utf8))
+        XCTAssertEqual(recap.summary.topSenders.map { $0.name }, ["…0001", "Ana", "…0002"])
+        XCTAssertEqual(try Recap(payload: recap.payload).summary, recap.summary)
+
+        var stats = try RecapPayload.decodeObject(recap.payload)
+        RecapLinkBuilder.applyTrimStep(2, to: &stats)
+        let entries = try XCTUnwrap(stats["most_reacted"] as? [[String: Any]])
+        XCTAssertEqual(entries.first?["text"] as? String, "", "an empty quote stays empty")
+
+        let message = try RecapMessageComposer.message(for: recap)
+        XCTAssertEqual(RecapMessageComposer.recap(from: message), recap)
+        XCTAssertEqual(RecapCardRenderer.image(for: recap.summary).size, RecapCardRenderer.pointSize)
+    }
+
+    func testJustComposedRecapIsRememberedBriefly() throws {
+        let suite = "wrapped.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let store = RecapStore(defaults: defaults)
+        XCTAssertNil(store.lastComposed())
+
+        let now = Date()
+        store.setLastComposed(DemoRecap.recap, now: now)
+        let composed = try XCTUnwrap(store.lastComposed(now: now.addingTimeInterval(5)))
+        XCTAssertEqual(composed.recap, DemoRecap.recap)
+        XCTAssertEqual(composed.date.timeIntervalSince1970, now.timeIntervalSince1970, accuracy: 0.01)
+        XCTAssertNil(store.lastComposed(now: now.addingTimeInterval(120)), "it expires")
     }
 
     func testRecentsStoreKeepsNewestFirstAndSkipsTheDemo() throws {

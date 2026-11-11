@@ -10,6 +10,8 @@ final class RecapStore {
     private let recentsKey = "wrapped.recentPayloads.v1"
     private let pendingPayloadKey = "wrapped.pendingPlay.payload"
     private let pendingDateKey = "wrapped.pendingPlay.date"
+    private let composedPayloadKey = "wrapped.lastComposed.payload"
+    private let composedDateKey = "wrapped.lastComposed.date"
     private let limit = 6
 
     init(defaults: UserDefaults = UserDefaults.standard) {
@@ -48,6 +50,31 @@ final class RecapStore {
         defaults.removeObject(forKey: recentsKey)
         defaults.removeObject(forKey: pendingPayloadKey)
         defaults.removeObject(forKey: pendingDateKey)
+        defaults.removeObject(forKey: composedPayloadKey)
+        defaults.removeObject(forKey: composedDateKey)
+    }
+
+    // MARK: The recap that was just composed
+
+    /// Recorded when a recap bubble is staged in the input field. The live bubble Messages
+    /// creates for that staged message may not be given its message, so it can ask what
+    /// was composed a moment ago instead of showing a generic bubble.
+    func setLastComposed(_ recap: Recap, now: Date = Date()) {
+        defaults.set(recap.payload, forKey: composedPayloadKey)
+        defaults.set(now.timeIntervalSince1970, forKey: composedDateKey)
+    }
+
+    /// The recap composed within the last `maxAge` seconds, and when.
+    func lastComposed(maxAge: TimeInterval = 30, now: Date = Date()) -> (recap: Recap, date: Date)? {
+        guard let payload = defaults.string(forKey: composedPayloadKey) else {
+            return nil
+        }
+        let stamp = defaults.double(forKey: composedDateKey)
+        let age = now.timeIntervalSince1970 - stamp
+        guard age >= 0, age <= maxAge, let recap = try? Recap(payload: payload) else {
+            return nil
+        }
+        return (recap, Date(timeIntervalSince1970: stamp))
     }
 
     // MARK: Hand-off from a live bubble to the expanded instance
