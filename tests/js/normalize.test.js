@@ -179,6 +179,21 @@ test('untrusted input is sanitised', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(s.reactions.by_kind, '__proto__'), false);
 });
 
+test('text that would not paint counts as no text', () => {
+  const input = clone(vector.stats);
+  input.most_reacted[0].text = '\u200B\u2800 \u3164\uFE0F';
+  input.most_reacted[1].text = '\u200Bhi\u200B';
+  input.chat.name = '\u2800\u2800';
+  const out = normalize(input);
+  assert.equal(out.most_reacted[0].text, '', 'a "blank message" is treated like a recap without quotes');
+  assert.ok(out.most_reacted[0].reactions > 0, 'and keeps its tapbacks');
+  assert.equal(out.most_reacted[1].text, '\u200Bhi\u200B', 'visible text is left alone');
+  assert.ok(out.chat.name.length > 0 && /\S/.test(out.chat.name) && !/\u2800/.test(out.chat.name), 'an invisible chat name falls back to a visible one');
+  // Emoji sequences use joiners and variation selectors; they are not "invisible".
+  input.most_reacted[0].text = '\u2764\uFE0F';
+  assert.equal(normalize(input).most_reacted[0].text, '\u2764\uFE0F');
+});
+
 test('absurd numbers are capped, and shares stay within 0..1', () => {
   const { MAX_COUNT } = require('../../web/js/normalize.js');
   assert.equal(MAX_COUNT, 9999999999);

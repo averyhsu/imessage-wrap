@@ -34,6 +34,8 @@
 
   function i(v) { return Math.round(n(v)); }
 
+  var INVISIBLE = /^[\s\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180F\u200B-\u200F\u2060-\u2064\u206A-\u206F\u2800\u3164\uFE00-\uFE0F\uFEFF\uFFA0]*$/;
+
   function str(v, max) {
     if (v == null) return '';
     if (typeof v === 'object') return '';
@@ -43,6 +45,9 @@
       .replace(/[\r\n\t]+/g, ' ')
       .replace(/ {2,}/g, ' ')
       .trim();
+    // Nothing in it would paint (zero-width characters, blank fillers): treat it as empty,
+    // so a "blank message" never becomes an empty bubble and a blank name gets its fallback.
+    if (INVISIBLE.test(s)) return '';
     var chars = Array.from(s);
     return chars.length > max ? chars.slice(0, max).join('') : s;
   }
