@@ -31,7 +31,7 @@ private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
 /// Plays one recap: the bundled web story in a `WKWebView`, plus the native half of the
 /// embed bridge (haptics, share sheet, send, close). Used by the app and by the iMessage
 /// extension's expanded style.
-final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate {
+final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
     static let bridgeName = "wrapped"
 
     /// When true, the last bridge event is exposed through an invisible accessibility
@@ -40,6 +40,11 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
 
     let recap: Recap
     weak var delegate: StoryViewControllerDelegate?
+
+    /// When true, dragging the story down dismisses it, so nobody is ever stuck in a
+    /// full-screen story. The containing app turns this on; Messages has its own control
+    /// for collapsing the expanded style. Set it before the view loads.
+    var allowsSwipeDownToClose = false
 
     private var webView: WKWebView?
     private var statusLabel: UILabel?
@@ -125,6 +130,9 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         #endif
         view.addSubview(web)
         webView = web
+        if allowsSwipeDownToClose {
+            installSwipeDownToClose()
+        }
 
         if StoryViewController.showsBridgeStatusForTesting {
             let label = UILabel(frame: CGRect(x: 0, y: 0, width: 4, height: 4))
@@ -358,6 +366,59 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         } else {
             showFailure("The story stopped unexpectedly.")
         }
+    }
+
+    // MARK: Swipe down to close
+
+    private func installSwipeDownToClose() {
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleDismissPan(_:)))
+        pan.delegate = self
+        pan.maximumNumberOfTouches = 1
+        view.addGestureRecognizer(pan)
+    }
+
+    @objc private func handleDismissPan(_ pan: UIPanGestureRecognizer) {
+        guard let web = webView else {
+            return
+        }
+        let translation = pan.translation(in: view)
+        switch pan.state {
+        case .changed:
+            let offset = max(0, translation.y)
+            web.transform = CGAffineTransform(translationX: 0, y: offset * 0.5)
+            web.alpha = 1 - min(0.5, offset / 600)
+        case .ended, .cancelled, .failed:
+            let velocity = pan.velocity(in: view)
+            let draggedDown = translation.y > 140 && abs(translation.x) < translation.y
+            if pan.state == .ended, draggedDown, velocity.y >= 0 {
+                setStatus("close")
+                delegate?.storyDidRequestClose(self)
+            } else {
+                UIView.animate(withDuration: 0.2) {
+                    web.transform = .identity
+                    web.alpha = 1
+                }
+            }
+        default:
+            break
+        }
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard let pan = gestureRecognizer as? UIPanGestureRecognizer else {
+            return true
+        }
+        // Only a clearly downward drag starts the dismissal; taps and sideways swipes
+        // belong to the story.
+        let velocity = pan.velocity(in: view)
+        return velocity.y > 0 && abs(velocity.y) > abs(velocity.x) * 1.5
+    }
+
+    func gestureRecognizer(
+        _ gestureRecognizer: UIGestureRecognizer,
+        shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+    ) -> Bool {
+        return true
     }
 
     // MARK: UIScrollViewDelegate (no pinch zoom)

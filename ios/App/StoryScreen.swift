@@ -14,6 +14,7 @@ struct StoryScreen: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> StoryViewController {
         let story = StoryViewController(recap: recap)
+        story.allowsSwipeDownToClose = true
         story.delegate = context.coordinator
         return story
     }

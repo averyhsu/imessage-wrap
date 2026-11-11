@@ -68,6 +68,14 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         updateContent(for: presentationStyle, conversation: conversation)
     }
 
+    override func didBecomeActive(with conversation: MSConversation) {
+        super.didBecomeActive(with: conversation)
+        // A request made from `willBecomeActive` can come too early to be honoured.
+        if storyRecap != nil, presentationStyle == .compact {
+            requestPresentationStyle(.expanded)
+        }
+    }
+
     override func didSelect(_ message: MSMessage, conversation: MSConversation) {
         super.didSelect(message, conversation: conversation)
         guard presentationStyle != .transcript,
