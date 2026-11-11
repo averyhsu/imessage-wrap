@@ -3,11 +3,13 @@ import UIKit
 /// The live message bubble (transcript presentation style): chat name, a big message
 /// count and "Tap to play". Deliberately plain UIKit with no web view: Messages creates
 /// one of these per bubble in the transcript, so it has to be cheap.
+/// It uses the story's cover look: blue gradient with a lighter rounded blob.
 final class RecapBubbleView: UIView {
     /// Called when the bubble is tapped.
     var onTap: (() -> Void)?
 
     private let gradientLayer = CAGradientLayer()
+    private let blobLayer = CAShapeLayer()
     private let eyebrowLabel = UILabel()
     private let nameLabel = UILabel()
     private let countLabel = UILabel()
@@ -32,40 +34,43 @@ final class RecapBubbleView: UIView {
     }
 
     private func setUp() {
-        backgroundColor = WrappedTheme.violetUI
+        backgroundColor = WrappedTheme.blueUI
         clipsToBounds = true
 
-        gradientLayer.colors = WrappedTheme.brandCGColors
-        gradientLayer.locations = [0.0, 0.55, 1.0]
-        gradientLayer.startPoint = CGPoint(x: 0, y: 0)
-        gradientLayer.endPoint = CGPoint(x: 1, y: 1)
+        gradientLayer.colors = WrappedTheme.coverCGColors
+        gradientLayer.locations = [0.0, 0.38, 1.0]
+        gradientLayer.startPoint = CGPoint(x: 0.37, y: 0)
+        gradientLayer.endPoint = CGPoint(x: 0.63, y: 1)
         layer.addSublayer(gradientLayer)
 
-        eyebrowLabel.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+        blobLayer.fillColor = WrappedTheme.blobLightUI.cgColor
+        layer.addSublayer(blobLayer)
+
+        eyebrowLabel.font = WrappedTheme.displayFont(ofSize: 10.5, weight: .heavy)
         eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.86)
         eyebrowLabel.numberOfLines = 1
 
-        nameLabel.font = WrappedTheme.roundedFont(ofSize: 19, weight: .heavy)
+        nameLabel.font = WrappedTheme.displayFont(ofSize: 17, weight: .black)
         nameLabel.textColor = .white
         nameLabel.numberOfLines = 1
         nameLabel.lineBreakMode = .byTruncatingTail
 
-        countLabel.font = WrappedTheme.roundedFont(ofSize: 50, weight: .black)
+        countLabel.font = WrappedTheme.displayFont(ofSize: 46, weight: .black)
         countLabel.textColor = .white
         countLabel.numberOfLines = 1
         countLabel.adjustsFontSizeToFitWidth = true
         countLabel.minimumScaleFactor = 0.5
         countLabel.baselineAdjustment = .alignBaselines
 
-        unitLabel.font = UIFont.systemFont(ofSize: 14, weight: .semibold)
-        unitLabel.textColor = UIColor.white.withAlphaComponent(0.9)
+        unitLabel.font = WrappedTheme.displayFont(ofSize: 14, weight: .black)
+        unitLabel.textColor = .white
         unitLabel.numberOfLines = 1
 
-        playLabel.font = UIFont.systemFont(ofSize: 13, weight: .bold)
-        playLabel.textColor = .white
+        playLabel.font = UIFont.systemFont(ofSize: 13, weight: .heavy)
+        playLabel.textColor = WrappedTheme.coverBottomUI
         playLabel.text = "▶  Tap to play"
         playLabel.textAlignment = .center
-        playLabel.backgroundColor = UIColor.black.withAlphaComponent(0.28)
+        playLabel.backgroundColor = .white
         playLabel.layer.cornerRadius = 15
         playLabel.layer.masksToBounds = true
 
@@ -73,8 +78,8 @@ final class RecapBubbleView: UIView {
         textStack.axis = .vertical
         textStack.alignment = .leading
         textStack.spacing = 1
-        textStack.setCustomSpacing(4, after: nameLabel)
-        textStack.setCustomSpacing(-4, after: countLabel)
+        textStack.setCustomSpacing(3, after: nameLabel)
+        textStack.setCustomSpacing(-5, after: countLabel)
         textStack.translatesAutoresizingMaskIntoConstraints = false
         playLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -109,6 +114,14 @@ final class RecapBubbleView: UIView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradientLayer.frame = bounds
+
+        // A rounded blob leaning in from the lower right, as on the story's cover.
+        let blobSize = CGSize(width: bounds.width * 0.62, height: bounds.height * 0.78)
+        let blobRect = CGRect(x: -blobSize.width / 2, y: -blobSize.height / 2, width: blobSize.width, height: blobSize.height)
+        blobLayer.path = UIBezierPath(roundedRect: blobRect, cornerRadius: blobSize.height * 0.36).cgPath
+        blobLayer.bounds = CGRect(origin: .zero, size: .zero)
+        blobLayer.position = CGPoint(x: bounds.maxX - blobSize.width * 0.12, y: bounds.maxY + blobSize.height * 0.02)
+        blobLayer.setAffineTransform(CGAffineTransform(rotationAngle: -12 * .pi / 180))
         CATransaction.commit()
     }
 
@@ -117,7 +130,7 @@ final class RecapBubbleView: UIView {
         if let summary = summary {
             eyebrowLabel.attributedText = NSAttributedString(
                 string: summary.reviewLabel.uppercased(),
-                attributes: [.kern: 1.3]
+                attributes: [.kern: 1.2]
             )
             nameLabel.text = summary.chatName
             countLabel.text = summary.formattedTotal
@@ -126,7 +139,7 @@ final class RecapBubbleView: UIView {
         } else {
             eyebrowLabel.attributedText = NSAttributedString(
                 string: "IN REVIEW",
-                attributes: [.kern: 1.3]
+                attributes: [.kern: 1.2]
             )
             nameLabel.text = WrappedConfig.productName
             countLabel.text = "▶"

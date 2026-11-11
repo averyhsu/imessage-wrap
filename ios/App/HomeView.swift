@@ -9,8 +9,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            WrappedTheme.background
-                .ignoresSafeArea()
+            ThemeBackground()
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 26) {
                     brandRow
@@ -33,9 +32,9 @@ struct HomeView: View {
 
     private var brandRow: some View {
         HStack(spacing: 10) {
-            BrandMark(size: 34)
+            BrandMark(size: 26)
             Text(WrappedConfig.productName)
-                .font(.system(size: 19, weight: .bold, design: .rounded))
+                .font(WrappedTheme.display(17, weight: .heavy))
                 .foregroundStyle(Color.white)
                 .accessibilityIdentifier("home.title")
             Spacer(minLength: 0)
@@ -43,22 +42,27 @@ struct HomeView: View {
     }
 
     private var hero: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: -2) {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(WrappedConfig.productDescriptor.uppercased())
+                .font(WrappedTheme.display(11.5, weight: .heavy))
+                .kerning(1.3)
+                .foregroundStyle(Color.white.opacity(0.62))
+
+            VStack(alignment: .leading, spacing: -4) {
                 Text("Your group chat,")
-                    .font(.system(size: 40, weight: .heavy, design: .rounded))
+                    .font(WrappedTheme.display(38))
                     .foregroundStyle(Color.white)
                 Text("in review.")
-                    .font(.system(size: 40, weight: .heavy, design: .rounded))
-                    .foregroundStyle(WrappedTheme.brandGradientHorizontal)
+                    .font(WrappedTheme.display(38))
+                    .foregroundStyle(WrappedTheme.popBlue)
             }
-            .minimumScaleFactor(0.7)
+            .minimumScaleFactor(0.6)
             .lineLimit(1)
             .accessibilityElement(children: .combine)
 
             Text("The year your chat had, told as a story you can play right inside Messages.")
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(Color.white.opacity(0.72))
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.78))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -69,15 +73,7 @@ struct HomeView: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                .overlay(alignment: .topTrailing) {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color.white)
-                        .frame(width: 48, height: 48)
-                        .background(Color.black.opacity(0.32), in: Circle())
-                        .padding(14)
-                }
-                .shadow(color: WrappedTheme.violet.opacity(0.5), radius: 28, x: 0, y: 14)
+                .shadow(color: WrappedTheme.blue.opacity(0.45), radius: 28, x: 0, y: 14)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Play the demo recap")
@@ -113,21 +109,24 @@ struct HomeView: View {
     private var howTo: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("How to use it in Messages")
-                .font(.system(size: 22, weight: .bold, design: .rounded))
+                .font(WrappedTheme.display(20))
                 .foregroundStyle(Color.white)
                 .accessibilityIdentifier("home.howTo")
             HowToStep(
                 number: 1,
+                tint: WrappedTheme.blue,
                 title: "Open a conversation",
                 detail: "In Messages, tap the + next to the text field and choose \(WrappedConfig.productName) from your apps."
             )
             HowToStep(
                 number: 2,
+                tint: WrappedTheme.green,
                 title: "Pick a recap",
                 detail: "Send the demo, or paste a recap link made from your own group chat."
             )
             HowToStep(
                 number: 3,
+                tint: WrappedTheme.pink,
                 title: "Send it",
                 detail: "It lands as a card everyone can tap. With the app it plays as a story; without it, the link opens the same story on the web."
             )
@@ -138,7 +137,7 @@ struct HomeView: View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: "lock.fill")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(WrappedTheme.violet)
+                .foregroundStyle(WrappedTheme.popBlue)
                 .padding(.top, 2)
             Text("Private by design. A recap lives entirely inside its link: no account, no server, and this app never reads your messages.")
                 .font(.system(size: 13, weight: .regular))
@@ -150,29 +149,30 @@ struct HomeView: View {
 
 private struct HowToStep: View {
     let number: Int
+    let tint: Color
     let title: String
     let detail: String
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Text("\(number)")
-                .font(.system(size: 17, weight: .heavy, design: .rounded))
-                .foregroundStyle(Color.white)
+                .font(WrappedTheme.display(16))
+                .foregroundStyle(tint == WrappedTheme.green ? WrappedTheme.ink : Color.white)
                 .frame(width: 36, height: 36)
-                .background(WrappedTheme.brandGradient, in: Circle())
+                .background(tint, in: Circle())
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(Color.white)
                 Text(detail)
                     .font(.system(size: 15, weight: .regular))
-                    .foregroundStyle(Color.white.opacity(0.68))
+                    .foregroundStyle(Color.white.opacity(0.7))
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
         .padding(14)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
         .accessibilityElement(children: .combine)
     }
 }

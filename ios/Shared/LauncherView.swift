@@ -24,8 +24,7 @@ struct LauncherView: View {
 
     var body: some View {
         ZStack {
-            WrappedTheme.background
-                .ignoresSafeArea()
+            ThemeBackground()
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: model.isRoomy ? 18 : 10) {
                     header
@@ -54,23 +53,25 @@ struct LauncherView: View {
     // MARK: Pieces
 
     private var headlineSize: CGFloat {
-        return model.isRoomy ? 34 : 23
+        return model.isRoomy ? 32 : 21
     }
 
     private var header: some View {
         HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: -1) {
                 Text("Your group chat,")
-                    .font(.system(size: headlineSize, weight: .heavy, design: .rounded))
+                    .font(WrappedTheme.display(headlineSize))
                     .foregroundStyle(Color.white)
                 Text("in review.")
-                    .font(.system(size: headlineSize, weight: .heavy, design: .rounded))
-                    .foregroundStyle(WrappedTheme.brandGradientHorizontal)
+                    .font(WrappedTheme.display(headlineSize))
+                    .foregroundStyle(WrappedTheme.popBlue)
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("launcher.headline")
             Spacer(minLength: 0)
-            BrandMark(size: model.isRoomy ? 54 : 44)
+            BrandMark(size: model.isRoomy ? 44 : 34)
         }
     }
 
@@ -79,7 +80,7 @@ struct LauncherView: View {
             .resizable()
             .aspectRatio(contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .shadow(color: WrappedTheme.violet.opacity(0.45), radius: 24, x: 0, y: 12)
+            .shadow(color: WrappedTheme.blue.opacity(0.4), radius: 24, x: 0, y: 12)
             .accessibilityLabel("Preview of the demo recap card")
     }
 
@@ -102,7 +103,7 @@ struct LauncherView: View {
     private func noticeView(_ text: String) -> some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "exclamationmark.circle.fill")
-                .foregroundStyle(WrappedTheme.pink)
+                .foregroundStyle(WrappedTheme.yellow)
             Text(text)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.white.opacity(0.85))
@@ -110,7 +111,7 @@ struct LauncherView: View {
             Spacer(minLength: 0)
         }
         .padding(10)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityIdentifier("launcher.notice")
     }
 
@@ -119,9 +120,9 @@ struct LauncherView: View {
         if !model.recents.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("RECENT RECAPS")
-                    .font(.system(size: 11, weight: .bold))
+                    .font(WrappedTheme.display(10.5, weight: .heavy))
                     .kerning(1.2)
-                    .foregroundStyle(Color.white.opacity(0.55))
+                    .foregroundStyle(Color.white.opacity(0.62))
                 if model.isRoomy {
                     VStack(spacing: 8) {
                         ForEach(model.recents) { recap in
@@ -173,15 +174,15 @@ private struct RecentRecapRow: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundStyle(Color.white)
                         .frame(width: 32, height: 32)
-                        .background(WrappedTheme.brandGradient, in: Circle())
+                        .background(WrappedTheme.blue, in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text(recap.summary.chatName)
-                            .font(.system(size: 15, weight: .semibold))
+                            .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color.white)
                             .lineLimit(1)
                         Text("\(recap.summary.reviewLabel) · \(recap.summary.messagesLine)")
                             .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(Color.white.opacity(0.6))
+                            .foregroundStyle(Color.white.opacity(0.62))
                             .lineLimit(1)
                     }
                     Spacer(minLength: 0)
@@ -202,67 +203,6 @@ private struct RecentRecapRow: View {
             .accessibilityLabel("Send \(recap.summary.caption)")
         }
         .padding(10)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-}
-
-/// The app's mark, drawn in SwiftUI: a gradient tile with three rising bars.
-struct BrandMark: View {
-    var size: CGFloat = 44
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-            .fill(WrappedTheme.brandGradient)
-            .frame(width: size, height: size)
-            .overlay {
-                HStack(alignment: .bottom, spacing: size * 0.08) {
-                    bar(height: 0.26)
-                    bar(height: 0.40)
-                    bar(height: 0.54)
-                }
-            }
-            .accessibilityHidden(true)
-    }
-
-    private func bar(height: CGFloat) -> some View {
-        Capsule()
-            .fill(Color.white)
-            .frame(width: size * 0.13, height: size * height)
-    }
-}
-
-/// Full-width gradient button.
-struct PrimaryActionStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 17, weight: .bold, design: .rounded))
-            .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 50)
-            .background(
-                WrappedTheme.brandGradientHorizontal,
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .opacity(configuration.isPressed ? 0.82 : 1)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-    }
-}
-
-/// Full-width quiet button.
-struct SecondaryActionStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 16, weight: .semibold, design: .rounded))
-            .foregroundStyle(Color.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 46)
-            .background(
-                Color.white.opacity(configuration.isPressed ? 0.16 : 0.10),
-                in: RoundedRectangle(cornerRadius: 16, style: .continuous)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(Color.white.opacity(0.14), lineWidth: 1)
-            }
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 }
