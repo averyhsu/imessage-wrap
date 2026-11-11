@@ -4,7 +4,7 @@
 first names only. No message text ever goes on the card.
 
 Design notes
-- One bundled typeface (Inter, SIL OFL 1.1, in ``fonts/``) so the output looks the
+- One bundled typeface (Inter, SIL OFL 1.1, in ``assets/``) so the output looks the
   same on every machine. Emoji come from the platform colour-emoji font when one
   exists (Apple Color Emoji on macOS, Noto Color Emoji on Linux) and are dropped
   cleanly otherwise. Characters Inter lacks fall back to a system font.
@@ -34,7 +34,7 @@ DESIGN_W, DESIGN_H = 1080, 1350
 SUPERSAMPLE = 2
 FOOTER = f"{PRODUCT_NAME} · made on this Mac, nothing uploaded"
 
-FONT_DIR = Path(__file__).resolve().parent / "fonts"
+FONT_DIR = Path(__file__).resolve().parent / "assets"
 FONT_FILES = {
     "black": "Inter-Display-Black.ttf",
     "bold": "Inter-Display-Bold.ttf",
@@ -184,7 +184,7 @@ class FontBook:
         if missing:
             raise CardError(
                 f"The bundled card font is missing ({', '.join(missing)} in {self.font_dir}). "
-                "Reinstall Threadback; the package must include wrapped/mac/fonts/*."
+                "Reinstall Threadback; the package must include wrapped/mac/assets/*."
             )
         self._primary_ranges = _cmap_ranges(str(self.font_dir / FONT_FILES["bold"]))
         self._faces = {}
@@ -755,6 +755,28 @@ def render_card(stats: dict, out_path, size: Tuple[int, int] = (DESIGN_W, DESIGN
     out = Path(out_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     # level 6: a third of a second; level 9 saves 3% and takes seven times longer
+    final.save(out, format="PNG", compress_level=6)
+    return out
+
+
+def render_test_image(out_path, size: Tuple[int, int] = (720, 480)):
+    """A small, obviously-a-test picture for ``wrapped send-test --with-image``."""
+    width, height = int(size[0]), int(size[1])
+    book = _book(None)
+    k = (width / 720.0) * SUPERSAMPLE
+    c = Canvas(width * SUPERSAMPLE, height * SUPERSAMPLE, k, book)
+    W, H = 720.0, height / (width / 720.0)
+    c.mesh(MESH)
+    c.glow(W * 0.9, H * 0.1, 360, "#2F8CFF", 0.5)
+    c.grain(4)
+    c.bubble(60, H / 2 - 92, 600, 150, 56, BLUE_TOP, fill_bottom=BLUE_BOTTOM, tail="right", shadow=0.4)
+    c.text(360, H / 2 - 10, f"{PRODUCT_NAME} test image", "black", 46, WHITE, anchor="ms", max_width=540)
+    c.text(360, H / 2 + 34, "If you can see this, attachments work.", "medium", 24, (255, 255, 255, 235),
+           anchor="ms", max_width=540)
+    c.tapback(70, H / 2 - 88, 30, "heart", side="left")
+    final = c.img.convert("RGB").resize((width, height), Image.LANCZOS)
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
     final.save(out, format="PNG", compress_level=6)
     return out
 

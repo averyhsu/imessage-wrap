@@ -235,7 +235,7 @@ class MessagesSender:
         self,
         db_path: os.PathLike,
         *,
-        runner: Runner = run_osascript,
+        runner: Optional[Runner] = None,
         decode: Optional[Callable[[Optional[str], Optional[bytes]], str]] = None,
         verify_timeout: float = 8.0,
         verify_interval: float = 0.4,
@@ -246,7 +246,7 @@ class MessagesSender:
         connect: Callable[[os.PathLike], "chatdb.sqlite3.Connection"] = chatdb.open_ro,
     ) -> None:
         self.db_path = Path(db_path)
-        self._runner = runner
+        self._runner_override = runner
         self._decode = decode
         self.verify_timeout = verify_timeout
         self.verify_interval = verify_interval
@@ -256,6 +256,9 @@ class MessagesSender:
         self._monotonic = monotonic
         self._connect = connect
         self._working_guid: Dict[str, str] = {}
+
+    def _runner(self, script: str, args: Sequence[str], timeout: float) -> OsaResult:
+        return (self._runner_override or run_osascript)(script, args, timeout)
 
     # -- public API ---------------------------------------------------------
 

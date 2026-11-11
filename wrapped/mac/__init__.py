@@ -18,9 +18,9 @@ final AppleScript hand-off to Messages can be tested without a Mac:
 - ``cli``       ``register(subparsers)`` for the ``wrapped`` command
 """
 
-# The public product name is one constant (docs/SCHEMA.md §7). Code, file names and
-# the typed command keep the working name ``wrapped``.
-PRODUCT_NAME = "Threadback"
-TAGLINE = "your group chat's year in review"
+# The public product name is one constant, owned by the core package
+# (docs/SCHEMA.md §7). Code, file names and the typed command keep the working
+# name ``wrapped``.
+from ..product import PRODUCT_NAME, TAGLINE
 
 __all__ = ["PRODUCT_NAME", "TAGLINE"]

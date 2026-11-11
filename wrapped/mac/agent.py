@@ -268,6 +268,12 @@ class Agent:
             members=known.members if known else 0,
         )
 
+    def preview(self, chat: ChatRef, period: Optional[str] = None) -> TriggerOutcome:
+        """Build exactly what a command in ``chat`` would produce, through the
+        configured sender (a ``DryRunSender`` for ``wrapped preview``). Ignores
+        the cursor, the allowlist and the cooldown, and changes no state."""
+        return self._answer(chat, Trigger("wrapped", period))
+
     # -- answering -----------------------------------------------------------
 
     def _answer(self, chat: ChatRef, trigger: Trigger) -> TriggerOutcome:
