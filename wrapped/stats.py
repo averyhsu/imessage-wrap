@@ -55,12 +55,12 @@ _LAUGH = 3
 # Whitespace is the ECMAScript set (what /\s/ and String.prototype.trim use),
 # so "trim" and "whitespace-separated" mean the same thing in both engines.
 WHITESPACE = (
-    "\t\n\x0b\x0c\r \xa0          "
-    "      　﻿"
+    "\t\n\x0b\x0c\r \xa0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008"
+    "\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 )
 _WS_RUN = re.compile("[" + re.escape(WHITESPACE) + "]+")
 # characters on which str.split() and the ECMAScript set disagree
-_SPLIT_DIFFERS = re.compile("[\x1c-\x1f\x85﻿]")
+_SPLIT_DIFFERS = re.compile("[\x1c-\x1f\x85\ufeff]")
 _NOT_DIGIT = re.compile("[^0-9]")
 _ASCII_LOWER = {c: c + 32 for c in range(65, 91)}
 _ISO_DATE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
@@ -84,14 +84,14 @@ PERSONALITIES = {
 
 # id, emoji, title, detail template ({n} or {x})
 AWARDS = (
-    ("yapper", "\U0001F5E3️", "The Yapper", "{n} messages. Nobody asked."),
+    ("yapper", "\U0001F5E3\ufe0f", "The Yapper", "{n} messages. Nobody asked."),
     ("lurker", "\U0001F47B", "The Lurker", "{n} messages. Reads everything, says little."),
     ("night_owl", "\U0001F989", "The Night Owl", "{n} messages after midnight."),
     ("comedian", "\U0001F602", "The Comedian", "Made the chat laugh {n} times."),
     ("hype", "\U0001F4E3", "The Hype Machine", "Handed out {n} tapbacks."),
     ("novelist", "\U0001F4DA", "The Novelist", "{x} words per message. A paragraph person."),
     ("paparazzi", "\U0001F4F8", "The Paparazzi", "{n} photos, videos and memes."),
-    ("favorite", "⭐", "The Crowd Favorite", "{n} tapbacks received."),
+    ("favorite", "\u2b50", "The Crowd Favorite", "{n} tapbacks received."),
 )
 MAX_AWARDS = 6
 AWARD_MIN_MESSAGES = 5
@@ -108,10 +108,10 @@ def clean_text(text: Optional[str]) -> str:
     """Remove U+FFFC and U+FFFD, then trim (section 2, "Text")."""
     if not text:
         return ""
-    if "￼" in text:
-        text = text.replace("￼", "")
-    if "�" in text:
-        text = text.replace("�", "")
+    if "\ufffc" in text:
+        text = text.replace("\ufffc", "")
+    if "\ufffd" in text:
+        text = text.replace("\ufffd", "")
     return text.strip(WHITESPACE)
 
 
@@ -126,7 +126,7 @@ def count_words(text: str) -> int:
 
 def _truncate(text: str, limit: int) -> str:
     """First ``limit`` characters (Unicode code points) plus an ellipsis."""
-    return text if len(text) <= limit else text[:limit] + "…"
+    return text if len(text) <= limit else text[:limit] + "\u2026"
 
 
 def _u16(name: str) -> bytes:
@@ -715,7 +715,7 @@ def compute_stats(rows: Iterable[Mapping[str, Any]], options: Optional[Mapping[s
     if start_day is None:
         start_day = first_day if first_day is not None else end_day
     if label is None:
-        label = "%s – %s" % (_iso(start_day), _iso(end_day))
+        label = "%s \u2013 %s" % (_iso(start_day), _iso(end_day))
 
     # ---- people -----------------------------------------------------------------
     ranked = sorted(people.items(), key=lambda item: (-item[1][_MSG], _u16(item[0])))

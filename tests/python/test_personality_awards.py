@@ -119,7 +119,7 @@ class Awards(unittest.TestCase):
             pap=(100, 100, 12, 0, 0, 0, 0), fav=(100, 100, 0, 0, 0, 55, 0)))
         self.assertEqual(ids(got), [("yapper", "yap"), ("lurker", "lurk"), ("night_owl", "owl"),
                                     ("comedian", "funny"), ("hype", "hype"), ("novelist", "novel")])
-        self.assertEqual(got[0], {"id": "yapper", "emoji": "\U0001F5E3️", "title": "The Yapper",
+        self.assertEqual(got[0], {"id": "yapper", "emoji": "\U0001F5E3\ufe0f", "title": "The Yapper",
                                   "winner": "yap", "detail": "900 messages. Nobody asked."})
 
     def test_details(self):
@@ -190,7 +190,7 @@ class Awards(unittest.TestCase):
         t = calendar.timegm((2026, 6, 1, 12, 0, 0))
         a, b, c = "+15550100001", "+15550100002", "+15550100003"
         rows = [msg(t + i, a, "word " * 3, guid="A%d" % i) for i in range(30)]
-        rows += [msg(t + 100 + i, b, "￼", cache_has_attachments=1) for i in range(6)]
+        rows += [msg(t + 100 + i, b, "\ufffc", cache_has_attachments=1) for i in range(6)]
         rows += [msg(t - 12 * 3600 + i, c, "night") for i in range(5)]          # midnight UTC
         rows += [tap(t + 500 + i, b, 2003, rows[i]) for i in range(4)]
         st = compute_stats(rows, tz="UTC", now=NOW)

@@ -53,7 +53,7 @@ SMS_WAL_ID = "cd47480f213dba9bc38ee792775d17e3f5a73a59"  # ...sms.db-wal
 ADDRESS_BOOK_ID = "31bb7ba8914766d4ba40d6dfb6113c8b614be442"  # ...AddressBook.sqlitedb
 FAKE_UDID = "00008030-000FAKE0FAKE0FAKE"
 
-OBJ = "￼"  # object replacement character: one per inline attachment
+OBJ = "\ufffc"  # object replacement character: one per inline attachment
 
 
 # --------------------------------------------------------------------------- #
@@ -219,9 +219,9 @@ def typedstream_samples():
         ("len300", ("lorem ipsum " * 25)),
         ("len5000", ("the quick brown fox jumps over the lazy dog " * 114)[:5000]),
         ("len32767", "e" * 32767),
-        ("emoji", "ok 👍🏽 see you 🎉🎉 at the café"),
-        ("emoji_long", "😂" * 70),  # 280 UTF-8 bytes, 140 UTF-16 units
-        ("cjk", "明日の夜ご飯はどこにする？" * 12),
+        ("emoji", "ok \U0001f44d\U0001f3fd see you \U0001f389\U0001f389 at the caf\xe9"),
+        ("emoji_long", "\U0001f602" * 70),  # 280 UTF-8 bytes, 140 UTF-16 units
+        ("cjk", "\u660e\u65e5\u306e\u591c\u3054\u98ef\u306f\u3069\u3053\u306b\u3059\u308b\uff1f" * 12),
         ("attachment", OBJ),
         ("attachment_text", OBJ + "Look at this cover"),
         ("two_attachments", OBJ + OBJ + " both of these"),
@@ -280,7 +280,7 @@ PEOPLE = {
     "bram":  ("Bram", "Okoye", ["+15550100002"], [("phone", "+1 555-010-0002")]),
     "samr":  ("Sam", "Rivera", ["+15550100003"], [("phone", "555.010.0003")]),
     "samc":  ("Sam", "Chen", ["+15550100004"], [("phone", "15550100004")]),
-    "zoe":   ("Zoë", "Müller", ["+15550100005"], [("phone", "+1 (555) 010-0005")]),
+    "zoe":   ("Zo\xeb", "M\xfcller", ["+15550100005"], [("phone", "+1 (555) 010-0005")]),
     "anon6": (None, None, ["+15550100006"], []),            # not in contacts
     "anon7": (None, None, ["+15550100007"], []),            # not in contacts
     "pat":   (None, None, ["pat@example.com"], []),         # not in contacts
@@ -399,7 +399,7 @@ class Specs:
         verb = TAPBACK_TEXT.get(kind if kind < 3000 else kind - 1000, "Reacted to")
         if kind >= 3000:
             verb = "Removed a reaction from"
-        text = "%s “%s”" % (verb, quoted)
+        text = "%s \u201c%s\u201d" % (verb, quoted)
         return self.add(chat, when, sender, text, assoc_type=kind,
                         assoc_guid=prefix + target["guid"], **kw)
 
@@ -411,11 +411,11 @@ EZRA = "+15550100012"
 
 M10_TEXT = ("I have read exactly one chapter and I already have opinions about every "
             "single character in this book so please prepare yourselves for a rant")
-M11_TEXT = ("Zoë says the café scene is the best part \U0001F602 and honestly I agree "
-            "— the whole chapter felt like a fever dream, naïve narrator and all. "
-            "Also who brings a piñata to a funeral?? \U0001FA85\U0001FA85 Anyway next month "
+M11_TEXT = ("Zo\xeb says the caf\xe9 scene is the best part \U0001F602 and honestly I agree "
+            "\u2014 the whole chapter felt like a fever dream, na\xefve narrator and all. "
+            "Also who brings a pi\xf1ata to a funeral?? \U0001FA85\U0001FA85 Anyway next month "
             "we are reading something shorter because I cannot do another 600 pages of this, "
-            "déjà vu or not.")
+            "d\xe9j\xe0 vu or not.")
 
 
 def tiny_chat(s):
@@ -468,7 +468,7 @@ def tiny_chat(s):
     s.tapback(c, d(12, 11), EZRA, 2007, m["M11"], label="TB11")
     s.tapback(c, d(12, 12), "me", 2005, m["M10"], label="TB12")
     s.tapback(c, d(12, 13), NORA_P, 2002, m["M10"], label="TB13")
-    s.add(c, d(12, 14), EZRA, "Liked “something else”", assoc_type=2001,
+    s.add(c, d(12, 14), EZRA, "Liked \u201csomething else\u201d", assoc_type=2001,
           assoc_guid="p:0/00000000-0000-0000-0000-00000000DEAD", label="TB15")
     # a tapback whose add row Messages deleted when it was removed
     s.tapback(c, d(12, 15), "me", 2000, m["M7"], deleted=True, label="TB19")
@@ -508,29 +508,29 @@ WORDS = (
     "birthday surprise cake candles forgot remember photo video send link menu spicy "
     "mild extra hungry starving full sleepy awake weekend monday friday game movie show"
 ).split()
-SPICE = ["\U0001F32E", "\U0001F602", "\U0001F525", "\U0001F62D", "❤️", "café",
-         "jalapeño", "\U0001F469‍\U0001F373", "\U0001F1F2\U0001F1FD", "naïve",
-         "¡vamos!", "すごい", "\U0001F44D\U0001F3FD"]
+SPICE = ["\U0001F32E", "\U0001F602", "\U0001F525", "\U0001F62D", "\u2764\ufe0f", "caf\xe9",
+         "jalape\xf1o", "\U0001F469\u200d\U0001F373", "\U0001F1F2\U0001F1FD", "na\xefve",
+         "\xa1vamos!", "\u3059\u3054\u3044", "\U0001F44D\U0001F3FD"]
 
 # Text that probes the whitespace and clean-up rules of SCHEMA.md section 2.
 EDGE_TEXTS = [
     "tabs\tand\nnewlines\r\nmixed   spaces",
-    "nbsp separated words",
-    "ideographic　space",
-    "zero​width​space is not a separator",
-    "bom﻿inside",
-    "﻿leading bom",
+    "nbsp\xa0separated\xa0words",
+    "ideographic\u3000space",
+    "zero\u200bwidth\u200bspace is not a separator",
+    "bom\ufeffinside",
+    "\ufeffleading bom",
     "unit\x1fseparator and\x1cfile separator",
     "next\x85line",
-    "line separator paragraph",
-    "narrow nbsp and math space and ogham",
-    "᠎mongolian vowel separator",
-    "replacement � char and " + OBJ + " object inside text",
-    "�",
-    "emoji only \U0001F468‍\U0001F469‍\U0001F467‍\U0001F466 \U0001F1E8\U0001F1E6 \U0001F44D\U0001F3FD",
+    "line\u2028separator\u2029paragraph",
+    "narrow\u202fnbsp and\u205fmath space and\u1680ogham",
+    "\u180emongolian vowel separator",
+    "replacement \ufffd char and " + OBJ + " object inside text",
+    "\ufffd",
+    "emoji only \U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466 \U0001F1E8\U0001F1E6 \U0001F44D\U0001F3FD",
     "nul\x00inside the text",
     "  padded with spaces  ",
-    "  em spaces around ",
+    "\u2003\u2003em spaces around\u2003",
     "x",
 ]
 
@@ -708,7 +708,7 @@ CHATS = {
                 "", ["bram", "samr", "anon7", "pat"]),
     "stress": ("iMessage;+;chat400000000000000004", "chat400000000000000004", 43, "iMessage",
                "The Extremely Long-Named Group Chat Of Unreasonable Proportions "
-               "✨\U0001FAA9\U0001F389 (est. 2019) 「長い名前」", None),
+               "\u2728\U0001FAA9\U0001F389 (est. 2019) \u300c\u9577\u3044\u540d\u524d\u300d", None),
     "dm_ines": ("iMessage;-;+15550100001", "+15550100001", 45, "iMessage", "", ["ines"]),
     "dm_bram": ("iMessage;-;+15550100002", "+15550100002", 45, "iMessage", "", ["bram"]),
 }

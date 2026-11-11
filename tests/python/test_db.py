@@ -360,7 +360,7 @@ class Contacts(unittest.TestCase):
         names = dict(pairs)
         self.assertEqual(names["(555) 010-0001"], "Ines Calloway")
         self.assertEqual(names["Ines.Calloway@Example.com"], "Ines Calloway")
-        self.assertEqual(names["+1 (555) 010-0005"], "Zoë Müller")
+        self.assertEqual(names["+1 (555) 010-0005"], "Zo\xeb M\xfcller")
         self.assertEqual(names["555-010-0099"], "Pizza Planet")       # organisation fallback
         self.assertEqual(names["555-010-0098"], "Coach")              # nickname fallback
         self.assertEqual(names["SOLO@EXAMPLE.COM"], "Solo")           # from the second book
@@ -414,7 +414,7 @@ class OldAndOddDatabases(unittest.TestCase):
             chat = source.chat("Bram, Sam")
             rows = db.load_rows(source.conn, chat["chat_ids"])
         bad = [r for r in rows if isinstance(r["text"], str) and r["text"].startswith("bad ")]
-        self.assertEqual([r["text"] for r in bad], ["bad �� bytes in a text column"])
+        self.assertEqual([r["text"] for r in bad], ["bad \ufffd\ufffd bytes in a text column"])
         st = compute_stats(bad, tz="UTC", all_time=True, now=NOW)
         self.assertEqual(st["totals"]["words"], 6)
 

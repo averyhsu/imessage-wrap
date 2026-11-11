@@ -76,7 +76,7 @@ class CommandLine(unittest.TestCase):
         self.assertEqual((status, err), (0, ""))
         got = json.loads(out)
         expected = json.loads(json.dumps(TINY))
-        expected["period"]["label"] = "2026-01-01 – 2026-11-11"
+        expected["period"]["label"] = "2026-01-01 \u2013 2026-11-11"
         got["meta"]["generated"] = expected["meta"]["generated"]
         # tapbacks are bounded by the period end exactly like messages
         self.assertEqual(got, expected)
@@ -176,10 +176,10 @@ class PublicApi(unittest.TestCase):
         self.assertEqual(wrapped.GENERATOR, "wrapped/1")
 
     def test_decode_text(self):
-        body = support.build_fixture.archive_attributed_string("￼  /wrapped 2026 ")
+        body = support.build_fixture.archive_attributed_string("\ufffc  /wrapped 2026 ")
         self.assertEqual(wrapped.decode_text(None, body), "/wrapped 2026")
         self.assertEqual(wrapped.decode_text("", body), "/wrapped 2026")
-        self.assertEqual(wrapped.decode_text(None, body, clean=False), "￼  /wrapped 2026 ")
+        self.assertEqual(wrapped.decode_text(None, body, clean=False), "\ufffc  /wrapped 2026 ")
         self.assertEqual(wrapped.decode_text("  plain text\n", body), "plain text")
         self.assertEqual(wrapped.decode_text(None, None), "")
         self.assertEqual(wrapped.decode_text(None, b"junk"), "")

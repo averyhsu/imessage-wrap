@@ -35,7 +35,7 @@ def big_stats(senders=12, quotes=3, quote_len=180, awards=6, name_len=40):
         {"sender": stats["senders"][i % senders]["name"], "reactions": 9 - i, "date": "2026-03-14",
          "text": noise(quote_len), "kinds": {"laugh": 9 - i}} for i in range(quotes)]
     stats["awards"] = [
-        {"id": "a%d" % i, "emoji": "⭐", "title": "Title %d" % i,
+        {"id": "a%d" % i, "emoji": "\u2b50", "title": "Title %d" % i,
          "winner": stats["senders"][i % senders]["name"], "detail": noise(30)} for i in range(awards)]
     return stats
 
@@ -55,7 +55,7 @@ class Codec(unittest.TestCase):
         self.assertEqual(P.stats_from_url(VECTOR["url"]), VECTOR["stats"])
 
     def test_round_trip(self):
-        for stats in (VECTOR["stats"], {}, {"chat": {"name": "\U0001F32E \"quoted\" \\  "}},
+        for stats in (VECTOR["stats"], {}, {"chat": {"name": "\U0001F32E \"quoted\" \\ \u2028"}},
                       big_stats()):
             encoded = P.encode_payload(stats)
             self.assertRegex(encoded, r"^[A-Za-z0-9_-]+$")
@@ -71,8 +71,8 @@ class Codec(unittest.TestCase):
 
     def test_canonical_json_matches_javascript_number_formatting(self):
         self.assertEqual(P.canonical_json({"a": 0.0832, "b": 1, "c": 0, "d": 0.5, "e": None,
-                                           "f": True, "g": "é\n\x01"}),
-                         '{"a":0.0832,"b":1,"c":0,"d":0.5,"e":null,"f":true,"g":"é\\n\\u0001"}')
+                                           "f": True, "g": "\xe9\n\x01"}),
+                         '{"a":0.0832,"b":1,"c":0,"d":0.5,"e":null,"f":true,"g":"\xe9\\n\\u0001"}')
 
     def test_decoder_accepts_padding_and_rejects_rubbish(self):
         encoded = P.encode_payload({"v": 1})
@@ -123,9 +123,9 @@ class TrimLadder(unittest.TestCase):
         stats["most_reacted"][2]["text"] = "\U0001F602" * 61
         original = stats["most_reacted"][0]["text"]
         P.apply_trim_step(stats, 2)
-        self.assertEqual(stats["most_reacted"][0]["text"], original[:60] + "…")
+        self.assertEqual(stats["most_reacted"][0]["text"], original[:60] + "\u2026")
         self.assertEqual(stats["most_reacted"][1]["text"], "short")
-        self.assertEqual(stats["most_reacted"][2]["text"], "\U0001F602" * 60 + "…")
+        self.assertEqual(stats["most_reacted"][2]["text"], "\U0001F602" * 60 + "\u2026")
         exactly = big_stats(quote_len=60)
         before = copy.deepcopy(exactly)
         self.assertEqual(P.apply_trim_step(exactly, 2), before)

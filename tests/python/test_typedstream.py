@@ -79,9 +79,9 @@ class FixtureSamples(unittest.TestCase):
         self.assertIn(b"\x84\x01+\x81\x00\x01" + b"c" * 256, large)
 
     def test_accepts_bytearray_and_memoryview(self):
-        data = build_fixture.archive_attributed_string("café \U0001F389")
-        self.assertEqual(decode_attributed_body(bytearray(data)), "café \U0001F389")
-        self.assertEqual(decode_attributed_body(memoryview(data)), "café \U0001F389")
+        data = build_fixture.archive_attributed_string("caf\xe9 \U0001F389")
+        self.assertEqual(decode_attributed_body(bytearray(data)), "caf\xe9 \U0001F389")
+        self.assertEqual(decode_attributed_body(memoryview(data)), "caf\xe9 \U0001F389")
 
 
 class Fallbacks(unittest.TestCase):
@@ -113,7 +113,7 @@ class Fallbacks(unittest.TestCase):
         self.assertEqual(decode_attributed_body(data), "ok")
 
     def test_invalid_utf8_is_replaced(self):
-        self.assertEqual(decode_attributed_body(blob(b"\x04", b"a\xff\xfeb")), "a��b")
+        self.assertEqual(decode_attributed_body(blob(b"\x04", b"a\xff\xfeb")), "a\ufffd\ufffdb")
 
     def test_not_a_typedstream(self):
         for junk in (None, b"", b"\x00", b"bplist00\xd4\x01\x02", b"streamtyped", "text".encode()):

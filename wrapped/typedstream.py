@@ -215,7 +215,13 @@ def decode_with_strategy(blob) -> Tuple[Optional[str], str]:
     """
     if blob is None:
         return None, "none"
-    data = blob if isinstance(blob, (bytes, bytearray)) else bytes(blob)
+    if isinstance(blob, (bytes, bytearray)):
+        data = blob
+    else:
+        try:
+            data = bytes(memoryview(blob))
+        except TypeError:           # not bytes-like at all (a str, a number ...)
+            return None, "none"
     if not data:
         return None, "none"
     try:
