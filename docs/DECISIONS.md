@@ -270,3 +270,30 @@ add. The on-device preview may show the quotes, because nothing has left the dev
 Cost: the "message of the year" slide is less striking by default (it shows who wrote it and
 the tapbacks, not the words). Accepted; it is one deliberate tap away.
 
+### D13 — What the first independent review found, and what was done
+A reviewer that had not seen the build was told to break the finished parts. What held:
+89 hostile recap links (nothing ran, nothing left the page, no crash), the pages' content
+security policy at the network level, parameterised SQL, and the counting, which matched
+the reviewer's own recount from SQLite on 12 chat, time-zone and period combinations.
+
+What did not hold, and the fix:
+
+| Finding | Fix |
+|---------|-----|
+| **Critical.** The maker's phone preview could copy a link containing message text while the quotes switch was off. | The preview is built from exactly the link that would be shared. A test presses the story's own Copy link inside the preview, with the switch off and on. |
+| **High.** The Mac helper matched chats by name while running, so a new or renamed group could get a reply it was never approved for. | Approved chats are fixed by id when the helper starts; a rename keeps an approved chat approved and never adds one. |
+| **High.** Masking could be defeated by formatting (`tel:` prefixes, labels, full-width digits, `Name <address>`). | Any label with an address or 7+ digits is masked, in both engines, checked against one shared table. Chat names use a stricter test so that years survive (see `SCHEMA.md` §2). |
+| Full contact labels ("Dave plumber") went into links; the owner showed as "Me". | Short names by default (`--full-names` to keep them); the Mac helper takes the owner's first name from the Mac account. |
+| The installer's uninstall could delete a folder it had not created. | It removes only what it wrote, refuses `/`, the home folder and its parents, and never follows links. |
+| A long unbroken chat name stalled the card renderer for minutes. | Every string is capped before fitting; a 100,000-character name costs the same as a short one. |
+| Damaged or odd databases produced raw error traces. | One sentence and exit status 1 in the command-line tool; coded errors in the browser. |
+| Control characters in chat names reached the terminal, the log and the sent text. | Names are cleaned at the source and again wherever they are printed. |
+| Link builders defaulted to including message text. | Every builder defaults to none. |
+| AI-award checks let through bare domains, numbers and invisible characters; an API error could echo the key into the log. | Stricter validation; errors log status and type only, with key-shaped text scrubbed. |
+| Running the tests rewrote tracked screenshots. | Tests write to a temporary folder; CI fails if a run leaves anything in the checkout. |
+
+Smaller items (a personality id that named a built-in property, numbers above 10^21, the
+embed mode opened in a normal browser, right-to-left names, focus order, reduced motion) were
+fixed in the story with tests. Not changed: `wrapped chats --json` still lists members' raw
+identifiers, because it is the owner's own local output and never part of a recap.
+
