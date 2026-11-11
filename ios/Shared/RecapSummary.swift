@@ -252,7 +252,20 @@ struct Recap: Identifiable, Equatable {
         return lhs.payload == rhs.payload
     }
 
+    /// True for the built-in sample (invented data). It is labelled "Sample" wherever it
+    /// is shown or sent, and it is never kept among the recent recaps.
     var isDemo: Bool {
         return payload == DemoRecap.payload
+    }
+
+    /// "Dinner Club · 2026 in review", with "Sample · " in front for the built-in sample.
+    var caption: String {
+        return isDemo ? "Sample · \(summary.caption)" : summary.caption
+    }
+
+    /// "2026 IN REVIEW", or "SAMPLE · 2026 IN REVIEW".
+    var eyebrow: String {
+        let label = summary.reviewLabel.uppercased()
+        return isDemo ? "SAMPLE · \(label)" : label
     }
 }

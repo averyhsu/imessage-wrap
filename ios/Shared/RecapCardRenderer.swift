@@ -8,23 +8,31 @@ enum RecapCardRenderer {
     /// 4:3 card. Rendered at 3x this is 1080 x 810 pixels.
     static let pointSize = CGSize(width: 360, height: 270)
 
-    static func image(for summary: RecapSummary, scale: CGFloat = 3) -> UIImage {
+    /// `eyebrow` is the text of the pill, "2026 IN REVIEW" unless given (the built-in
+    /// sample passes "SAMPLE · 2026 IN REVIEW").
+    static func image(for summary: RecapSummary, eyebrow: String? = nil, scale: CGFloat = 3) -> UIImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = scale
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: pointSize, format: format)
         return renderer.image { (context: UIGraphicsImageRendererContext) in
-            draw(summary, in: CGRect(origin: .zero, size: pointSize), context: context.cgContext)
+            draw(
+                summary,
+                eyebrow: eyebrow ?? summary.reviewLabel.uppercased(),
+                in: CGRect(origin: .zero, size: pointSize),
+                context: context.cgContext
+            )
         }
     }
 
-    static func pngData(for summary: RecapSummary, scale: CGFloat = 3) -> Data? {
-        return image(for: summary, scale: scale).pngData()
+    /// The card of a recap, labelled as a sample when it is the built-in one.
+    static func image(for recap: Recap, scale: CGFloat = 3) -> UIImage {
+        return image(for: recap.summary, eyebrow: recap.eyebrow, scale: scale)
     }
 
     // MARK: Drawing
 
-    private static func draw(_ summary: RecapSummary, in rect: CGRect, context: CGContext) {
+    private static func draw(_ summary: RecapSummary, eyebrow eyebrowText: String, in rect: CGRect, context: CGContext) {
         drawBackground(in: rect, context: context)
 
         let inset: CGFloat = 22
@@ -35,7 +43,7 @@ enum RecapCardRenderer {
         // app-icon badge over the top-left corner of a bubble's image (seen in the
         // Simulator), so nothing that matters is drawn there.
         let eyebrow = NSAttributedString(
-            string: summary.reviewLabel.uppercased(),
+            string: eyebrowText,
             attributes: [
                 .font: WrappedTheme.displayFont(ofSize: 11.5, weight: .heavy),
                 .foregroundColor: white,

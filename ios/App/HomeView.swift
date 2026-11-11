@@ -1,11 +1,12 @@
 import SwiftUI
 import UIKit
 
-/// The containing app's home: play the demo, learn the three steps, open a pasted link.
+/// The containing app's home: see the sample, open a recap link, learn the three steps.
 struct HomeView: View {
     @EnvironmentObject private var model: AppModel
 
-    private static let demoCardImage: UIImage = RecapCardRenderer.image(for: DemoRecap.recap.summary, scale: 2)
+    /// The share card of the built-in sample, labelled as a sample.
+    private static let sampleCardImage: UIImage = RecapCardRenderer.image(for: DemoRecap.recap, scale: 2)
 
     var body: some View {
         ZStack {
@@ -14,8 +15,9 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 26) {
                     brandRow
                     hero
-                    demoCard
+                    sampleCard
                     actions
+                    recents
                     howTo
                     privacy
                 }
@@ -32,7 +34,7 @@ struct HomeView: View {
 
     private var brandRow: some View {
         HStack(spacing: 10) {
-            BrandMark(size: 26)
+            BrandMark(size: 30)
             Text(WrappedConfig.productName)
                 .font(WrappedTheme.display(17, weight: .heavy))
                 .foregroundStyle(Color.white)
@@ -67,26 +69,26 @@ struct HomeView: View {
         }
     }
 
-    private var demoCard: some View {
-        Button(action: { model.playDemo() }) {
-            Image(uiImage: HomeView.demoCardImage)
+    private var sampleCard: some View {
+        Button(action: { model.playSample() }) {
+            Image(uiImage: HomeView.sampleCardImage)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 .shadow(color: WrappedTheme.blue.opacity(0.45), radius: 28, x: 0, y: 14)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Play the demo recap")
-        .accessibilityIdentifier("home.demoCard")
+        .accessibilityLabel("Play the sample recap")
+        .accessibilityIdentifier("home.sampleCard")
     }
 
     private var actions: some View {
         VStack(spacing: 10) {
-            Button(action: { model.playDemo() }) {
-                Label("Play the demo", systemImage: "play.fill")
+            Button(action: { model.playSample() }) {
+                Label("Play the sample", systemImage: "play.fill")
             }
             .buttonStyle(PrimaryActionStyle())
-            .accessibilityIdentifier("home.playDemo")
+            .accessibilityIdentifier("home.playSample")
 
             Button(action: { model.pasteLink() }) {
                 Label("Paste a recap link", systemImage: "link")
@@ -106,6 +108,19 @@ struct HomeView: View {
         }
     }
 
+    /// Recaps the user pasted into the app, with a way to forget them.
+    @ViewBuilder
+    private var recents: some View {
+        if !model.recents.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                RecentsHeader(title: "Your recaps", onClear: { model.clearRecents() })
+                ForEach(model.recents) { recap in
+                    RecapRow(recap: recap, onPlay: { model.play(recap) })
+                }
+            }
+        }
+    }
+
     private var howTo: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("How to use it in Messages")
@@ -121,8 +136,8 @@ struct HomeView: View {
             HowToStep(
                 number: 2,
                 tint: WrappedTheme.green,
-                title: "Pick a recap",
-                detail: "Send the demo, or paste a recap link made from your own group chat."
+                title: "Paste your recap link",
+                detail: "Copy the link of a recap made from your own group chat and paste it there."
             )
             HowToStep(
                 number: 3,

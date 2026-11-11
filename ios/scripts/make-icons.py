@@ -5,6 +5,8 @@
 
 Design: near-black background with a soft glow, a speech bubble filled with the brand
 gradient, and three rising bars (the "stats") inside it. No third-party logos.
+The same bubble, without the background, is the brand mark the app and the extension show
+in their own UI (Shared/Brand.xcassets), so there is one mark everywhere.
 The PNGs are committed; rerun this only when the design changes.
 """
 import json
@@ -34,8 +36,11 @@ def gradient(size, start, mid, end, angle=45):
     return ImageOps.colorize(ramp, black=start, white=end, mid=mid)
 
 
-def render(width, height, bubble_scale=0.62):
-    """Render the icon at width x height (supersampled 4x)."""
+def render(width, height, bubble_scale=0.62, mark_only=False):
+    """Render the icon at width x height (supersampled 4x).
+
+    With mark_only, return just the bubble on a transparent background, cropped to its
+    bounds and still at the supersampled resolution."""
     ss = 4
     w, h = width * ss, height * ss
     base = min(w, h)
@@ -102,7 +107,33 @@ def render(width, height, bubble_scale=0.62):
         d.rounded_rectangle((x, top, x + bar_w, floor), radius=bar_w // 2, fill=(255, 255, 255))
         x += bar_w + gap
 
+    if mark_only:
+        rgba = img.convert("RGBA")
+        rgba.putalpha(mask)
+        return rgba.crop((bx0, by0, bx1, tail_bottom))
+
     return img.resize((width, height), Image.LANCZOS).convert("RGB")
+
+
+def write_brand_mark():
+    """The bubble alone, for use inside the app's and the extension's own UI."""
+    catalog = os.path.join(IOS, "Shared", "Brand.xcassets")
+    out = os.path.join(catalog, "BrandMark.imageset")
+    os.makedirs(out, exist_ok=True)
+    with open(os.path.join(catalog, "Contents.json"), "w") as f:
+        json.dump({"info": {"author": "xcode", "version": 1}}, f, indent=2)
+        f.write("\n")
+    big = render(512, 512, mark_only=True)
+    ratio = big.width / big.height
+    images = []
+    for scale in (1, 2, 3):
+        height = 44 * scale
+        name = "brand-mark@%dx.png" % scale
+        big.resize((round(height * ratio), height), Image.LANCZOS).save(os.path.join(out, name), optimize=True)
+        images.append({"filename": name, "idiom": "universal", "scale": "%dx" % scale})
+    with open(os.path.join(out, "Contents.json"), "w") as f:
+        json.dump({"images": images, "info": {"author": "xcode", "version": 1}}, f, indent=2)
+        f.write("\n")
 
 
 def write_app_icon():
@@ -178,4 +209,5 @@ if __name__ == "__main__":
     write_catalog_roots()
     write_app_icon()
     write_messages_icon()
+    write_brand_mark()
     print("icons written")

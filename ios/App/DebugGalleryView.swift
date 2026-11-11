@@ -21,7 +21,7 @@ struct DebugGalleryView: View {
         return recaps
     }()
 
-    private static let demoCard: UIImage = RecapCardRenderer.image(for: DemoRecap.recap.summary, scale: 2)
+    private static let sampleCard: UIImage = RecapCardRenderer.image(for: DemoRecap.recap, scale: 2)
 
     var body: some View {
         ZStack {
@@ -40,27 +40,20 @@ struct DebugGalleryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color.yellow, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-                    section("Template card (image + caption every member sees)") {
+                    section("The card (what every member of the chat sees)") {
                         VStack(alignment: .leading, spacing: 6) {
-                            Image(uiImage: DebugGalleryView.demoCard)
+                            Image(uiImage: DebugGalleryView.sampleCard)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .frame(maxWidth: 300)
                                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            Text(DemoRecap.recap.summary.caption)
+                            Text(DemoRecap.recap.caption)
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundStyle(Color.white)
                             Text(DemoRecap.recap.summary.subcaption)
                                 .font(.system(size: 13, weight: .regular))
                                 .foregroundStyle(Color.white.opacity(0.6))
                         }
-                    }
-
-                    section("Live bubble (transcript style)") {
-                        BubblePreview(summary: DemoRecap.recap.summary)
-                            .frame(width: 300, height: 188)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .accessibilityIdentifier("gallery.bubble")
                     }
 
                     section("Launcher (compact style, 300 pt tall)") {
@@ -71,6 +64,13 @@ struct DebugGalleryView: View {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .stroke(Color.white.opacity(0.15), lineWidth: 1)
                             }
+                    }
+
+                    section("Experimental, off by default: live bubble") {
+                        BubblePreview(summary: DemoRecap.recap.summary, eyebrow: DemoRecap.recap.eyebrow)
+                            .frame(width: 300, height: 188)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .accessibilityIdentifier("gallery.bubble")
                     }
                 }
                 .padding(18)
@@ -95,12 +95,13 @@ struct DebugGalleryView: View {
 /// Wraps the UIKit live bubble for the gallery.
 private struct BubblePreview: UIViewRepresentable {
     let summary: RecapSummary?
+    let eyebrow: String?
 
     func makeUIView(context: Context) -> RecapBubbleView {
         return RecapBubbleView(frame: .zero)
     }
 
     func updateUIView(_ uiView: RecapBubbleView, context: Context) {
-        uiView.configure(with: summary)
+        uiView.configure(with: summary, eyebrow: eyebrow)
     }
 }

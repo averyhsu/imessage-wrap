@@ -138,10 +138,10 @@ final class RecapBubbleView: UIView {
     }
 
     /// Shows a recap, or a neutral "open" state when the message carries none we can read.
-    func configure(with summary: RecapSummary?) {
+    func configure(with summary: RecapSummary?, eyebrow: String? = nil) {
         if let summary = summary {
             eyebrowLabel.attributedText = NSAttributedString(
-                string: summary.reviewLabel.uppercased(),
+                string: eyebrow ?? summary.reviewLabel.uppercased(),
                 attributes: [.kern: 1.2]
             )
             nameLabel.text = summary.chatName

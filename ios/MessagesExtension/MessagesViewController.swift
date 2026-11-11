@@ -8,15 +8,18 @@ import UIKit
 /// own interface (compact, or expanded), and with live layout one more per recap bubble in
 /// the transcript (`.transcript` style). Each instance shows exactly one of:
 ///
-/// - compact:    the launcher (send the demo, paste a link, recent recaps)
+/// - compact:    the launcher (paste a recap link, recaps the user made, see a sample)
 /// - expanded:   the story for the selected recap, or a roomier launcher when there is none
-/// - transcript: the live bubble (a light native view, never a web view)
+/// - transcript: the experimental live bubble (a light native view, never a web view)
 ///
-/// Tap-to-play: a template bubble tap arrives as `didSelect` or as `selectedMessage` in
+/// Tap-to-play: a card tap arrives as `didSelect` or as `selectedMessage` in
 /// `willBecomeActive`. A live bubble gets no `didSelect`; it calls
 /// `requestPresentationStyle(.expanded)`, which makes Messages create a *new* instance, so
 /// the bubble also leaves the recap in `RecapStore` as a hand-off in case that new
 /// instance has no `selectedMessage`.
+///
+/// What is remembered: only recaps the user pasted or sent from here. A recap that merely
+/// arrived in a conversation is played, never stored or offered for sending elsewhere.
 final class MessagesViewController: MSMessagesAppViewController, StoryViewControllerDelegate {
     private let store = RecapStore.shared
     private let launcherModel = LauncherModel()
@@ -28,6 +31,10 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
 
     /// The recap that is playing, or waiting for the expanded style to play.
     private var storyRecap: Recap?
+    /// True when that recap came out of a message in the conversation (someone sent it),
+    /// false when the user picked it in the launcher. A recap that arrived in a
+    /// conversation is never added to "Your recaps", even if it is sent on from the story.
+    private var storyIsFromConversation = false
     /// True once this activation has looked at `selectedMessage` / the hand-off.
     private var consumedLaunchRecap = false
     private var hasContent = false
@@ -47,17 +54,21 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         StoryViewController.showsBridgeStatusForTesting = true
         #endif
 
-        launcherModel.onSendDemo = { [weak self] in
-            self?.compose(DemoRecap.recap)
+        launcherModel.onPasteLink = { [weak self] in
+            self?.pasteLink()
+        }
+        launcherModel.onSeeSample = { [weak self] in
+            // Plays the built-in sample. Nothing is staged in the conversation.
+            self?.play(DemoRecap.recap, fromConversation: false)
+        }
+        launcherModel.onClearRecents = { [weak self] in
+            self?.clearRecents()
         }
         launcherModel.onSendDemoWithLayout = { [weak self] (live: Bool) in
             self?.compose(DemoRecap.recap, live: live)
         }
-        launcherModel.onPasteLink = { [weak self] in
-            self?.pasteLink()
-        }
         launcherModel.onPlay = { [weak self] (recap: Recap) in
-            self?.play(recap)
+            self?.play(recap, fromConversation: false)
         }
         launcherModel.onSend = { [weak self] (recap: Recap) in
             self?.compose(recap)
@@ -102,7 +113,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
               let recap = RecapMessageComposer.recap(from: message) else {
             return
         }
-        play(recap)
+        play(recap, fromConversation: true)
     }
 
     override func willTransition(to presentationStyle: MSMessagesAppPresentationStyle) {
@@ -142,7 +153,10 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         case .transcript:
             showBubble(for: conversation, reason: updateReason)
         case .expanded:
-            if let recap = storyRecap ?? launchRecap(from: conversation) ?? store.takePendingPlay() {
+            if let recap = storyRecap {
+                showStory(recap)
+            } else if let recap = launchRecap(from: conversation) ?? store.takePendingPlay() {
+                storyIsFromConversation = true
                 showStory(recap)
             } else {
                 showLauncher(roomy: true)
@@ -150,7 +164,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         case .compact:
             showLauncher(roomy: false)
             if storyRecap == nil, let recap = launchRecap(from: conversation) {
-                play(recap)
+                play(recap, fromConversation: true)
             }
         @unknown default:
             showLauncher(roomy: false)
@@ -171,8 +185,9 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         return store.takePendingPlay()
     }
 
-    private func play(_ recap: Recap) {
+    private func play(_ recap: Recap, fromConversation: Bool) {
         storyRecap = recap
+        storyIsFromConversation = fromConversation
         if presentationStyle == .expanded {
             showStory(recap)
         } else {
@@ -191,11 +206,29 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         let host = UIHostingController(rootView: LauncherView(model: launcherModel))
         host.view.backgroundColor = .black
         install(host, belowTopSafeArea: false)
+
+        // Start the story's web view now, while the person looks at the launcher, so a
+        // story opens without waiting for a web process and a page load.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            self?.prewarmStory()
+        }
+    }
+
+    private func prewarmStory() {
+        guard presentationStyle != .transcript else {
+            return
+        }
+        StoryWebViewPool.prewarm()
+    }
+
+    private func clearRecents() {
+        store.clear()
+        launcherModel.recents = []
+        launcherModel.notice = nil
     }
 
     private func showStory(_ recap: Recap) {
         storyRecap = recap
-        store.remember(recap)
         if let current = contentController as? StoryViewController, current.recap == recap {
             return
         }
@@ -227,13 +260,10 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
         let message = conversation?.selectedMessage
         let recap = recapForBubble(message)
         bubbleRecap = recap
-        if let recap = recap {
-            store.remember(recap)
-        }
 
         let bubble = RecapBubbleView(frame: view.bounds)
         bubble.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        bubble.configure(with: recap?.summary)
+        bubble.configure(with: recap?.summary, eyebrow: recap?.eyebrow)
         bubble.onTap = { [weak self] in
             self?.bubbleTapped()
         }
@@ -265,8 +295,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
             return
         }
         bubbleRecap = found
-        bubble.configure(with: found.summary)
-        store.remember(found)
+        bubble.configure(with: found.summary, eyebrow: found.eyebrow)
     }
 
     /// Debug builds record how a live bubble found (or did not find) its message, as the
@@ -318,6 +347,8 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
 
     private func removeContent() {
         if let controller = contentController {
+            // A story hands its web view back, ready for the next one.
+            (controller as? StoryViewController)?.releaseWebView()
             controller.willMove(toParent: nil)
             NSLayoutConstraint.deactivate(contentConstraints)
             contentConstraints = []
@@ -332,7 +363,9 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
     // MARK: Actions
 
     /// Stages a recap bubble in the conversation's input field. The user taps send.
-    private func compose(_ recap: Recap, live: Bool = WrappedConfig.useLiveLayout) {
+    /// `remember` is false for a recap that arrived in a conversation: sending it on does
+    /// not add it to "Your recaps".
+    private func compose(_ recap: Recap, live: Bool = WrappedConfig.useLiveLayout, remember: Bool = true) {
         guard let conversation = activeConversation else {
             launcherModel.notice = "Open a conversation to send a recap."
             return
@@ -346,8 +379,13 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
             return
         }
 
-        store.remember(recap)
-        store.setLastComposed(recap)
+        if remember {
+            store.remember(recap)
+        }
+        if live {
+            // Only the experimental live bubble needs this hand-off (see `recapForBubble`).
+            store.setLastComposed(recap)
+        }
         launcherModel.notice = nil
         conversation.insert(message) { [weak self] (error: Error?) in
             guard let error = error else {
@@ -386,7 +424,7 @@ final class MessagesViewController: MSMessagesAppViewController, StoryViewContro
     // MARK: StoryViewControllerDelegate
 
     func storyDidRequestSend(_ story: StoryViewController) {
-        compose(story.recap)
+        compose(story.recap, remember: !storyIsFromConversation)
     }
 
     func storyDidRequestClose(_ story: StoryViewController) {

@@ -66,29 +66,65 @@ final class MessageTests: XCTestCase {
         XCTAssertEqual(restoredPayload, recap.payload)
     }
 
-    func testComposedMessageUsesLiveLayoutWithATemplateFallback() throws {
-        let recap = DemoRecap.recap
-        let message = try RecapMessageComposer.message(for: recap, live: true)
+    /// An invented recap that is not the built-in sample.
+    private func ownRecap() throws -> Recap {
+        let text = "{\"v\":1,\"chat\":{\"name\":\"Sunday Hikers\",\"members\":5},\"period\":{\"label\":\"2026\"},"
+            + "\"totals\":{\"messages\":13018},\"senders\":[{\"name\":\"Noor\",\"messages\":3197}]}"
+        return try Recap(statsJSON: Data(text.utf8))
+    }
 
-        let live = try XCTUnwrap(message.layout as? MSMessageLiveLayout)
-        let template = live.alternateLayout
-        XCTAssertEqual(template.caption, "Dinner Club 🍝 · 2026 in review")
-        XCTAssertEqual(template.subcaption, recap.summary.subcaption)
-        let image = try XCTUnwrap(template.image, "the template needs its share card image")
+    /// What ships: a template card (image, caption, subcaption) that every member sees.
+    func testAMessageIsATemplateCardByDefault() throws {
+        XCTAssertFalse(WrappedConfig.useLiveLayout, "the live layout is experimental and off")
+        let recap = try ownRecap()
+        XCTAssertFalse(recap.isDemo)
+        let message = try RecapMessageComposer.message(for: recap)
+
+        let template = try XCTUnwrap(message.layout as? MSMessageTemplateLayout)
+        XCTAssertFalse(message.layout is MSMessageLiveLayout)
+        XCTAssertEqual(template.caption, "Sunday Hikers · 2026 in review")
+        XCTAssertEqual(template.subcaption, "13,018 messages · Tap to play")
+        let image = try XCTUnwrap(template.image, "the card needs its image")
         XCTAssertGreaterThan(image.size.width, 0)
 
-        XCTAssertEqual(message.summaryText, "Dinner Club 🍝 · 2026 in review")
+        XCTAssertEqual(message.summaryText, "Sunday Hikers · 2026 in review")
         let url = try XCTUnwrap(message.url)
         XCTAssertEqual(url.scheme, "https")
         XCTAssertEqual(url.host, "averyhsu.github.io")
         XCTAssertLessThanOrEqual(url.absoluteString.count, 5000, "MSMessage.url rejects longer URLs")
+        XCTAssertTrue(RecapLink.isRecapLink(url))
         XCTAssertEqual(RecapMessageComposer.recap(from: message), recap)
     }
 
-    func testTemplateOnlyLayoutWhenLiveLayoutIsOff() throws {
-        let message = try RecapMessageComposer.message(for: DemoRecap.recap, live: false)
-        XCTAssertTrue(message.layout is MSMessageTemplateLayout)
-        XCTAssertFalse(message.layout is MSMessageLiveLayout)
+    /// The built-in sample says "Sample" wherever it is sent.
+    func testTheSampleIsLabelledWhenItIsSent() throws {
+        let sample = DemoRecap.recap
+        XCTAssertTrue(sample.isDemo)
+        XCTAssertEqual(sample.caption, "Sample · Dinner Club 🍝 · 2026 in review")
+        XCTAssertEqual(sample.eyebrow, "SAMPLE · 2026 IN REVIEW")
+        let message = try RecapMessageComposer.message(for: sample)
+        let template = try XCTUnwrap(message.layout as? MSMessageTemplateLayout)
+        XCTAssertEqual(template.caption, "Sample · Dinner Club 🍝 · 2026 in review")
+        XCTAssertEqual(message.summaryText, "Sample · Dinner Club 🍝 · 2026 in review")
+        XCTAssertEqual(RecapMessageComposer.recap(from: message), sample)
+
+        let own = try ownRecap()
+        XCTAssertEqual(own.caption, "Sunday Hikers · 2026 in review")
+        XCTAssertEqual(own.eyebrow, "2026 IN REVIEW")
+    }
+
+    /// Experimental and off by default: a live layout, with the template card as the
+    /// alternate layout everyone else sees.
+    func testExperimentalLiveLayoutKeepsTheCardAsItsAlternate() throws {
+        let recap = try ownRecap()
+        let message = try RecapMessageComposer.message(for: recap, live: true)
+        let live = try XCTUnwrap(message.layout as? MSMessageLiveLayout)
+        XCTAssertEqual(live.alternateLayout.caption, "Sunday Hikers · 2026 in review")
+        XCTAssertNotNil(live.alternateLayout.image)
+        XCTAssertEqual(RecapMessageComposer.recap(from: message), recap)
+
+        let card = try RecapMessageComposer.message(for: recap, live: false)
+        XCTAssertTrue(card.layout is MSMessageTemplateLayout)
     }
 
     func testOversizedRecapIsTrimmedBeforeItBecomesAMessage() throws {
@@ -108,18 +144,23 @@ final class MessageTests: XCTestCase {
         XCTAssertNil(RecapMessageComposer.recap(from: message))
         message.url = URL(string: "https://example.com/?game=1")
         XCTAssertNil(RecapMessageComposer.recap(from: message))
+        // Another app's message that carries a recap payload on its own site is not ours.
+        message.url = URL(string: "https://example.com/imessage-wrap/#w1=" + DemoRecap.payload)
+        XCTAssertNil(RecapMessageComposer.recap(from: message))
     }
 
     // MARK: Native rendering (offscreen; these are not screenshots of Messages)
 
     func testShareCardRendersAtFullResolution() throws {
-        let image = RecapCardRenderer.image(for: DemoRecap.recap.summary)
+        let own = try ownRecap()
+        let image = RecapCardRenderer.image(for: own)
         XCTAssertEqual(image.size, RecapCardRenderer.pointSize)
         XCTAssertEqual(image.scale, 3)
         let cgImage = try XCTUnwrap(image.cgImage)
         XCTAssertEqual(cgImage.width, 1080)
         XCTAssertEqual(cgImage.height, 810)
-        TestArtifacts.save(image, named: "render-share-card-demo", in: self)
+        TestArtifacts.save(image, named: "render-share-card", in: self)
+        TestArtifacts.save(RecapCardRenderer.image(for: DemoRecap.recap), named: "render-share-card-sample", in: self)
 
         let long = RecapSummary(
             chatName: "The Extremely Long Group Chat Name That Keeps On Going 🎉🎉",
@@ -129,7 +170,7 @@ final class MessageTests: XCTestCase {
         TestArtifacts.save(RecapCardRenderer.image(for: long), named: "render-share-card-long-name", in: self)
     }
 
-    func testLiveBubbleLaysOutWithinTheOfferedSize() throws {
+    func testExperimentalLiveBubbleLaysOutWithinTheOfferedSize() throws {
         XCTAssertEqual(RecapBubbleView.preferredSize(fitting: CGSize(width: 1000, height: 1000)), CGSize(width: 300, height: 188))
         XCTAssertEqual(RecapBubbleView.preferredSize(fitting: CGSize(width: 240, height: 150)), CGSize(width: 240, height: 150))
 
@@ -144,7 +185,7 @@ final class MessageTests: XCTestCase {
         let image = renderer.image { (context: UIGraphicsImageRendererContext) in
             bubble.layer.render(in: context.cgContext)
         }
-        TestArtifacts.save(image, named: "render-live-bubble-demo", in: self)
+        TestArtifacts.save(image, named: "experimental-render-live-bubble", in: self)
 
         var tapped = false
         bubble.onTap = {
