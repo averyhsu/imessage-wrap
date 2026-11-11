@@ -70,14 +70,25 @@ jobs:
         run: node --test tests/engine-js/*.test.js
       - name: Conformance (both engines, byte-identical JSON)
         run: python -m pytest tests/conformance -q
+      - name: The tests left nothing behind in the checkout
+        run: |
+          left="$(git status --porcelain --ignored | grep -v '^!! node_modules/$' || true)"
+          if [ -n "$left" ]; then
+            echo "The test runs created or changed these files in the repository:"
+            echo "$left"
+            exit 1
+          fi
       - name: The package installs and the console script runs
         run: |
           python -m pip install --quiet .
           cd "$RUNNER_TEMP"
           wrapped --version
           wrapped chats --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts
-          wrapped link "Book Club" --year 2026 --tz America/Los_Angeles --no-quotes \
+          wrapped chats --db "$WRAPPED_FIXTURE_DIR/evil/chat.db" --no-contacts
+          wrapped link "Book Club" --year 2026 --tz America/Los_Angeles \
             --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts
+          wrapped stats "Book Club" --year 2026 --tz America/Los_Angeles --full-names --compact \
+            --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts > /dev/null
 
   macos:
     name: macOS Python + real NSArchiver format
@@ -109,6 +120,14 @@ jobs:
         run: node --test --test-reporter=dot tests/engine-js/*.test.js
       - name: Conformance (both engines, byte-identical JSON)
         run: /usr/bin/python3 -m unittest discover -s tests/conformance
+      - name: The tests left nothing behind in the checkout
+        run: |
+          left="$(git status --porcelain --ignored | grep -v '^!! node_modules/$' || true)"
+          if [ -n "$left" ]; then
+            echo "The test runs created or changed these files in the repository:"
+            echo "$left"
+            exit 1
+          fi
       - name: What the decoder makes of the real samples
         if: always()
         run: /usr/bin/python3 tests/conformance/describe_typedstream.py "$RUNNER_TEMP/real_typedstream.json"

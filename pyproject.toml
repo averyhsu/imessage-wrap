@@ -26,3 +26,4 @@ include = ["wrapped*"]
 [tool.pytest.ini_options]
 testpaths = ["tests/python", "tests/conformance"]
 python_files = ["test_*.py"]
+addopts = "-p no:cacheprovider"      # a test run leaves nothing behind in the checkout
