@@ -1,9 +1,12 @@
+import Compression
 import Foundation
 
 /// Errors from decoding, encoding or fitting a recap link payload.
 enum RecapPayloadError: Error, Equatable {
     case invalidBase64URL
+    case payloadTooLong(length: Int, limit: Int)
     case inflateFailed
+    case inflatedTooLarge(limit: Int)
     case deflateFailed
     case notAStatsObject
     case linkTooLong(length: Int, limit: Int)
@@ -15,6 +18,8 @@ extension RecapPayloadError: LocalizedError {
         switch self {
         case .invalidBase64URL:
             return "That link does not contain a readable recap."
+        case .payloadTooLong, .inflatedTooLarge:
+            return "That link is too large to be a recap."
         case .inflateFailed:
             return "The recap in that link is damaged."
         case .deflateFailed:
@@ -32,9 +37,14 @@ extension RecapPayloadError: LocalizedError {
 /// Link payload codec (docs/SCHEMA.md §5):
 /// `payload = base64url( raw-DEFLATE( UTF-8( JSON ) ) )`, no padding.
 enum RecapPayload {
-    /// Upper bound for the inflated JSON. A 5,000-character link cannot legitimately get
-    /// anywhere near this; it only stops a crafted payload from ballooning in memory.
-    static let maxInflatedBytes = 4 * 1024 * 1024
+    /// Longest payload that is decoded at all. Links are capped at 4,800 characters
+    /// (docs/SCHEMA.md §5); anything much longer is not a recap link.
+    static let maxPayloadCharacters = 8000
+
+    /// Hard cap for the inflated JSON. A real recap is a few kilobytes. Inflating stops at
+    /// this size, so a crafted payload (a "deflate bomb") cannot balloon in memory, which
+    /// matters most inside the iMessage extension.
+    static let maxInflatedBytes = 256 * 1024
 
     static func base64URLDecode(_ text: String) -> Data? {
         var s = text
@@ -61,23 +71,89 @@ enum RecapPayload {
     }
 
     /// Decodes a payload to the UTF-8 JSON bytes of the stats object.
+    /// Input comes from links, the clipboard and other people's messages, so it is treated
+    /// as hostile: length-checked before decoding and inflated with a hard output cap.
     static func decode(_ payload: String) throws -> Data {
+        let length = payload.utf8.count
+        guard length <= maxPayloadCharacters else {
+            throw RecapPayloadError.payloadTooLong(length: length, limit: maxPayloadCharacters)
+        }
         guard !payload.isEmpty,
               let compressed = base64URLDecode(payload),
               !compressed.isEmpty else {
             throw RecapPayloadError.invalidBase64URL
         }
-        let inflated: Data
-        do {
-            // `.zlib` is raw DEFLATE (RFC 1951) on Apple platforms: no zlib or gzip header.
-            inflated = try (compressed as NSData).decompressed(using: .zlib) as Data
-        } catch {
+        return try inflateRaw(compressed, limit: maxInflatedBytes)
+    }
+
+    /// Inflates raw DEFLATE (RFC 1951, no zlib or gzip header) in chunks and gives up as
+    /// soon as the output would pass `limit`. Throws `.inflatedTooLarge` in that case and
+    /// `.inflateFailed` for corrupt or truncated input.
+    static func inflateRaw(_ compressed: Data, limit: Int) throws -> Data {
+        guard !compressed.isEmpty else {
             throw RecapPayloadError.inflateFailed
         }
-        guard !inflated.isEmpty, inflated.count <= maxInflatedBytes else {
+        let stream = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
+        defer {
+            stream.deallocate()
+        }
+        // COMPRESSION_ZLIB is raw DEFLATE on Apple platforms.
+        guard compression_stream_init(stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB) == COMPRESSION_STATUS_OK else {
             throw RecapPayloadError.inflateFailed
         }
-        return inflated
+        defer {
+            compression_stream_destroy(stream)
+        }
+
+        let chunkSize = 16 * 1024
+        let chunk = UnsafeMutablePointer<UInt8>.allocate(capacity: chunkSize)
+        defer {
+            chunk.deallocate()
+        }
+
+        var output = Data()
+        try compressed.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Void in
+            guard let source = raw.bindMemory(to: UInt8.self).baseAddress else {
+                throw RecapPayloadError.inflateFailed
+            }
+            stream.pointee.src_ptr = source
+            stream.pointee.src_size = raw.count
+            let flags = Int32(COMPRESSION_STREAM_FINALIZE.rawValue)
+            var idleRounds = 0
+
+            while true {
+                stream.pointee.dst_ptr = chunk
+                stream.pointee.dst_size = chunkSize
+                let status = compression_stream_process(stream, flags)
+                guard status == COMPRESSION_STATUS_OK || status == COMPRESSION_STATUS_END else {
+                    throw RecapPayloadError.inflateFailed
+                }
+                let produced = chunkSize - stream.pointee.dst_size
+                if output.count + produced > limit {
+                    throw RecapPayloadError.inflatedTooLarge(limit: limit)
+                }
+                if produced > 0 {
+                    output.append(chunk, count: produced)
+                }
+                if status == COMPRESSION_STATUS_END {
+                    return
+                }
+                // Not at the end of the stream, the output chunk was not filled and
+                // there is no input left: the DEFLATE data stops short.
+                if produced < chunkSize && stream.pointee.src_size == 0 {
+                    throw RecapPayloadError.inflateFailed
+                }
+                // Belt and braces: never spin without making progress.
+                idleRounds = produced == 0 ? idleRounds + 1 : 0
+                if idleRounds > 2 {
+                    throw RecapPayloadError.inflateFailed
+                }
+            }
+        }
+        guard !output.isEmpty else {
+            throw RecapPayloadError.inflateFailed
+        }
+        return output
     }
 
     /// Encodes the UTF-8 JSON bytes of a stats object as a payload.

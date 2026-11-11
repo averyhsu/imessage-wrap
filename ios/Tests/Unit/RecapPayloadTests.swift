@@ -123,6 +123,98 @@ final class RecapPayloadTests: XCTestCase {
         }
     }
 
+    // MARK: Hostile input
+
+    func testRefusesOverlongPayloadsBeforeDecodingThem() throws {
+        let limit = RecapPayload.maxPayloadCharacters
+        XCTAssertEqual(limit, 8000)
+        let tooLong = String(repeating: "A", count: limit + 1)
+        XCTAssertThrowsError(try RecapPayload.decode(tooLong)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .payloadTooLong(length: limit + 1, limit: limit))
+        }
+        XCTAssertThrowsError(try Recap(payload: tooLong)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .payloadTooLong(length: limit + 1, limit: limit))
+        }
+        let link = try XCTUnwrap(RecapLink.storyURL(payload: tooLong))
+        XCTAssertNil(RecapLink.recap(from: link))
+        XCTAssertNil(RecapLink.recap(inText: link.absoluteString))
+
+        // Exactly at the limit is still looked at (and fails for what it is, not its length).
+        let atLimit = String(repeating: "A", count: limit)
+        XCTAssertThrowsError(try RecapPayload.decode(atLimit)) { error in
+            XCTAssertNotEqual(error as? RecapPayloadError, .payloadTooLong(length: limit, limit: limit))
+        }
+    }
+
+    /// A "deflate bomb": 1,378 characters that inflate to a megabyte of zeros (packed with
+    /// zlib at level 9 as raw DEFLATE). Inflating stops at the cap instead.
+    func testInflatingStopsAtTheOutputCap() throws {
+        let bomb = "7cExAQAAAMKg9U9tCF-g" + String(repeating: "A", count: 1355) + "-Aw"
+        XCTAssertEqual(bomb.count, 1378)
+        XCTAssertLessThanOrEqual(bomb.count, RecapPayload.maxPayloadCharacters)
+
+        XCTAssertThrowsError(try RecapPayload.decode(bomb)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .inflatedTooLarge(limit: RecapPayload.maxInflatedBytes))
+        }
+        XCTAssertThrowsError(try Recap(payload: bomb))
+        XCTAssertNil(RecapLink.recap(from: try XCTUnwrap(RecapLink.storyURL(payload: bomb))))
+
+        // With the cap lifted it really is a megabyte, so the cap is what stops it.
+        let packed = try XCTUnwrap(RecapPayload.base64URLDecode(bomb))
+        XCTAssertEqual(try RecapPayload.inflateRaw(packed, limit: 2 * 1024 * 1024).count, 1024 * 1024)
+
+        // The same with a stream packed on this device.
+        let own = try XCTUnwrap(RecapPayload.base64URLDecode(try RecapPayload.encode(json: Data(count: 2 * 1024 * 1024))))
+        print("WRAPPED_NOTE deflate bomb: 2 MB of zeros packed here into \(own.count) bytes; inflating stops at \(RecapPayload.maxInflatedBytes) bytes")
+        XCTAssertThrowsError(try RecapPayload.inflateRaw(own, limit: RecapPayload.maxInflatedBytes)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .inflatedTooLarge(limit: RecapPayload.maxInflatedBytes))
+        }
+    }
+
+    func testInflateCapIsExact() throws {
+        let json = Data(String(repeating: "{\"a\":1}", count: 1000).utf8)
+        XCTAssertEqual(json.count, 7000)
+        let packed = try XCTUnwrap(RecapPayload.base64URLDecode(try RecapPayload.encode(json: json)))
+        XCTAssertEqual(try RecapPayload.inflateRaw(packed, limit: 7000), json)
+        XCTAssertThrowsError(try RecapPayload.inflateRaw(packed, limit: 6999)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .inflatedTooLarge(limit: 6999))
+        }
+        XCTAssertThrowsError(try RecapPayload.inflateRaw(Data(), limit: 7000)) { error in
+            XCTAssertEqual(error as? RecapPayloadError, .inflateFailed)
+        }
+    }
+
+    /// Larger than one internal chunk, and still well under the cap: decodes completely.
+    func testInflatesOutputLargerThanOneChunk() throws {
+        var text = SeededText(seed: 7)
+        var words: [String] = []
+        for _ in 0..<15_000 {
+            words.append(text.word())
+        }
+        let filler = words.joined(separator: " ")
+        let json = Data("{\"chat\":{\"name\":\"Big\"},\"totals\":{\"messages\":5},\"pad\":\"\(filler)\"}".utf8)
+        XCTAssertGreaterThan(json.count, 80_000)
+        XCTAssertLessThan(json.count, RecapPayload.maxInflatedBytes)
+        let packed = try XCTUnwrap(RecapPayload.base64URLDecode(try RecapPayload.encode(json: json)))
+        XCTAssertEqual(try RecapPayload.inflateRaw(packed, limit: RecapPayload.maxInflatedBytes), json)
+    }
+
+    func testTruncatedDeflateIsRefused() throws {
+        let vector = try PayloadVector.load()
+        let full = try XCTUnwrap(RecapPayload.base64URLDecode(vector.payload))
+        for keep in [1, 2, 10, full.count / 2, full.count - 1] {
+            let cut = RecapPayload.base64URLEncode(Data(full.prefix(keep)))
+            XCTAssertThrowsError(try RecapPayload.decode(cut), "cut to \(keep) of \(full.count) bytes")
+            XCTAssertThrowsError(try Recap(payload: cut), "cut to \(keep) of \(full.count) bytes")
+        }
+        // Damage in the middle of the stream is refused or, at worst, decodes to something
+        // that is not the recap; it never crashes and never passes as the original.
+        var damaged = full
+        damaged[full.count / 2] = damaged[full.count / 2] ^ 0xFF
+        let recap = try? Recap(payload: RecapPayload.base64URLEncode(damaged))
+        XCTAssertNotEqual(recap?.summary, try Recap(payload: vector.payload).summary)
+    }
+
     /// Contract update: senders without a contact name arrive as "…0001" (never a full
     /// number), and message text is opt-in, so `most_reacted[].text` is usually "".
     func testHandlesMaskedSenderNamesAndEmptyQuotes() throws {
@@ -185,5 +277,25 @@ final class RecapPayloadTests: XCTestCase {
         XCTAssertNil(store.takePendingPlay(now: now.addingTimeInterval(6)), "a hand-off is taken once")
         store.setPendingPlay(second, now: now)
         XCTAssertNil(store.takePendingPlay(now: now.addingTimeInterval(120)), "a stale hand-off is ignored")
+    }
+
+    func testClearForgetsEverything() throws {
+        let suite = "wrapped.tests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+        }
+        let store = RecapStore(defaults: defaults)
+        let recap = try Recap(statsJSON: Data("{\"chat\":{\"name\":\"One\"},\"totals\":{\"messages\":1}}".utf8))
+        store.remember(recap)
+        store.setLastComposed(recap)
+        store.setPendingPlay(recap)
+        XCTAssertEqual(store.recents(), [recap])
+
+        store.clear()
+        XCTAssertTrue(store.recents().isEmpty)
+        XCTAssertNil(store.lastComposed())
+        XCTAssertNil(store.takePendingPlay())
+        XCTAssertNil(defaults.persistentDomain(forName: suite)?.keys.first { $0.hasPrefix("wrapped.") })
     }
 }

@@ -5,9 +5,11 @@ struct WrappedApp: App {
     @StateObject private var model = AppModel()
 
     init() {
+        #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-testing") {
             StoryViewController.showsBridgeStatusForTesting = true
         }
+        #endif
     }
 
     var body: some Scene {
@@ -39,6 +41,11 @@ struct RootView: View {
                 model.playing = nil
             })
             .ignoresSafeArea()
+        }
+        .onAppear {
+            // Start the story's web view while the person reads the home screen, so the
+            // first story opens without waiting for a web process and a page load.
+            StoryWebViewPool.prewarm()
         }
     }
 }

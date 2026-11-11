@@ -23,6 +23,11 @@ struct StoryScreen: UIViewControllerRepresentable {
         context.coordinator.onClose = onClose
     }
 
+    static func dismantleUIViewController(_ uiViewController: StoryViewController, coordinator: Coordinator) {
+        // The story is gone: its web view goes back to the pool, ready for the next one.
+        uiViewController.releaseWebView()
+    }
+
     final class Coordinator: NSObject, StoryViewControllerDelegate, MFMessageComposeViewControllerDelegate {
         var onClose: () -> Void
 

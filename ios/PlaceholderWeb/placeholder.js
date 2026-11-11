@@ -142,6 +142,7 @@
   }
 
   function goTo(next) {
+    if (!slides.length) { return; }
     next = Math.max(0, Math.min(slides.length - 1, Number(next) || 0));
     if (next === index) { return; }
     index = next;
@@ -211,20 +212,37 @@
   // ---- start --------------------------------------------------------------------------
 
   function start() {
+    index = -1;
+    paused = false;
+    document.body.classList.remove('paused');
     buildSlides();
     post({ type: 'ready', slides: slides.length });
     goTo(0);
   }
 
-  var payload = findPayload();
-  if (!payload) {
-    start();
-  } else {
+  /* Like the real story: with no recap in the address, wait quietly (the native shell
+     warms the page up early and hands the recap over later by setting the #fragment). */
+  function route() {
+    var payload = findPayload();
+    window.clearTimeout(timer);
+    if (!payload) {
+      index = -1;
+      slides = [];
+      stage.className = '';
+      stage.innerHTML = '';
+      progress.innerHTML = '';
+      return;
+    }
     decodePayload(payload).then(function (decoded) {
-      if (decoded && typeof decoded === 'object') { stats = decoded; }
+      stats = (decoded && typeof decoded === 'object') ? decoded : FALLBACK;
       start();
     }, function () {
+      stats = FALLBACK;
       start();
     });
   }
+
+  window.addEventListener('hashchange', route);
+  window.WrappedApp = { route: route };
+  route();
 })();

@@ -11,29 +11,14 @@ protocol StoryViewControllerDelegate: AnyObject {
     func story(_ story: StoryViewController, didRequestOpen url: URL)
 }
 
-/// Keeps `WKUserContentController` from retaining the view controller.
-private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
-    weak var target: WKScriptMessageHandler?
-
-    init(target: WKScriptMessageHandler) {
-        self.target = target
-        super.init()
-    }
-
-    func userContentController(
-        _ userContentController: WKUserContentController,
-        didReceive message: WKScriptMessage
-    ) {
-        target?.userContentController(userContentController, didReceive: message)
-    }
-}
-
 /// Plays one recap: the bundled web story in a `WKWebView`, plus the native half of the
 /// embed bridge (haptics, share sheet, send, close). Used by the app and by the iMessage
 /// extension's expanded style.
-final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIScrollViewDelegate, UIGestureRecognizerDelegate {
-    static let bridgeName = "wrapped"
-
+///
+/// Until the page reports that the story is on screen, a native cover in the look of the
+/// story's first slide is shown (the chat name on the brand gradient), so the screen is
+/// never black; it cross-fades into the story.
+final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureRecognizerDelegate {
     /// When true, the last bridge event is exposed through an invisible accessibility
     /// label (`story.bridge`) so UI tests can wait for "ready" and watch slides change.
     static var showsBridgeStatusForTesting = false
@@ -46,12 +31,11 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     /// for collapsing the expanded style. Set it before the view loads.
     var allowsSwipeDownToClose = false
 
-    private var webView: WKWebView?
+    private var story: StoryWebView?
+    private var cover: StoryCoverView?
     private var statusLabel: UILabel?
     private var failureLabel: UILabel?
-    private var loadingIndicator: UIActivityIndicatorView?
-    private var reloadsAfterCrash = 0
-    private var loadStartedAt = Date()
+    private var playStartedAt = Date()
     private var readyNote = ""
 
     private(set) var slideCount = 0
@@ -85,69 +69,29 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = WrappedTheme.coverBottomUI
 
-        let configuration = WKWebViewConfiguration()
-        configuration.allowsInlineMediaPlayback = true
-        configuration.mediaTypesRequiringUserActionForPlayback = []
-
-        let content = WKUserContentController()
-        content.add(WeakScriptMessageHandler(target: self), name: StoryViewController.bridgeName)
-        content.addUserScript(
-            WKUserScript(
-                source: StoryViewController.errorReportingScript,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: true
-            )
-        )
-        content.addUserScript(
-            WKUserScript(
-                source: StoryViewController.viewportScript,
-                injectionTime: .atDocumentEnd,
-                forMainFrameOnly: true
-            )
-        )
-        configuration.userContentController = content
-
-        let web = WKWebView(frame: view.bounds, configuration: configuration)
+        // A web view that was warmed up earlier starts the story at once; a new one has
+        // to start its process and load the page first.
+        let story = StoryWebViewPool.take()
+        story.owner = self
+        let web = story.webView
+        web.transform = .identity
+        web.alpha = 1
+        web.frame = view.bounds
         web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        web.isOpaque = false
-        web.backgroundColor = .black
-        web.underPageBackgroundColor = .black
-        web.scrollView.backgroundColor = .black
-        web.scrollView.bounces = false
-        web.scrollView.alwaysBounceVertical = false
-        web.scrollView.alwaysBounceHorizontal = false
-        web.scrollView.showsVerticalScrollIndicator = false
-        web.scrollView.showsHorizontalScrollIndicator = false
-        web.scrollView.contentInsetAdjustmentBehavior = .never
-        web.scrollView.delegate = self
-        web.allowsLinkPreview = false
-        web.allowsBackForwardNavigationGestures = false
-        web.navigationDelegate = self
-        web.accessibilityIdentifier = "story.web"
-        #if DEBUG
-        if #available(iOS 16.4, *) {
-            web.isInspectable = true
-        }
-        #endif
         view.addSubview(web)
-        webView = web
+        self.story = story
         if allowsSwipeDownToClose {
             installSwipeDownToClose()
         }
 
-        // A quiet native spinner until the page reports that the story is on screen.
-        let spinner = UIActivityIndicatorView(style: .large)
-        spinner.color = .white
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-        spinner.startAnimating()
-        view.addSubview(spinner)
-        NSLayoutConstraint.activate([
-            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
-        ])
-        loadingIndicator = spinner
+        // The cover hides the web view until the story is on screen.
+        let cover = StoryCoverView(frame: view.bounds)
+        cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        cover.configure(with: recap.summary, isSample: recap.isDemo)
+        view.addSubview(cover)
+        self.cover = cover
 
         if StoryViewController.showsBridgeStatusForTesting {
             let label = UILabel(frame: CGRect(x: 0, y: 0, width: 4, height: 4))
@@ -163,44 +107,51 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             statusLabel = label
         }
 
-        loadStory()
+        playStartedAt = Date()
+        setStatus(story.isPageLoaded ? "loading: warm web view" : "loading: cold web view")
+        story.play(payload: recap.payload)
+
+        // Whatever happens, the cover does not stay up forever.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12.0) { [weak self] in
+            self?.revealIfStillWaiting()
+        }
     }
 
-    private func loadStory() {
-        guard let location = RecapLink.bundledStoryLocation(payload: recap.payload) else {
-            showFailure("The story files are missing from this build.")
+    /// Returns the web view to the pool. Hosts call this when the story goes away.
+    func releaseWebView() {
+        guard let story = story else {
             return
         }
-        loadStartedAt = Date()
-        webView?.loadFileURL(location.url, allowingReadAccessTo: location.directory)
+        self.story = nil
+        StoryWebViewPool.recycle(story)
     }
 
-    private func hideLoadingIndicator() {
-        guard let spinner = loadingIndicator else {
+    private func revealStory() {
+        guard let cover = cover else {
             return
         }
-        loadingIndicator = nil
+        self.cover = nil
         UIView.animate(
-            withDuration: 0.2,
+            withDuration: 0.35,
             animations: {
-                spinner.alpha = 0
+                cover.alpha = 0
             },
             completion: { (_: Bool) in
-                spinner.removeFromSuperview()
+                cover.removeFromSuperview()
             }
         )
     }
 
     private func showFailure(_ text: String) {
-        hideLoadingIndicator()
+        revealStory()
         setStatus("error: \(text)")
         if failureLabel == nil {
             // A native notice that covers the page; tapping it leaves the story.
-            let cover = UIView(frame: view.bounds)
-            cover.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            cover.backgroundColor = WrappedTheme.nightUI
-            cover.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleFailureTap)))
-            view.addSubview(cover)
+            let notice = UIView(frame: view.bounds)
+            notice.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            notice.backgroundColor = WrappedTheme.nightUI
+            notice.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleFailureTap)))
+            view.addSubview(notice)
 
             let label = UILabel()
             label.translatesAutoresizingMaskIntoConstraints = false
@@ -209,11 +160,11 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             label.numberOfLines = 0
             label.textAlignment = .center
             label.accessibilityIdentifier = "story.failure"
-            cover.addSubview(label)
+            notice.addSubview(label)
             NSLayoutConstraint.activate([
-                label.centerYAnchor.constraint(equalTo: cover.centerYAnchor),
-                label.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: 32),
-                label.trailingAnchor.constraint(equalTo: cover.trailingAnchor, constant: -32)
+                label.centerYAnchor.constraint(equalTo: notice.centerYAnchor),
+                label.leadingAnchor.constraint(equalTo: notice.leadingAnchor, constant: 32),
+                label.trailingAnchor.constraint(equalTo: notice.trailingAnchor, constant: -32)
             ])
             failureLabel = label
         }
@@ -233,34 +184,18 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     // MARK: Native → page
 
     func pause() {
-        evaluate("window.WrappedStory && window.WrappedStory.pause && window.WrappedStory.pause();")
+        story?.evaluate("window.WrappedStory && window.WrappedStory.pause && window.WrappedStory.pause();")
     }
 
     func resume() {
-        evaluate("window.WrappedStory && window.WrappedStory.resume && window.WrappedStory.resume();")
+        story?.evaluate("window.WrappedStory && window.WrappedStory.resume && window.WrappedStory.resume();")
     }
 
     func goTo(slide index: Int) {
-        evaluate("window.WrappedStory && window.WrappedStory.goTo && window.WrappedStory.goTo(\(index));")
+        story?.evaluate("window.WrappedStory && window.WrappedStory.goTo && window.WrappedStory.goTo(\(index));")
     }
 
-    private func evaluate(_ script: String) {
-        webView?.evaluateJavaScript(script, completionHandler: nil)
-    }
-
-    // MARK: Page → native (WKScriptMessageHandler)
-
-    func userContentController(
-        _ userContentController: WKUserContentController,
-        didReceive message: WKScriptMessage
-    ) {
-        guard message.name == StoryViewController.bridgeName,
-              let body = message.body as? [String: Any],
-              let type = body["type"] as? String else {
-            return
-        }
-        handleBridgeMessage(type: type, body: body)
-    }
+    // MARK: StoryWebViewOwner
 
     private func intValue(_ value: Any?) -> Int? {
         if let number = value as? NSNumber {
@@ -272,19 +207,19 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         return nil
     }
 
-    private func handleBridgeMessage(type: String, body: [String: Any]) {
+    func storyWebView(_ story: StoryWebView, didReceive type: String, body: [String: Any]) {
         switch type {
         case "ready":
             isReady = true
-            hideLoadingIndicator()
+            revealStory()
             slideCount = intValue(body["slides"]) ?? slideCount
-            // "ready 12 (1.4s)": the time from loading the page to the story being on screen.
-            let elapsed = String(format: "%.1f", Date().timeIntervalSince(loadStartedAt))
+            // "(ready in 0.3s)": from asking for the story to the story being on screen.
+            let elapsed = String(format: "%.1f", Date().timeIntervalSince(playStartedAt))
             readyNote = " (ready in \(elapsed)s)"
             setStatus("ready \(slideCount)\(readyNote)")
             NSLog("[story] ready after %@ s, %ld slides", elapsed, slideCount)
         case "slide":
-            hideLoadingIndicator()
+            revealStory()
             currentSlide = intValue(body["index"]) ?? currentSlide
             slideCount = intValue(body["total"]) ?? slideCount
             setStatus("slide \(currentSlide)/\(slideCount)\(readyNote)")
@@ -306,7 +241,7 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             showFailure("This recap could not be played.")
             setStatus("error: page: \(text)")
         case "jserror":
-            // An uncaught script error, forwarded by the script this class injects.
+            // An uncaught script error, forwarded by the script the web view injects.
             let text = (body["message"] as? String) ?? "unknown"
             NSLog("[story] uncaught page error: %@", text)
             if !isReady {
@@ -315,6 +250,65 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         default:
             break
         }
+    }
+
+    func storyWebViewDidFinishLoading(_ story: StoryWebView) {
+        if !isReady {
+            setStatus("loaded")
+        }
+        // Fallback: a page that never reports "ready" must not keep the cover forever.
+        // If it still has not reported by then, record what the page looks like inside.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+            self?.revealIfStillWaiting()
+        }
+    }
+
+    private func revealIfStillWaiting() {
+        guard !isReady else {
+            return
+        }
+        revealStory()
+        let script = """
+        (function () {
+          try {
+            return [
+              'readyState=' + document.readyState,
+              'visibility=' + document.visibilityState,
+              'class=' + document.documentElement.className,
+              'story=' + (typeof window.WrappedStory),
+              'handler=' + !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.wrapped),
+              'size=' + window.innerWidth + 'x' + window.innerHeight
+            ].join(' ');
+          } catch (e) {
+            return 'probe failed: ' + e;
+          }
+        })()
+        """
+        story?.evaluate(script) { [weak self] (result: Any?, error: Error?) in
+            guard let self = self, !self.isReady else {
+                return
+            }
+            let text: String
+            if let value = result as? String {
+                text = value
+            } else if let error = error {
+                text = "js error: \(StoryWebView.describe(error))"
+            } else {
+                text = "no result"
+            }
+            let ignored = self.story.map { "ignored=\($0.ignoredMessages) \($0.lastIgnoredSource)" } ?? ""
+            NSLog("[story] not ready after load: %@ %@", text, ignored)
+            self.setStatus("loaded, not ready: \(text) \(ignored)")
+        }
+    }
+
+    func storyWebView(_ story: StoryWebView, didFailWith reason: String) {
+        showFailure("The story could not be loaded.")
+        setStatus("error: \(reason)")
+    }
+
+    func storyWebView(_ story: StoryWebView, wantsToOpen url: URL) {
+        delegate?.story(self, didRequestOpen: url)
     }
 
     // MARK: Haptics
@@ -382,117 +376,6 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         present(sheet, animated: true, completion: nil)
     }
 
-    // MARK: WKNavigationDelegate
-
-    func webView(
-        _ webView: WKWebView,
-        decidePolicyFor navigationAction: WKNavigationAction,
-        decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void
-    ) {
-        guard let url = navigationAction.request.url else {
-            decisionHandler(.cancel)
-            return
-        }
-        let scheme = (url.scheme ?? "").lowercased()
-        if url.isFileURL || scheme == "about" || scheme == "blob" || scheme == "data" {
-            decisionHandler(.allow)
-            return
-        }
-        // The story is fully bundled: never navigate the web view to the network.
-        decisionHandler(.cancel)
-        if navigationAction.navigationType == .linkActivated, scheme == "https" || scheme == "http" {
-            delegate?.story(self, didRequestOpen: url)
-        }
-    }
-
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        if !isReady {
-            setStatus("loading: navigation started")
-        }
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        if !isReady {
-            setStatus("loaded")
-        }
-        // Fallback: a page that never reports "ready" must not keep the spinner forever.
-        // If it still has not reported by then, record what the page looks like from inside.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-            self?.hideLoadingIndicator()
-            self?.probePageIfNotReady()
-        }
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        showFailure("The story could not be loaded.")
-        setStatus("error: navigation failed: \(StoryViewController.describe(error))")
-    }
-
-    func webView(
-        _ webView: WKWebView,
-        didFailProvisionalNavigation navigation: WKNavigation!,
-        withError error: Error
-    ) {
-        showFailure("The story could not be loaded.")
-        setStatus("error: provisional navigation failed: \(StoryViewController.describe(error))")
-    }
-
-    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-        // The web process was killed (memory pressure is the usual cause): reload once.
-        if reloadsAfterCrash < 1 {
-            reloadsAfterCrash += 1
-            setStatus("loading: web process restarted")
-            loadStory()
-        } else {
-            showFailure("The story stopped unexpectedly.")
-        }
-    }
-
-    private static func describe(_ error: Error) -> String {
-        let nsError = error as NSError
-        return "\(nsError.domain) \(nsError.code) \(nsError.localizedDescription)"
-    }
-
-    /// Diagnostics for a page that loaded but never reported "ready": puts the page's own
-    /// view of the world into the bridge status (and the log).
-    private func probePageIfNotReady() {
-        guard !isReady, let web = webView else {
-            return
-        }
-        let script = """
-        (function () {
-          try {
-            return [
-              'readyState=' + document.readyState,
-              'visibility=' + document.visibilityState,
-              'class=' + document.documentElement.className,
-              'story=' + (typeof window.WrappedStory),
-              'bridgeLog=' + ((window.WrappedBridge && window.WrappedBridge.log) ? window.WrappedBridge.log.length : -1),
-              'handler=' + !!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.wrapped),
-              'size=' + window.innerWidth + 'x' + window.innerHeight
-            ].join(' ');
-          } catch (e) {
-            return 'probe failed: ' + e;
-          }
-        })()
-        """
-        web.evaluateJavaScript(script) { [weak self] (result: Any?, error: Error?) in
-            guard let self = self, !self.isReady else {
-                return
-            }
-            let text: String
-            if let value = result as? String {
-                text = value
-            } else if let error = error {
-                text = "js error: \(StoryViewController.describe(error))"
-            } else {
-                text = "no result"
-            }
-            NSLog("[story] not ready after load: %@", text)
-            self.setStatus("loaded, not ready: \(text)")
-        }
-    }
-
     // MARK: Swipe down to close
 
     private func installSwipeDownToClose() {
@@ -503,7 +386,7 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     }
 
     @objc private func handleDismissPan(_ pan: UIPanGestureRecognizer) {
-        guard let web = webView else {
+        guard let web = story?.webView else {
             return
         }
         let translation = pan.translation(in: view)
@@ -545,45 +428,130 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     ) -> Bool {
         return true
     }
+}
 
-    // MARK: UIScrollViewDelegate (no pinch zoom)
+/// What is on screen while the story gets ready: the brand gradient with the chat name
+/// and "2026 in review", in the look of the story's first slide.
+final class StoryCoverView: UIView {
+    private let gradientLayer = CAGradientLayer()
+    private let lightBlob = CAShapeLayer()
+    private let deepBlob = CAShapeLayer()
+    private let eyebrowLabel = UILabel()
+    private let nameLabel = UILabel()
+    private let reviewLabel = UILabel()
+    private let reviewPill = UIView()
+    private let countLabel = UILabel()
+    private let spinner = UIActivityIndicatorView(style: .medium)
 
-    func scrollViewWillBeginZooming(_ scrollView: UIScrollView, with view: UIView?) {
-        scrollView.pinchGestureRecognizer?.isEnabled = false
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        setUp()
     }
 
-    // MARK: Injected scripts
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
 
-    /// Forwards uncaught page errors to native so a broken story is diagnosable from logs.
-    private static let errorReportingScript = """
-    (function () {
-      function post(o) {
-        try { window.webkit.messageHandlers.wrapped.postMessage(o); } catch (e) {}
-      }
-      window.addEventListener('error', function (e) {
-        post({ type: 'jserror', message: String((e && e.message) || e) + ' @' + String((e && e.filename) || '') + ':' + String((e && e.lineno) || 0) });
-      });
-      window.addEventListener('unhandledrejection', function (e) {
-        post({ type: 'jserror', message: 'unhandledrejection: ' + String(e && e.reason) });
-      });
-    })();
-    """
+    private func setUp() {
+        backgroundColor = WrappedTheme.coverMidUI
+        clipsToBounds = true
+        isAccessibilityElement = false
+        accessibilityIdentifier = "story.cover"
 
-    /// Makes sure the page cannot be pinch- or double-tap-zoomed, whatever its viewport tag says.
-    private static let viewportScript = """
-    (function () {
-      var head = document.head || document.documentElement;
-      var meta = document.querySelector('meta[name="viewport"]');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.setAttribute('name', 'viewport');
-        meta.setAttribute('content', 'width=device-width, initial-scale=1, viewport-fit=cover');
-        head.appendChild(meta);
-      }
-      var content = meta.getAttribute('content') || '';
-      if (content.indexOf('user-scalable') === -1) { content += ', user-scalable=no'; }
-      if (content.indexOf('maximum-scale') === -1) { content += ', maximum-scale=1'; }
-      meta.setAttribute('content', content);
-    })();
-    """
+        gradientLayer.colors = WrappedTheme.coverCGColors
+        gradientLayer.locations = [0.0, 0.38, 1.0]
+        gradientLayer.startPoint = CGPoint(x: 0.37, y: 0)
+        gradientLayer.endPoint = CGPoint(x: 0.63, y: 1)
+        layer.addSublayer(gradientLayer)
+        lightBlob.fillColor = WrappedTheme.blobLightUI.cgColor
+        deepBlob.fillColor = WrappedTheme.blobDeepUI.cgColor
+        layer.addSublayer(lightBlob)
+        layer.addSublayer(deepBlob)
+
+        eyebrowLabel.font = WrappedTheme.displayFont(ofSize: 13, weight: .heavy)
+        eyebrowLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+
+        nameLabel.font = WrappedTheme.displayFont(ofSize: 44, weight: .black)
+        nameLabel.textColor = .white
+        nameLabel.numberOfLines = 3
+        nameLabel.adjustsFontSizeToFitWidth = true
+        nameLabel.minimumScaleFactor = 0.6
+        nameLabel.lineBreakMode = .byTruncatingTail
+
+        reviewLabel.font = WrappedTheme.displayFont(ofSize: 22, weight: .black)
+        reviewLabel.textColor = WrappedTheme.coverBottomUI
+        reviewLabel.translatesAutoresizingMaskIntoConstraints = false
+        reviewPill.backgroundColor = .white
+        reviewPill.layer.cornerRadius = 22
+        reviewPill.layer.masksToBounds = true
+        reviewPill.addSubview(reviewLabel)
+
+        countLabel.font = UIFont.systemFont(ofSize: 16, weight: .semibold)
+        countLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+
+        spinner.color = .white
+        spinner.startAnimating()
+
+        let stack = UIStackView(arrangedSubviews: [eyebrowLabel, nameLabel, reviewPill, countLabel])
+        stack.axis = .vertical
+        stack.alignment = .leading
+        stack.spacing = 10
+        stack.setCustomSpacing(16, after: nameLabel)
+        stack.setCustomSpacing(14, after: reviewPill)
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        addSubview(spinner)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 28),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -28),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 10),
+            reviewPill.heightAnchor.constraint(equalToConstant: 44),
+            reviewLabel.leadingAnchor.constraint(equalTo: reviewPill.leadingAnchor, constant: 18),
+            reviewLabel.trailingAnchor.constraint(equalTo: reviewPill.trailingAnchor, constant: -18),
+            reviewLabel.centerYAnchor.constraint(equalTo: reviewPill.centerYAnchor),
+            spinner.centerXAnchor.constraint(equalTo: centerXAnchor),
+            spinner.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -28)
+        ])
+    }
+
+    func configure(with summary: RecapSummary, isSample: Bool) {
+        eyebrowLabel.attributedText = NSAttributedString(
+            string: isSample ? "SAMPLE RECAP" : "YOUR GROUP CHAT",
+            attributes: [.kern: 1.4]
+        )
+        nameLabel.text = summary.chatName
+        reviewLabel.text = summary.reviewLabel
+        countLabel.text = summary.messagesLine
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        gradientLayer.frame = bounds
+        StoryCoverView.place(
+            lightBlob,
+            size: CGSize(width: bounds.width * 0.85, height: bounds.height * 0.27),
+            center: CGPoint(x: bounds.maxX - bounds.width * 0.12, y: bounds.minY + bounds.height * 0.05),
+            degrees: 14
+        )
+        StoryCoverView.place(
+            deepBlob,
+            size: CGSize(width: bounds.width * 0.92, height: bounds.height * 0.3),
+            center: CGPoint(x: bounds.minX + bounds.width * 0.08, y: bounds.maxY - bounds.height * 0.02),
+            degrees: -10
+        )
+        CATransaction.commit()
+    }
+
+    private static func place(_ blob: CAShapeLayer, size: CGSize, center: CGPoint, degrees: CGFloat) {
+        let rect = CGRect(x: -size.width / 2, y: -size.height / 2, width: size.width, height: size.height)
+        blob.path = UIBezierPath(roundedRect: rect, cornerRadius: size.height * 0.36).cgPath
+        blob.bounds = CGRect(origin: .zero, size: .zero)
+        blob.position = center
+        blob.setAffineTransform(CGAffineTransform(rotationAngle: degrees * .pi / 180))
+    }
 }

@@ -47,8 +47,9 @@ enum WrappedConfig {
     /// live bubble with the recap in it; the template card stays attached as the fallback.
     static let useLiveLayout = false
 
-    /// Custom scheme the containing app registers: `imessagewrapped://recap#w1=<payload>`.
-    static let appURLScheme = "imessagewrapped"
+    /// Custom scheme the containing app registers: `threadback://recap#w1=<payload>`.
+    /// Registered through the build setting `APP_URL_SCHEME` in `project.yml`.
+    static let appURLScheme = "threadback"
 
     /// Key that carries the payload in links (`w1` = payload format version 1).
     static let payloadKey = "w1"

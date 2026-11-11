@@ -1,8 +1,8 @@
 import XCTest
 @testable import Wrapped
 
-/// Link parsing (both forms), link building, and the length budget with its trim ladder
-/// (docs/SCHEMA.md §5).
+/// Link parsing (both forms), which links are accepted as recap links, link building, and
+/// the length budget with its trim ladder (docs/SCHEMA.md §5).
 final class RecapLinkTests: XCTestCase {
     private let base = "https://averyhsu.github.io/imessage-wrap/"
 
@@ -26,9 +26,9 @@ final class RecapLinkTests: XCTestCase {
     }
 
     func testParsesTheAppScheme() throws {
-        let url = try XCTUnwrap(URL(string: "imessagewrapped://recap#w1=abc-_123"))
+        let url = try XCTUnwrap(URL(string: "threadback://recap#w1=abc-_123"))
         XCTAssertEqual(RecapLink.payload(from: url), "abc-_123")
-        let query = try XCTUnwrap(URL(string: "imessagewrapped://recap?w1=xyz"))
+        let query = try XCTUnwrap(URL(string: "threadback://recap?w1=xyz"))
         XCTAssertEqual(RecapLink.payload(from: query), "xyz")
     }
 
@@ -54,12 +54,87 @@ final class RecapLinkTests: XCTestCase {
         XCTAssertNil(RecapLink.recap(from: try XCTUnwrap(URL(string: base + "#w1=abc"))), "not a decodable recap")
     }
 
-    func testFindsALinkInsidePastedText() throws {
+    func testFindsLinksInsidePastedText() throws {
         let vector = try PayloadVector.load()
-        XCTAssertEqual(RecapLink.payload(inText: "look at this \(base)#w1=abc-_123 lol"), "abc-_123")
-        XCTAssertEqual(RecapLink.payload(inText: "\(base)?x=1&w1=abc"), "abc")
-        XCTAssertNil(RecapLink.payload(inText: "no link here, just w1 and = signs"))
+        let text = "look at this \(base)#w1=abc-_123, lol (see also <https://example.com/a?b=1>)."
+        XCTAssertEqual(
+            RecapLink.links(inText: text).map { $0.absoluteString },
+            [base + "#w1=abc-_123", "https://example.com/a?b=1"]
+        )
+        XCTAssertTrue(RecapLink.links(inText: "no link here, just w1 and = signs").isEmpty)
+        XCTAssertEqual(
+            RecapLink.links(inText: String(repeating: "https://example.com/x ", count: 50)).count,
+            20,
+            "only the first few links of a long text are looked at"
+        )
+
         XCTAssertEqual(RecapLink.recap(inText: "Our year: \(vector.url)\nopen it!")?.summary.chatName, "Dinner Club 🍝")
+        XCTAssertNil(RecapLink.recap(inText: "no link here"))
+        // A recap payload on some other site is not a recap link; the real one after it is.
+        let elsewhere = "https://example.com/#w1=\(vector.payload)"
+        XCTAssertNil(RecapLink.recap(inText: elsewhere))
+        XCTAssertEqual(RecapLink.recap(inText: "\(elsewhere) and \(vector.url)")?.payload, vector.payload)
+    }
+
+    // MARK: Which links are accepted
+
+    func testAcceptsOnlyTheAppSchemeAndTheStoryPage() throws {
+        let payload = DemoRecap.payload
+        let accepted = [
+            "https://averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/?w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/index.html#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap#w1=\(payload)",
+            "https://AveryHsu.GitHub.io/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io:443/imessage-wrap/#w1=\(payload)",
+            "threadback://recap#w1=\(payload)",
+            "threadback://recap?w1=\(payload)",
+            "threadback://recap/#w1=\(payload)",
+            "THREADBACK://recap#w1=\(payload)"
+        ]
+        for text in accepted {
+            let url = try XCTUnwrap(URL(string: text), text)
+            XCTAssertTrue(RecapLink.isRecapLink(url), "should be accepted: \(text.prefix(70))")
+            XCTAssertEqual(RecapLink.recap(from: url), DemoRecap.recap, "should decode: \(text.prefix(70))")
+        }
+
+        let refused = [
+            "http://averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://example.com/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io.example.com/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io@example.com/imessage-wrap/#w1=\(payload)",
+            "https://someone:secret@averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io:8443/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io/#w1=\(payload)",
+            "https://averyhsu.github.io/another-project/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/make/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/%2e%2e/another-project/#w1=\(payload)",
+            "threadback://other#w1=\(payload)",
+            "threadback://recap/extra#w1=\(payload)",
+            "threadback:recap#w1=\(payload)",
+            "imessagewrapped://recap#w1=\(payload)",
+            "file:///tmp/web/index.html?embed=ios#w1=\(payload)",
+            "ftp://averyhsu.github.io/imessage-wrap/#w1=\(payload)"
+        ]
+        for text in refused {
+            guard let url = URL(string: text) else {
+                continue
+            }
+            XCTAssertFalse(RecapLink.isRecapLink(url), "should be refused: \(text.prefix(70))")
+            XCTAssertNil(RecapLink.recap(from: url), "should not decode: \(text.prefix(70))")
+        }
+    }
+
+    /// The scheme the code accepts is the one the app registers (both come from the
+    /// `APP_URL_SCHEME` build setting and `WrappedConfig.appURLScheme`).
+    func testTheAppRegistersTheSchemeTheCodeAccepts() throws {
+        XCTAssertEqual(WrappedConfig.appURLScheme, "threadback")
+        let types = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]])
+        var schemes: [String] = []
+        for type in types {
+            schemes.append(contentsOf: (type["CFBundleURLSchemes"] as? [String]) ?? [])
+        }
+        XCTAssertEqual(schemes, [WrappedConfig.appURLScheme])
     }
 
     // MARK: Building
@@ -78,7 +153,7 @@ final class RecapLinkTests: XCTestCase {
 
     func testAppURLRoundTrip() throws {
         let url = try XCTUnwrap(RecapLink.appURL(payload: DemoRecap.payload))
-        XCTAssertEqual(url.scheme, "imessagewrapped")
+        XCTAssertEqual(url.scheme, "threadback")
         XCTAssertEqual(url.host, "recap")
         XCTAssertEqual(RecapLink.recap(from: url), DemoRecap.recap)
     }
@@ -96,6 +171,14 @@ final class RecapLinkTests: XCTestCase {
         XCTAssertEqual(components.queryItems?.first?.value, "ios")
         XCTAssertEqual(components.fragment, "w1=" + DemoRecap.payload)
         XCTAssertEqual(RecapLink.payload(from: location.url), DemoRecap.payload)
+
+        // Without a recap: the page a web view is warmed up with, which then waits.
+        let idle = try XCTUnwrap(RecapLink.bundledStoryLocation(payload: nil))
+        XCTAssertNil(idle.url.fragment)
+        XCTAssertEqual(idle.url.query, "embed=ios")
+        XCTAssertEqual(idle.url.path, location.url.path)
+        // The bundled page is never itself a recap link.
+        XCTAssertNil(RecapLink.recap(from: location.url))
     }
 
     // MARK: Length budget

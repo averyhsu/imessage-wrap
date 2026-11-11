@@ -2,14 +2,44 @@ import Foundation
 
 /// Building and parsing recap links (docs/SCHEMA.md §5).
 enum RecapLink {
+    // MARK: Which links are recap links
+
+    /// Only two kinds of URL are accepted as recap links, so that nothing else can make
+    /// the app or the extension play content:
+    ///  - the app's own scheme with host `recap`: `threadback://recap#w1=…`
+    ///  - the https story page: `https://<story host>/<story path>/` (or its `index.html`)
+    ///    with `#w1=…` or `?w1=…`
+    static func isRecapLink(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let scheme = components.scheme?.lowercased() else {
+            return false
+        }
+        let host = (components.host ?? "").lowercased()
+        if scheme == WrappedConfig.appURLScheme {
+            return host == "recap" && (components.path.isEmpty || components.path == "/")
+        }
+        guard scheme == "https",
+              components.user == nil,
+              components.password == nil,
+              components.port == nil || components.port == 443,
+              let base = URLComponents(string: WrappedConfig.baseURLString),
+              let baseHost = base.host?.lowercased(),
+              host == baseHost else {
+            return false
+        }
+        let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
+        let path = components.path
+        return path == basePath || path == basePath + "index.html" || path + "/" == basePath
+    }
+
     // MARK: Parsing
 
-    /// Extracts the payload from a recap URL. Accepts the fragment form (`#w1=…`), the
-    /// query form (`?w1=…`), any scheme (https, the app's custom scheme, file) and extra
-    /// parameters around it. The fragment wins when both are present.
+    /// Extracts the payload from a URL's fragment (`#w1=…`) or query (`?w1=…`), whatever
+    /// its scheme, with other parameters allowed around it. The fragment wins when both
+    /// are present. This only parses; `recap(from:)` decides whether the link is trusted.
     static func payload(from url: URL) -> String? {
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
-            return payload(inText: url.absoluteString)
+            return nil
         }
         if let fragment = components.percentEncodedFragment,
            let found = parameter(WrappedConfig.payloadKey, in: fragment) {
@@ -20,23 +50,6 @@ enum RecapLink {
             return found
         }
         return nil
-    }
-
-    /// Finds a recap link inside free text (for example the clipboard) and returns its
-    /// payload. The text may contain other words around the link.
-    static func payload(inText text: String) -> String? {
-        let pattern = "[#?&]" + WrappedConfig.payloadKey + "=([A-Za-z0-9_\\-]+)"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else {
-            return nil
-        }
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        guard let match = regex.firstMatch(in: text, options: [], range: range),
-              match.numberOfRanges > 1,
-              let captured = Range(match.range(at: 1), in: text) else {
-            return nil
-        }
-        let value = String(text[captured])
-        return value.isEmpty ? nil : value
     }
 
     /// `a=1&w1=abc&b=2` → `abc`
@@ -55,20 +68,43 @@ enum RecapLink {
         return nil
     }
 
-    /// Decodes the recap carried by a URL, or nil when the URL carries none.
+    /// Decodes the recap carried by a recap link. Nil for any other URL (see
+    /// `isRecapLink`) and for links whose payload cannot be read.
     static func recap(from url: URL) -> Recap? {
-        guard let found = payload(from: url) else {
+        guard isRecapLink(url), let found = payload(from: url) else {
             return nil
         }
         return try? Recap(payload: found)
     }
 
-    /// Decodes the recap carried by a link somewhere in `text`, or nil.
-    static func recap(inText text: String) -> Recap? {
-        guard let found = payload(inText: text) else {
-            return nil
+    /// The URLs written in a piece of free text such as the clipboard.
+    static func links(inText text: String) -> [URL] {
+        let limited = String(text.prefix(60_000))
+        let separators = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "<>\"'()[]"))
+        let trailing = CharacterSet(charactersIn: ".,;:!?")
+        var result: [URL] = []
+        for token in limited.components(separatedBy: separators) {
+            let candidate = token.trimmingCharacters(in: trailing)
+            guard candidate.count >= 8, candidate.contains("://"), let url = URL(string: candidate) else {
+                continue
+            }
+            result.append(url)
+            if result.count == 20 {
+                break
+            }
         }
-        return try? Recap(payload: found)
+        return result
+    }
+
+    /// Decodes the first recap link found in `text`, or nil. The text may contain other
+    /// words around the link.
+    static func recap(inText text: String) -> Recap? {
+        for url in links(inText: text) {
+            if let found = recap(from: url) {
+                return found
+            }
+        }
+        return nil
     }
 
     // MARK: Building
@@ -86,19 +122,20 @@ enum RecapLink {
         return components.url
     }
 
-    /// `imessagewrapped://recap#w1=<payload>`: opens the recap in the containing app.
+    /// `threadback://recap#w1=<payload>`: opens the recap in the containing app.
     static func appURL(payload: String) -> URL? {
         var components = URLComponents()
         components.scheme = WrappedConfig.appURLScheme
         components.host = "recap"
-        components.fragment = WrappedConfig.payloadKey + "=" + payload
+        components.fragment = storyFragment(payload: payload)
         return components.url
     }
 
-    /// The bundled story page for a payload, plus the directory WebKit may read.
-    /// `web/index.html?embed=ios#w1=<payload>` (docs/SCHEMA.md §6).
+    /// The bundled story page, plus the directory WebKit may read:
+    /// `web/index.html?embed=ios#w1=<payload>` (docs/SCHEMA.md §6). Without a payload the
+    /// page loads in embed mode and waits for one (used to warm a web view up early).
     static func bundledStoryLocation(
-        payload: String,
+        payload: String?,
         bundle: Bundle = Bundle.main
     ) -> (url: URL, directory: URL)? {
         guard let index = bundle.url(forResource: "index", withExtension: "html", subdirectory: "web"),
@@ -106,17 +143,24 @@ enum RecapLink {
             return nil
         }
         components.queryItems = [URLQueryItem(name: "embed", value: "ios")]
-        components.fragment = WrappedConfig.payloadKey + "=" + payload
+        if let payload = payload {
+            components.fragment = storyFragment(payload: payload)
+        }
         guard let url = components.url else {
             return nil
         }
         return (url, index.deletingLastPathComponent())
     }
 
+    /// `w1=<payload>`: what goes after the `#` of the story page.
+    static func storyFragment(payload: String) -> String {
+        return WrappedConfig.payloadKey + "=" + payload
+    }
+
     private static func apply(payload: String, form: RecapLinkForm, to components: inout URLComponents) {
         switch form {
         case .fragment:
-            components.fragment = WrappedConfig.payloadKey + "=" + payload
+            components.fragment = storyFragment(payload: payload)
         case .query:
             var items = components.queryItems ?? []
             items.removeAll { (item: URLQueryItem) -> Bool in

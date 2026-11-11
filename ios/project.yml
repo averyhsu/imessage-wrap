@@ -18,6 +18,9 @@ settings:
     # Public product name (docs/SCHEMA.md §7). The only place it is spelled out:
     # both Info.plists use it as CFBundleDisplayName and Swift reads it from the bundle.
     PRODUCT_DISPLAY_NAME: Threadback
+    # Custom URL scheme of the app (threadback://recap#w1=...). App/Info.plist registers it;
+    # WrappedConfig.appURLScheme must say the same (a unit test checks).
+    APP_URL_SCHEME: threadback
     GENERATE_INFOPLIST_FILE: "NO"
     # Simulator builds are ad-hoc signed ("Sign to Run Locally") and need no team.
     # For a real device set DEVELOPMENT_TEAM here or in Xcode's Signing & Capabilities tab.
