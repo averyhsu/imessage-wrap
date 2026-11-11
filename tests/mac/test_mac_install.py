@@ -105,6 +105,150 @@ class InstallerBasics(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("no python3", proc.stderr)
 
+    # -- it only ever removes what it wrote (review M3) -------------------------
+
+    MARKER = next(
+        line.split('"', 1)[1].rsplit('"', 1)[0]
+        for line in INSTALLER.read_text(encoding="utf-8").splitlines()
+        if line.startswith("MARKER=")
+    ) if INSTALLER.is_file() else ""
+
+    def guarded(self, **extra):
+        """An environment in which even a broken installer cannot do damage: ``rm``
+        and ``rmdir`` only write down what they were asked to do, and the Python
+        is one that fails the version check, so an install stops before it creates
+        anything. These tests hand the installer paths like ``/`` and ``$HOME`` on
+        purpose; they must never depend on the installer being right to be safe."""
+        stubs = Path(self.tmp.name) / "stubs"
+        stubs.mkdir(exist_ok=True)
+        log = Path(self.tmp.name) / "removals.log"
+        for tool in ("rm", "rmdir"):
+            stub = stubs / tool
+            stub.write_text(f'#!/bin/sh\necho "{tool} $*" >> "{log}"\nexit 0\n')
+            stub.chmod(0o755)
+        too_old = stubs / "python3-too-old"
+        too_old.write_text("#!/bin/sh\nexit 1\n")
+        too_old.chmod(0o755)
+        env = {"PATH": f"{stubs}{os.pathsep}{os.environ.get('PATH', '/usr/bin:/bin')}", "THREADBACK_PYTHON": str(too_old)}
+        env.update(extra)
+        return env, log
+
+    def fake_install(self, tb=None, extra=()):
+        """The layout a real install leaves behind, built by hand (no network needed)."""
+        tb = tb or self.home / ".threadback"
+        (tb / "venv" / "bin").mkdir(parents=True)
+        (tb / "venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
+        (tb / "venv" / "bin" / "python").write_text("")
+        (tb / ".installed-by-threadback").write_text("")
+        (tb / "state.json").write_text('{"cursor": 5, "v": 1}')
+        (tb / "state.json.lock").write_text("")
+        (tb / "agent.log").write_text("a line\n")
+        for name in extra:
+            (tb / name).write_text("the owner put this here")
+        bin_dir = self.home / ".local" / "bin"
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        for name in ("wrapped", "threadback"):
+            (bin_dir / name).write_text(f"#!/bin/sh\n{self.MARKER}\nexec true\n")
+        (bin_dir / "other-tool").write_text("#!/bin/sh\necho not ours\n")
+        return tb, bin_dir
+
+    def test_install_refuses_a_folder_that_already_holds_someone_elses_files(self):
+        # the reviewer's repro: THREADBACK_HOME=~/Documents, install, uninstall
+        docs = self.home / "Documents"
+        (docs / "taxes").mkdir(parents=True)
+        (docs / "thesis.txt").write_text("irreplaceable")
+        env, removals = self.guarded(THREADBACK_HOME=str(docs))
+        proc = run_installer(self.home, env=env)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("not empty", proc.stderr)
+        self.assertEqual(sorted(x.name for x in docs.iterdir()), ["taxes", "thesis.txt"])  # nothing added either
+        # ... and had an older version installed there (its stamp is in the folder),
+        # uninstalling removes the installer's own files, never the folder
+        (docs / ".installed-by-threadback").write_text("")
+        (docs / "venv").mkdir()
+        (docs / "venv" / "pyvenv.cfg").write_text("home = /usr/bin\n")
+        gone = run_installer(self.home, "--uninstall", env={"THREADBACK_HOME": str(docs)})
+        self.assertEqual(gone.returncode, 0, gone.stderr)
+        self.assertEqual(sorted(x.name for x in docs.iterdir()), ["taxes", "thesis.txt"])
+        self.assertEqual((docs / "thesis.txt").read_text(), "irreplaceable")
+
+    def test_never_operates_on_home_the_root_or_a_parent_of_home(self):
+        (self.home / "keep.txt").write_text("mine")
+        (self.home / "sub").mkdir()
+        (self.home / ".installed-by-threadback").write_text("")  # even a stamp must not make HOME "ours"
+        link = Path(self.tmp.name) / "link-to-home"
+        os.symlink(self.home, link)
+        spellings = [
+            f"{self.home}//", f"{self.home}/", f"{self.home}/.", f"{self.home}/sub/..", f"{self.home}/sub/../.",
+            str(link), f"{link}/", str(self.home.parent), f"{self.home}/../{self.home.name}", "/", "//", "/.",
+            "///", "//.//", f"/{self.home}", f"//{self.home}/", "/tmp/..", "/tmp/../.",
+        ]
+        for bad in spellings:
+            for args in ((), ("--uninstall",)):
+                with self.subTest(home=bad, args=args):
+                    env, removals = self.guarded(THREADBACK_HOME=bad)
+                    if removals.exists():
+                        removals.unlink()
+                    proc = run_installer(self.home, *args, env=env)
+                    if not args:
+                        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                        self.assertIn("folder of its own", proc.stderr)
+                    else:
+                        self.assertIn("alone", proc.stderr)
+                    # it must not even try: nothing was handed to rm or rmdir
+                    self.assertFalse(removals.exists(), removals.read_text() if removals.exists() else "")
+                    self.assertEqual((self.home / "keep.txt").read_text(), "mine")
+                    self.assertTrue((self.home / "sub").is_dir())
+                    self.assertFalse((self.home / "venv").exists())
+
+    def test_uninstall_removes_only_what_the_installer_and_helper_wrote(self):
+        tb, bin_dir = self.fake_install(extra=("my-notes.txt",))
+        (tb / "exports").mkdir()
+        proc = run_installer(self.home, "--uninstall")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(sorted(x.name for x in tb.iterdir()), ["exports", "my-notes.txt"])  # theirs: kept
+        self.assertEqual(sorted(x.name for x in bin_dir.iterdir()), ["other-tool"])
+        self.assertIn("my-notes.txt", proc.stdout)  # ... and it says why the folder is still there
+
+    def test_uninstall_removes_the_folder_once_it_is_empty(self):
+        tb, bin_dir = self.fake_install()
+        proc = run_installer(self.home, "--uninstall")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertFalse(tb.exists())
+        self.assertEqual(sorted(x.name for x in bin_dir.iterdir()), ["other-tool"])
+        self.assertIn(f"Removed {tb.resolve()}", proc.stdout)
+
+    def test_uninstall_never_follows_a_link_out_of_its_folder(self):
+        tb, _ = self.fake_install()
+        precious = self.home / "Photos"
+        precious.mkdir()
+        (precious / "pyvenv.cfg").write_text("looks like a venv")
+        (precious / "wedding.jpg").write_text("irreplaceable")
+        import shutil as _shutil
+
+        _shutil.rmtree(tb / "venv")
+        os.symlink(precious, tb / "venv")
+        (tb / "agent.log").unlink()
+        os.symlink(precious / "wedding.jpg", tb / "agent.log")
+        proc = run_installer(self.home, "--uninstall")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(sorted(x.name for x in precious.iterdir()), ["pyvenv.cfg", "wedding.jpg"])
+        self.assertEqual((precious / "wedding.jpg").read_text(), "irreplaceable")
+        self.assertFalse(tb.exists())
+
+    def test_install_accepts_a_folder_that_only_holds_the_helpers_own_files(self):
+        # someone ran the helper from a checkout first: ~/.threadback has state but no stamp
+        tb = self.home / ".threadback"
+        tb.mkdir()
+        (tb / "state.json").write_text('{"cursor": 5, "v": 1}')
+        fake = Path(self.tmp.name) / "python3"  # stops right after the folder checks, without the network
+        fake.write_text("#!/bin/sh\nexit 1\n")
+        fake.chmod(0o755)
+        proc = run_installer(self.home, env={"THREADBACK_PYTHON": str(fake)})
+        self.assertNotIn("not empty", proc.stderr)
+        self.assertIn("needs Python 3.9 or newer", proc.stderr)
+        self.assertEqual((tb / "state.json").read_text(), '{"cursor": 5, "v": 1}')
+
     def test_uninstall_when_nothing_is_installed(self):
         proc = run_installer(self.home, "--uninstall")
         self.assertEqual(proc.returncode, 0)
@@ -119,9 +263,11 @@ class InstallerBasics(unittest.TestCase):
         self.assertTrue((precious / "notes.txt").exists())
         self.assertIn("Left", proc.stderr)
         for bad in ("/", str(self.home)):
-            proc = run_installer(self.home, "--uninstall", env={"THREADBACK_HOME": bad})
+            env, removals = self.guarded(THREADBACK_HOME=bad)
+            proc = run_installer(self.home, "--uninstall", env=env)
             self.assertEqual(proc.returncode, 0)
-            self.assertTrue(self.home.exists())
+            self.assertFalse(removals.exists())
+            self.assertTrue((precious / "notes.txt").exists())
 
 
 @unittest.skipUnless(BASH and INSTALLER.is_file() and HAVE_PROJECT, "needs bash, install.sh and the full project")

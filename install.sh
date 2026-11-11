@@ -17,7 +17,8 @@
 # Settings (environment variables, mostly for testing):
 #   THREADBACK_SOURCE   what pip installs (default: the GitHub tarball of THREADBACK_REF)
 #   THREADBACK_REF      branch to install (default: main)
-#   THREADBACK_HOME     where the private environment lives (default: ~/.threadback)
+#   THREADBACK_HOME     where the private environment lives (default: ~/.threadback). Must be a
+#                       folder of its own: new, empty, or one this installer created
 #   THREADBACK_BIN      where the launchers go (default: ~/.local/bin)
 #   THREADBACK_PYTHON   the python3 to use (default: the first python3 on PATH)
 #   THREADBACK_ALLOW_NON_MACOS=1   install on Linux anyway (reading works, sending does not)
@@ -105,15 +106,81 @@ write_launcher() {
   mv -f "$target.tmp.$$" "$target"
 }
 
-safe_home() {
-  # Refuse to treat anything dangerous as "our" folder.
-  case "$TB_HOME" in
-    "" | "/" | "$HOME" | "$HOME/") return 1 ;;
+canon() {
+  # canon PATH: the absolute path with symlinks, "//", "." and ".." resolved. PATH does
+  # not have to exist: its nearest existing ancestor is resolved and the rest appended.
+  # Shell built-ins only, and every turn of the loop shortens the path.
+  local path="$1" tail="" base
+  [ -n "$path" ] || return 1
+  case "$path" in
+    /*) ;;
+    *) path="$PWD/$path" ;;
   esac
+  while [ ! -d "$path" ]; do
+    while [ "${path%/}" != "$path" ]; do
+      path="${path%/}"
+    done
+    base="${path##*/}"
+    case "$base" in
+      "" | . | ..) return 1 ;;
+    esac
+    tail="/$base$tail"
+    path="${path%/*}"
+    if [ -z "$path" ]; then
+      path="/"
+    fi
+  done
+  path="$(cd "$path" 2>/dev/null && pwd -P)" || return 1
+  while [ "${path#//}" != "$path" ]; do
+    path="/${path#//}" # the shell keeps a leading "//" as it was typed; it is still the root
+  done
+  if [ "$path" = "/" ]; then
+    path=""
+  fi
+  if [ -z "$path$tail" ]; then
+    printf '/\n'
+  else
+    printf '%s\n' "$path$tail"
+  fi
+}
+
+safe_home() {
+  # Is THREADBACK_HOME a folder we may treat as ours? Compared in canonical form, so
+  # "$HOME//", "$HOME/.", a symlink to the home folder and the like are all caught.
+  # Never the root, the home folder, or anything the home folder lives inside.
+  # On success TB_HOME and VENV are replaced by their canonical forms.
+  local home_c tb_c
+  home_c="$(canon "$HOME")" || return 1
+  tb_c="$(canon "$TB_HOME")" || return 1
+  [ -n "$tb_c" ] || return 1
+  [ "$tb_c" != "/" ] || return 1
+  [ "$tb_c" != "$home_c" ] || return 1
+  case "$home_c/" in
+    "$tb_c"/*) return 1 ;;
+  esac
+  TB_HOME="$tb_c"
+  VENV="$TB_HOME/venv"
+  return 0
+}
+
+only_helper_files() {
+  # True if the folder holds nothing but files the helper itself writes there.
+  local entry
+  for entry in "$1"/* "$1"/.[!.]* "$1"/..?*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    case "${entry##*/}" in
+      state.json | state.json.lock | agent.log) ;;
+      *) return 1 ;;
+    esac
+  done
   return 0
 }
 
 uninstall() {
+  # Removes exactly what the installer and the helper wrote, by name: the two
+  # launchers (only if they carry our marker), the Python environment, the stamp
+  # and the helper's own three files. The folder itself goes only if that leaves
+  # it empty. Nothing is ever removed recursively except the environment.
   local removed=0 name target
   for name in wrapped threadback; do
     target="$BIN_DIR/$name"
@@ -123,13 +190,38 @@ uninstall() {
       removed=1
     fi
   done
-  if [ -d "$TB_HOME" ]; then
-    if safe_home && [ -f "$TB_HOME/$STAMP_NAME" ]; then
-      rm -rf "$TB_HOME"
-      say "Removed $TB_HOME"
-      removed=1
-    else
+  if [ -d "$TB_HOME" ] || [ -L "$TB_HOME" ]; then
+    if ! safe_home; then
+      warn "Left $TB_HOME alone: that is not a folder Threadback may touch."
+    elif [ ! -f "$TB_HOME/$STAMP_NAME" ]; then
       warn "Left $TB_HOME alone: it does not look like a folder this installer created."
+    else
+      if [ -L "$VENV" ]; then
+        rm -f "$VENV" # a link: remove the link, never what it points to
+      elif [ -d "$VENV" ]; then
+        if [ -f "$VENV/pyvenv.cfg" ]; then
+          rm -rf "$VENV"
+        else
+          warn "Left $VENV alone: it is not a Python environment."
+        fi
+      fi
+      for name in state.json state.json.lock agent.log "$STAMP_NAME"; do
+        if [ -f "$TB_HOME/$name" ] || [ -L "$TB_HOME/$name" ]; then
+          rm -f "$TB_HOME/$name"
+        fi
+      done
+      if rmdir "$TB_HOME" 2>/dev/null; then
+        say "Removed $TB_HOME"
+      else
+        say "Removed Threadback's files from $TB_HOME."
+        say "The folder itself stays, because it holds files Threadback did not create:"
+        for target in "$TB_HOME"/* "$TB_HOME"/.[!.]* "$TB_HOME"/..?*; do
+          if [ -e "$target" ] || [ -L "$target" ]; then
+            say "    ${target##*/}"
+          fi
+        done
+      fi
+      removed=1
     fi
   fi
   if [ "$removed" = "0" ]; then
@@ -150,7 +242,15 @@ install() {
 On another computer you can still make a recap from a copy of chat.db or an iPhone
 backup: see the README. To install here anyway, set THREADBACK_ALLOW_NON_MACOS=1."
   fi
-  safe_home || die "THREADBACK_HOME must be a folder of its own (got '$TB_HOME')."
+  safe_home || die "THREADBACK_HOME must be a folder of its own (got '$TB_HOME').
+It cannot be your home folder, a folder your home folder is inside, or the top of the disk."
+  if [ -e "$TB_HOME" ] && [ ! -d "$TB_HOME" ]; then
+    die "$TB_HOME exists and is not a folder."
+  fi
+  if [ -d "$TB_HOME" ] && [ ! -f "$TB_HOME/$STAMP_NAME" ] && ! only_helper_files "$TB_HOME"; then
+    die "$TB_HOME already exists, is not empty and was not created by this installer.
+Nothing was changed. Use a new or empty folder (the default is ~/.threadback)."
+  fi
 
   python="$(find_python)" || exit 1
   version="$("$python" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')"
@@ -161,7 +261,11 @@ backup: see the README. To install here anyway, set THREADBACK_ALLOW_NON_MACOS=1
   say "  From:     $SOURCE"
   say ""
 
-  mkdir -p "$TB_HOME" "$BIN_DIR"
+  if [ ! -d "$TB_HOME" ]; then
+    mkdir -p "$TB_HOME"
+    chmod 700 "$TB_HOME" # the helper's state and log live here
+  fi
+  mkdir -p "$BIN_DIR"
   : >"$TB_HOME/$STAMP_NAME"
 
   if [ ! -x "$VENV/bin/python" ]; then
