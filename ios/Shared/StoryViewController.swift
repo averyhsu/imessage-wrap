@@ -35,7 +35,7 @@ final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureR
     private var cover: StoryCoverView?
     private var statusLabel: UILabel?
     private var failureLabel: UILabel?
-    private var playStartedAt = Date()
+    private var playStartedAt = ProcessInfo.processInfo.systemUptime
     private var readyElapsed = ""
     /// How often the page reported `ready` again after the first time (it should not).
     private(set) var readyAgainCount = 0
@@ -119,7 +119,7 @@ final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureR
             statusLabel = label
         }
 
-        playStartedAt = Date()
+        playStartedAt = ProcessInfo.processInfo.systemUptime
         setStatus(story.isPageLoaded ? "loading: warm web view" : "loading: cold web view")
         story.play(payload: recap.payload)
 
@@ -228,7 +228,7 @@ final class StoryViewController: UIViewController, StoryWebViewOwner, UIGestureR
             // "ready in 0.3s": from asking for the story to the story being on screen.
             // Only the first report counts, should the page ever start the story again.
             if readyElapsed.isEmpty {
-                readyElapsed = String(format: "%.1f", Date().timeIntervalSince(playStartedAt))
+                readyElapsed = String(format: "%.1f", ProcessInfo.processInfo.systemUptime - playStartedAt)
             } else {
                 readyAgainCount += 1
             }

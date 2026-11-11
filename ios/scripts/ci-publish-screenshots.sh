@@ -71,7 +71,7 @@ main() {
     echo ""
     echo "| Prefix | What it is |"
     echo "|--------|------------|"
-    echo "| \`messages-\` | The real Messages app in the Simulator, in order: paste a recap link, send the card, tap it, the story plays, close, play the sample, clear. This is the product. |"
+    echo "| \`messages-\` | The real Messages app in the Simulator, in order: paste a recap link, send the card, tap it, the story plays, close, play the sample, clear. This is the product. \`messages-sample-\`: the sample sent from inside its story, where the card says \"Sample\". |"
     echo "| \`app-\` | The containing app on the Simulator, captured by UI tests. |"
     echo "| \`simctl-\` | The containing app, launched and captured with \`xcrun simctl\`. |"
     echo "| \`gallery-\` | The extension's native views hosted in the app's debug gallery. **Not Messages.** |"

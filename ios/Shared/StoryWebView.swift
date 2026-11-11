@@ -59,8 +59,9 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     private var currentPayload: String?
     private var restarts = 0
 
-    // How the last `play` went, for the bridge status that tests and logs read.
-    private var askedAt = Date()
+    // How the last `play` went, for the bridge status that tests and logs read. Times are
+    // taken from the uptime clock, which a correction of the wall clock cannot move.
+    private var askedAt = ProcessInfo.processInfo.systemUptime
     private var wasLoadedWhenAsked = false
     private var handedOverAfter: TimeInterval?
     private var scriptBackAfter: TimeInterval?
@@ -172,7 +173,7 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
     /// is handed over as soon as the page finishes loading.
     func play(payload: String) {
         currentPayload = payload
-        askedAt = Date()
+        askedAt = ProcessInfo.processInfo.systemUptime
         wasLoadedWhenAsked = isPageLoaded
         handedOverAfter = nil
         scriptBackAfter = nil
@@ -190,7 +191,7 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
 
     private func handOver(_ payload: String) {
         pendingPayload = nil
-        handedOverAfter = Date().timeIntervalSince(askedAt)
+        handedOverAfter = ProcessInfo.processInfo.systemUptime - askedAt
         // The recap goes into the page address as its #fragment, then the page is asked to
         // read the address, once. Writing the fragment with replaceState is not a
         // navigation, so the page's own hashchange and popstate listeners do not start the
@@ -206,7 +207,7 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
         let script = """
         (function (list) {
           var fragment = list[0];
-          var began = Date.now();
+          var began = window.performance.now();
           var direct = false;
           try {
             window.history.replaceState(window.history.state, '', '#' + fragment);
@@ -221,7 +222,7 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
             direct = false;
             window.location.hash = fragment;
           }
-          return (direct ? 'direct ' : 'fragment ') + (Date.now() - began) + ' ms';
+          return (direct ? 'direct ' : 'fragment ') + Math.round(window.performance.now() - began) + ' ms';
         })(\(literal));
         """
         let asked = askedAt
@@ -229,7 +230,7 @@ final class StoryWebView: NSObject, WKScriptMessageHandler, WKNavigationDelegate
             guard let self = self, self.askedAt == asked else {
                 return
             }
-            self.scriptBackAfter = Date().timeIntervalSince(asked)
+            self.scriptBackAfter = ProcessInfo.processInfo.systemUptime - asked
             self.scriptNote = (result as? String) ?? "no result"
         }
     }

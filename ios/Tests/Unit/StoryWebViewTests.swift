@@ -31,12 +31,17 @@ final class StoryWebViewTests: XCTestCase {
         }
     }
 
+    /// The uptime clock: unlike the wall clock it is never corrected while a test runs.
+    private func uptime() -> TimeInterval {
+        return ProcessInfo.processInfo.systemUptime
+    }
+
     /// Lets the main run loop turn (WebKit calls back on it) until `done` or the timeout.
     @discardableResult
     private func spin(_ timeout: TimeInterval, until done: () -> Bool) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = uptime() + timeout
         while !done() {
-            if Date() >= deadline {
+            if uptime() >= deadline {
                 return false
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -123,9 +128,9 @@ final class StoryWebViewTests: XCTestCase {
         story.owner = recorder
         XCTAssertFalse(story.isBroken, "the story files are missing from the app bundle")
 
-        let started = Date()
+        let started = uptime()
         XCTAssertTrue(spin(60) { story.isPageLoaded }, "the bundled story page never finished loading")
-        let loadTime = Date().timeIntervalSince(started)
+        let loadTime = uptime() - started
         spin(1.0) { false }
         XCTAssertEqual(recorder.messages, [], "a page that was handed nothing stays quiet")
         // A mark in the page: if it is still there later, the page was never loaded again.
@@ -139,13 +144,13 @@ final class StoryWebViewTests: XCTestCase {
             story.webView.removeFromSuperview()
         }
 
-        let asked = Date()
+        let asked = uptime()
         story.play(payload: DemoRecap.payload)
         XCTAssertTrue(
             spin(30) { recorder.messages.contains("ready") },
             "the story never reported ready (messages: \(recorder.messages), failures: \(recorder.failures))"
         )
-        let readyTime = Date().timeIntervalSince(asked)
+        let readyTime = uptime() - asked
         XCTAssertTrue(spin(10) { recorder.messages.contains("slide") })
         // Give a second start, if there were one, time to show up.
         spin(1.5) { false }
@@ -198,10 +203,12 @@ final class StoryWebViewTests: XCTestCase {
         story.owner = recorder
         story.webView.frame = window.bounds
         window.addSubview(story.webView)
-        let asked = Date()
+        let asked = uptime()
         story.play(payload: DemoRecap.payload)
         XCTAssertTrue(spin(30) { recorder.messages.contains("ready") }, "the warm web view never reported ready")
-        print(String(format: "WRAPPED_NOTE pooled web view: story ready %.2fs after it was asked for; %@", Date().timeIntervalSince(asked), story.timingNote))
+        let firstReady = uptime() - asked
+        spin(0.5) { false }
+        print(String(format: "WRAPPED_NOTE pooled web view: story ready %.2fs after it was asked for; %@", firstReady, story.timingNote))
 
         StoryWebViewPool.recycle(story)
         XCTAssertNil(story.owner)
@@ -214,6 +221,19 @@ final class StoryWebViewTests: XCTestCase {
 
         let again = StoryWebViewPool.take()
         XCTAssertTrue(again === story, "the same web view is handed out again")
+
+        // The second story in the same web view.
+        again.owner = recorder
+        recorder.messages = []
+        again.webView.frame = window.bounds
+        window.addSubview(again.webView)
+        let askedAgain = uptime()
+        again.play(payload: DemoRecap.payload)
+        XCTAssertTrue(spin(30) { recorder.messages.contains("ready") }, "the recycled web view never reported ready")
+        let secondReady = uptime() - askedAgain
+        spin(0.5) { false }
+        print(String(format: "WRAPPED_NOTE pooled web view, second story: ready %.2fs after it was asked for; %@", secondReady, again.timingNote))
+
         // Leave it waiting for the app.
         StoryWebViewPool.recycle(again)
     }

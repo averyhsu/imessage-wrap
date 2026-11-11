@@ -203,6 +203,30 @@ jobs:
           fi
           exit "$STATUS"
 
+      # The built-in sample, sent from inside its story with "Send to this chat": the card
+      # that lands in the conversation says "Sample". Allowed to fail for the same reason.
+      - name: "The extension inside Messages: the sample says Sample"
+        id: sample
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+          TEST_RUNNER_WRAPPED_ARTIFACTS_DIR: ${{ github.workspace }}/build/out/screenshots
+        run: |
+          STATUS=0
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/sample.log" \
+            test-without-building \
+            -project ios/Wrapped.xcodeproj \
+            -scheme Wrapped \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED" \
+            -resultBundlePath "$OUT/Sample.xcresult" \
+            -only-testing:WrappedUITests/MessagesExtensionUITests/testSampleSentFromItsStoryIsLabelledInsideMessages || STATUS=$?
+          if ! ls "$SHOTS"/messages-sample-*.png > /dev/null 2>&1 && [ -d "$OUT/Sample.xcresult" ]; then
+            python3 ios/scripts/ci-export-attachments.py "$OUT/Sample.xcresult" "$SHOTS" || true
+          fi
+          exit "$STATUS"
+
       # Not the product: the live bubble layout is experimental and off by default. This
       # keeps an eye on how Messages treats it; its screenshots carry an "experimental-"
       # prefix and no recording of it is published.
@@ -246,11 +270,18 @@ jobs:
             fi
             echo ""
             echo "== Notes printed by tests"
-            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-600 || true
+            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/sample.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-600 || true
             echo ""
             echo "== The extension inside the Simulator's Messages app: the card flow (automation of an undocumented UI, allowed to fail)"
             if [ -f "$OUT/logs/messages.log" ]; then
               grep -E "Test Case .* (passed|failed)|error:|\*\* TEST" "$OUT/logs/messages.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-400 || true
+            else
+              echo "not run"
+            fi
+            echo ""
+            echo "== The extension inside Messages: the sample, sent from inside its story, says Sample (allowed to fail)"
+            if [ -f "$OUT/logs/sample.log" ]; then
+              grep -E "Test Case .* (passed|failed)|error:|\*\* TEST" "$OUT/logs/sample.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-400 || true
             else
               echo "not run"
             fi
@@ -306,7 +337,7 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           cd "$OUT"
-          for bundle in Wrapped.xcresult Messages.xcresult Experimental.xcresult; do
+          for bundle in Wrapped.xcresult Messages.xcresult Sample.xcresult Experimental.xcresult; do
             if [ -d "$bundle" ]; then
               ditto -c -k --keepParent "$bundle" "logs/$bundle.zip"
             fi
@@ -345,6 +376,7 @@ jobs:
           WEB_SOURCE: ${{ steps.web.outputs.source }}
           MESSAGES_OUTCOME: ${{ steps.messages.outcome }}
           EXPERIMENTAL_OUTCOME: ${{ steps.experimental.outcome }}
+          SAMPLE_OUTCOME: ${{ steps.sample.outcome }}
         run: |
           {
             echo "## iOS build"
@@ -364,6 +396,7 @@ jobs:
               echo "- Tests: not run"
             fi
             echo "- The extension inside the Simulator's Messages app, card flow: ${MESSAGES_OUTCOME:-not run}"
+            echo "- The extension inside Messages, the sample sent from its story says Sample: ${SAMPLE_OUTCOME:-not run}"
             echo "- Experimental live bubble layout inside Messages (off by default): ${EXPERIMENTAL_OUTCOME:-not run}"
             echo "- Screenshots: $(ls "$SHOTS" 2>/dev/null | grep -c '\.png$' || true) (published to \`docs/screenshots/ios/\`, full size in the \`ios-screenshots\` artifact)"
             echo "- Recordings: $(ls "$OUT/video" 2>/dev/null | tr '\n' ' ')"
@@ -371,6 +404,6 @@ jobs:
             echo "### Notes printed by tests"
             echo ""
             echo '```'
-            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-400 | head -n 80 || true
+            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log "$OUT"/logs/sample.log "$OUT"/logs/experimental.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-400 | head -n 90 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

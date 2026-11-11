@@ -127,9 +127,10 @@ the notes the tests print, is linked from
 | Hostile input: a payload over 8,000 characters is refused before decoding; a 1,378-character deflate bomb (1 MB of zeros) stops at the 256 KB cap; truncated DEFLATE is refused. | unit tests | current run |
 | Only `threadback://recap` and the https story page are accepted as recap links (other hosts, paths, schemes, ports and user-info tricks are refused); the app registers exactly that scheme. | unit tests, UI test | current run |
 | `MSMessage` keeps a `#fragment` URL unchanged in memory, through `copy()` and through `NSKeyedArchiver`. | unit tests on the Simulator | first in 43042222401 |
-| The web view only hears the main frame of the bundled page, refuses script-driven navigation to the web or to other files, and plays again after being recycled without loading the page a second time. | unit tests with a real `WKWebView` | current run |
+| The web view only hears the main frame of the bundled page, refuses script-driven navigation to the web or to other files, starts a story exactly once, and plays again after being recycled without loading the page a second time. | unit tests with a real `WKWebView` | current run |
 | The app plays the real web story; the bridge reports `ready` and `slide`; taps advance; a link passed at launch and a `threadback://` link opened by the system both play; links from elsewhere stay on Home. | UI tests, screenshots `app-*` | current run |
 | A pasted recap is kept under "Your recaps" across launches and Clear forgets it; an opened recap and the sample are not kept; dragging the story down closes it. | unit tests, UI test | current run |
+| Inside the Simulator's **Messages** app, the sample sent from inside its story ("See a sample", last slide, "Send to this chat"): the card that is staged and sent says "Sample", and it is not listed under "Your recaps". | UI test, screenshots `messages-sample-*` | current run |
 | Inside the Simulator's **Messages** app, the whole card flow: the extension is in the app drawer and opens in compact style; **Paste a recap link** stages the card; it is sent; tapping the card plays the story in the expanded style (the bridge reports `ready`, taps advance); the story's close control returns to compact, where the recap is now listed; **See a sample** plays without staging anything; **Clear** empties the list. | UI test, screenshots `messages-*` | current run |
 
 Next to the screenshots there are two short recordings (`app-demo-story.mp4`, and
@@ -153,10 +154,18 @@ Found along the way, in the Simulator:
 - iOS asks "Threadback would like to paste from …" when the link was copied in another
   app. That is the system's own question and it is asked each time unless the person
   chooses otherwise in Settings.
-- How long the story takes to be on screen is printed by the tests ("ready in … s" in
-  `TEST-RESULTS.txt`): with the warmed-up web view it is a fraction of a second in the
-  app; the first story in the extension still waits for the extension's web process on
-  the CI simulator. A real phone is unmeasured.
+- How long a story takes to be on screen is printed by the tests ("ready in … s; warm …"
+  or "cold …" in `TEST-RESULTS.txt`). In run
+  [43085945658](https://github.com/averyhsu/imessage-wrap/actions/runs/43085945658), with
+  the web view warmed up it was 0.1 to 0.3 s, from the home screen and inside Messages
+  alike; without one (the app launched straight into a story, or an extension process
+  started by a tap on a bubble, which is what a recipient's first tap is) it was 1.3 to
+  1.4 s, during which the cover is on screen. Run 43080365295, on a slower runner, before
+  the waiting web view was kept on screen and while the page still started the story
+  twice, measured 3.2 to 4.6 s. A real phone is unmeasured.
+- Setting `location.hash` makes the story page start the story twice (it listens to both
+  `popstate` and `hashchange`); the shell therefore writes the fragment with
+  `history.replaceState` and calls `WrappedApp.route()` once.
 
 Not shown by CI, because it needs real devices (checklist):
 

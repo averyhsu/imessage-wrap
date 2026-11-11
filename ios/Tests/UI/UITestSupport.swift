@@ -27,6 +27,12 @@ enum UIArtifacts {
         try? screenshot.pngRepresentation.write(to: directory.appendingPathComponent(name + ".png"))
     }
 
+    /// Seconds on the uptime clock. Used for deadlines: the wall clock of a freshly
+    /// started CI machine can be corrected by seconds in the middle of a test.
+    static func uptime() -> TimeInterval {
+        return ProcessInfo.processInfo.systemUptime
+    }
+
     /// Prints a line the CI wrapper echoes into the job log.
     static func note(_ text: String) {
         print("WRAPPED_NOTE \(text)")
@@ -58,25 +64,32 @@ enum PastePermission {
         in testCase: XCTestCase,
         snapshotName: String? = nil
     ) -> Bool {
+        // The question is a system alert, shown by SpringBoard. Only look there while
+        // waiting: the app that asked is blocked until it is answered, and asking a
+        // blocked app to describe itself makes the test wait for a long timeout.
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            // The question is a system alert; look there first (the app that asked is
-            // waiting for the answer and may be slow to describe itself).
-            for host in [springboard, app] {
-                let button = host.buttons["Allow Paste"]
-                if button.exists {
-                    if let name = snapshotName {
-                        UIArtifacts.snap(name, in: testCase)
-                    }
-                    UIArtifacts.note("paste permission: answering 'Allow Paste'")
-                    button.tap()
-                    return true
-                }
+        let deadline = UIArtifacts.uptime() + timeout
+        while UIArtifacts.uptime() < deadline {
+            if answer(springboard.buttons["Allow Paste"], in: testCase, snapshotName: snapshotName) {
+                return true
             }
             Thread.sleep(forTimeInterval: 0.4)
         }
-        return false
+        // Not asked by SpringBoard: one look at the app itself, in case the question is
+        // presented there on some system.
+        return answer(app.buttons["Allow Paste"], in: testCase, snapshotName: snapshotName)
+    }
+
+    private static func answer(_ button: XCUIElement, in testCase: XCTestCase, snapshotName: String?) -> Bool {
+        guard button.exists else {
+            return false
+        }
+        if let name = snapshotName {
+            UIArtifacts.snap(name, in: testCase)
+        }
+        UIArtifacts.note("paste permission: answering 'Allow Paste'")
+        button.tap()
+        return true
     }
 }
 

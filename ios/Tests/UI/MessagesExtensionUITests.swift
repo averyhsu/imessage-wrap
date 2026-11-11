@@ -8,6 +8,9 @@ import XCTest
 /// in the expanded style, close it, see the recap under "Your recaps", play the sample
 /// (which stages nothing) and clear the list. Its screenshots are named `messages-…`.
 ///
+/// `testSampleSentFromItsStoryIsLabelledInsideMessages`: "See a sample", through to the
+/// story's last slide, "Send to this chat": the card that is staged and sent says "Sample".
+///
 /// `testExperimentalLiveLayoutInsideMessages` exercises the live bubble layout, which is
 /// experimental and off by default (`WrappedConfig.useLiveLayout`). Its screenshots are
 /// named `experimental-live-…` and are not part of the product.
@@ -43,7 +46,7 @@ final class MessagesExtensionUITests: XCTestCase {
 
     /// Taps the first candidate that exists and is hittable. Returns whether one was tapped.
     private func tapFirst(_ what: String, _ candidates: [XCUIElement], timeout: TimeInterval = 4) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = UIArtifacts.uptime() + timeout
         repeat {
             for (index, candidate) in candidates.enumerated() where candidate.exists {
                 if candidate.isHittable {
@@ -53,7 +56,7 @@ final class MessagesExtensionUITests: XCTestCase {
                 }
             }
             pause(0.5)
-        } while Date() < deadline
+        } while UIArtifacts.uptime() < deadline
         UIArtifacts.note("messages: \(what): no candidate found")
         return false
     }
@@ -74,9 +77,9 @@ final class MessagesExtensionUITests: XCTestCase {
     /// the invisible label `story.bridge`.
     private func waitForStory(timeout: TimeInterval, until matches: (String) -> Bool) -> String {
         let label = messages.staticTexts["story.bridge"]
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = UIArtifacts.uptime() + timeout
         var last = "(no story.bridge element)"
-        while Date() < deadline {
+        while UIArtifacts.uptime() < deadline {
             if label.exists {
                 last = label.label
                 if matches(last) {
@@ -95,7 +98,10 @@ final class MessagesExtensionUITests: XCTestCase {
     /// Registers the extension (the containing app must have run once), opens Messages and
     /// a conversation, opens the app drawer and launches our extension in compact style.
     /// Returns false, after recording failures, if any step could not be done.
-    private func openLauncherInConversation(_ index: Int, prefix: String) -> Bool {
+    /// With `prefix` nil the steps on the way are not screenshotted (failures still are).
+    private func openLauncherInConversation(_ index: Int, prefix givenPrefix: String?) -> Bool {
+        let prefix = givenPrefix ?? "messages-opening-"
+        let record = givenPrefix != nil
         let app = XCUIApplication()
         app.launch()
         _ = app.staticTexts["home.title"].waitForExistence(timeout: 30)
@@ -126,7 +132,9 @@ final class MessagesExtensionUITests: XCTestCase {
                 break
             }
         }
-        checkpoint(prefix + "01-conversation-list")
+        if record {
+            checkpoint(prefix + "01-conversation-list")
+        }
 
         let cell = messages.cells.element(boundBy: index)
         guard cell.waitForExistence(timeout: 8) else {
@@ -168,7 +176,9 @@ final class MessagesExtensionUITests: XCTestCase {
             return false
         }
         UIArtifacts.note("messages: our app in the drawer: id='\(ours.identifier)' label='\(ours.label)' after \(swipes) swipe(s)")
-        checkpoint(prefix + "02-app-drawer")
+        if record {
+            checkpoint(prefix + "02-app-drawer")
+        }
         if ours.isHittable {
             ours.tap()
         } else {
@@ -179,7 +189,9 @@ final class MessagesExtensionUITests: XCTestCase {
         UIArtifacts.note("messages: launcher visible=\(sawLauncher)")
         XCTAssertTrue(sawLauncher, "our launcher did not appear inside Messages")
         pause(1)
-        checkpoint(prefix + "03-launcher")
+        if record || !sawLauncher {
+            checkpoint(prefix + "03-launcher")
+        }
         return sawLauncher
     }
 
@@ -227,10 +239,36 @@ final class MessagesExtensionUITests: XCTestCase {
         checkpoint(names[3])
     }
 
+    /// "slide 3/12 (…)" → (3, 12)
+    private func slidePosition(_ status: String) -> (index: Int, total: Int)? {
+        guard status.hasPrefix("slide ") else {
+            return nil
+        }
+        let head = status.dropFirst("slide ".count).prefix(while: { (character: Character) -> Bool in
+            return character != " "
+        })
+        let parts = head.split(separator: "/")
+        guard parts.count == 2, let index = Int(parts[0]), let total = Int(parts[1]) else {
+            return nil
+        }
+        return (index, total)
+    }
+
+    /// A control inside the story page (the page is accessible to UI tests like any view).
+    private func storyButton(_ label: String) -> XCUIElement {
+        return messages.webViews.buttons[label].firstMatch
+    }
+
     /// The page's own close control (top right) asks native to return to compact.
     @discardableResult
     private func closeStory() -> Bool {
-        messages.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.151)).tap()
+        let close = storyButton("Close")
+        if close.exists, close.isHittable {
+            close.tap()
+        } else {
+            UIArtifacts.note("messages: the story's Close button was not found by its label; tapping its place")
+            messages.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.151)).tap()
+        }
         let backToCompact = messages.buttons["launcher.paste"].waitForExistence(timeout: 12)
         UIArtifacts.note("messages: the story's close control returned to the compact launcher=\(backToCompact)")
         return backToCompact
@@ -353,6 +391,88 @@ final class MessagesExtensionUITests: XCTestCase {
             XCTAssertFalse(stillListed, "Clear should forget the recaps")
             checkpoint("messages-12-your-recaps-cleared")
         }
+    }
+
+    // MARK: The sample, sent from inside its story, says "Sample"
+
+    func testSampleSentFromItsStoryIsLabelledInsideMessages() throws {
+        guard openLauncherInConversation(0, prefix: nil) else {
+            return
+        }
+        let sample = messages.buttons["launcher.seeSample"]
+        guard sample.waitForExistence(timeout: 8) else {
+            XCTFail("the launcher has no 'See a sample' control")
+            return
+        }
+        sample.tap()
+        var status = waitForStory(timeout: 90) { status in
+            return self.isPlaying(status) || status.hasPrefix("error")
+        }
+        UIArtifacts.note("messages: sample story bridge status: \(status)")
+        XCTAssertTrue(isPlaying(status), "the sample did not play (last status: \(status))")
+        guard isPlaying(status) else {
+            checkpoint("messages-sample-1-did-not-play")
+            return
+        }
+
+        // Go to the last slide with the page's own "Next slide" control.
+        var presses = 0
+        while presses < 24 {
+            status = waitForStory(timeout: 2) { _ in
+                return true
+            }
+            if let position = slidePosition(status), position.index >= position.total - 1 {
+                break
+            }
+            let next = storyButton("Next slide")
+            if next.exists, next.isHittable {
+                next.tap()
+            } else {
+                messages.coordinate(withNormalizedOffset: CGVector(dx: 0.86, dy: 0.55)).tap()
+            }
+            presses += 1
+            pause(0.6)
+        }
+        UIArtifacts.note("messages: sample story after \(presses) press(es) of Next: \(status)")
+
+        let send = storyButton("Send to this chat")
+        let sawSend = send.waitForExistence(timeout: 10)
+        pause(1.5)
+        checkpoint("messages-sample-1-last-slide")
+        XCTAssertTrue(sawSend, "the story's last slide has no 'Send to this chat' (last status: \(status))")
+        guard sawSend else {
+            return
+        }
+        send.tap()
+
+        let staged = waitForStagedBubble(timeout: 15)
+        UIArtifacts.note("messages: the sample was staged from its story=\(staged)")
+        XCTAssertTrue(staged, "'Send to this chat' did not stage a card")
+        guard staged else {
+            checkpoint("messages-sample-2-nothing-staged")
+            return
+        }
+        pause(2)
+        let labelled = NSPredicate(format: "label CONTAINS[c] %@ AND label CONTAINS[c] %@", "Sample · ", "in review")
+        let stagedCard = messages.descendants(matching: .any).matching(labelled).firstMatch
+        let stagedSaysSample = stagedCard.waitForExistence(timeout: 5)
+        UIArtifacts.note("messages: the staged card says Sample=\(stagedSaysSample) label='\(stagedSaysSample ? stagedCard.label : "")'")
+        checkpoint("messages-sample-2-staged-card-says-sample")
+        XCTAssertTrue(stagedSaysSample, "the staged sample card should say Sample in its caption")
+
+        messages.buttons["sendButton"].tap()
+        pause(5)
+        let sentCard = messages.descendants(matching: .any).matching(labelled).firstMatch
+        let sentSaysSample = sentCard.waitForExistence(timeout: 8)
+        UIArtifacts.note("messages: the sent card says Sample=\(sentSaysSample) label='\(sentSaysSample ? sentCard.label : "")'")
+        checkpoint("messages-sample-3-sent-card-says-sample")
+        XCTAssertTrue(sentSaysSample, "the sent sample card should say Sample in its caption")
+
+        // The sample is never kept among the person's recaps.
+        let keptSample = NSPredicate(format: "identifier == %@ AND label CONTAINS[c] %@", "recents.play", "Dinner Club")
+        let kept = messages.buttons.matching(keptSample).firstMatch.exists
+        UIArtifacts.note("messages: the sample is listed under Your recaps=\(kept)")
+        XCTAssertFalse(kept, "the sample must not be listed under Your recaps")
     }
 
     // MARK: Experimental (off by default): the live bubble layout

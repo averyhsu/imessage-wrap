@@ -24,9 +24,9 @@ final class WrappedUITests: XCTestCase {
         until matches: (String) -> Bool
     ) -> String {
         let label = app.staticTexts["story.bridge"]
-        let deadline = Date().addingTimeInterval(timeout)
+        let deadline = UIArtifacts.uptime() + timeout
         var last = "(no story.bridge element)"
-        while Date() < deadline {
+        while UIArtifacts.uptime() < deadline {
             if label.exists {
                 last = label.label
                 if matches(last) {
