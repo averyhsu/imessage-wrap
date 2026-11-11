@@ -37,18 +37,23 @@ func pattern(_ count: Int) -> String {
     return out
 }
 
-func record(_ name: String, _ value: NSAttributedString, mutable: Bool, messagesLayout: Bool) {
+func record(_ name: String, _ value: NSAttributedString, mutable: Bool, messagesLayout: Bool,
+            roundTrip: Bool = false) {
     print("archiving \(name) (\(value.string.utf8.count) bytes of UTF-8)")
     let data = NSArchiver.archivedData(withRootObject: value)
-    // the archive must round-trip through Apple's own decoder
-    if let back = NSUnarchiver.unarchiveObject(with: data) as? NSAttributedString {
-        if back.string != value.string {
-            print("ROUND TRIP MISMATCH: \(name)")
+    // For the plain samples, check that Apple's own decoder reads the archive
+    // back. (Not for every shape: NSUnarchiver raises Objective-C exceptions,
+    // which a Swift script cannot catch, on input it dislikes.)
+    if roundTrip {
+        if let back = NSUnarchiver.unarchiveObject(with: data) as? NSAttributedString {
+            if back.string != value.string {
+                print("ROUND TRIP MISMATCH: \(name)")
+                failures += 1
+            }
+        } else {
+            print("NSUnarchiver could not read its own archive: \(name)")
             failures += 1
         }
-    } else {
-        print("NSUnarchiver could not read its own archive: \(name)")
-        failures += 1
     }
     samples.append([
         "name": name,
@@ -60,12 +65,12 @@ func record(_ name: String, _ value: NSAttributedString, mutable: Bool, messages
 }
 
 /// One run with the attribute Messages puts on every plain text message.
-func plain(_ name: String, _ text: String) {
+func plain(_ name: String, _ text: String, roundTrip: Bool = true) {
     let attributes: [NSAttributedString.Key: Any] = [partKey: NSNumber(value: Int32(0))]
     record(name, NSAttributedString(string: text, attributes: attributes),
-           mutable: false, messagesLayout: true)
+           mutable: false, messagesLayout: true, roundTrip: roundTrip)
     record(name + "_mutable", NSMutableAttributedString(string: text, attributes: attributes),
-           mutable: true, messagesLayout: true)
+           mutable: true, messagesLayout: true, roundTrip: roundTrip)
 }
 
 // ---- every length encoding ----------------------------------------------------
@@ -87,7 +92,10 @@ plain("accents_127_bytes", String(repeating: "\u{E9}", count: 63) + "a")
 plain("accents_128_bytes", String(repeating: "\u{E9}", count: 64))
 plain("multiline", "line one\nline two\r\n\tindented")
 plain("nul_inside", "nul\u{0}inside")
-plain("bom_first", "\u{FEFF}leading bom")
+// NSUnarchiver drops a leading U+FEFF from the string and then raises because
+// the attribute run is one character too long, so no round trip for this one.
+// Our decoders return what the archive holds: the text with its U+FEFF.
+plain("bom_first", "\u{FEFF}leading bom", roundTrip: false)
 plain("odd_whitespace", "nbsp\u{A0}and\u{2028}line separator\u{3000}wide")
 plain("looks_like_tags", "\u{84}\u{85}\u{86} + NSString +")
 plain("decoy_marker", "NSString\u{1}+\u{5}hello NSString\u{1}+")
