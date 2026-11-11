@@ -43,7 +43,7 @@ WHERE j.message_id = :msg;
 - **`associated_message_guid`:** `p:<part>/<GUID>` for text and attachments, `bp:<GUID>` for URL-preview and app bubbles, or a bare GUID. Take the 36 characters after the prefix (`clean_associated_guid()`).
 - **`thread_originator_guid`:** bare GUID of the thread root.
 - **Edited/unsent:** `date_edited != 0`. `date_retracted` usually stays 0; unsends are part indexes under `rp` in the `message_summary_info` plist ([imsg json.md](https://github.com/steipete/imsg/blob/main/docs/json.md)).
-- **Version drift:** emoji tapbacks need the `associated_message_emoji` column (macOS 15, from memory); the `any;` GUID prefix arrived with macOS 26; exporter 4.3.0 "macOS Golden Gate and iOS 27 Support" added `filter_action`/`filter_sub_action` ([releases](https://github.com/ReagentX/imessage-exporter/releases)). "Even on a single macOS build, two machines can carry different `message` columns" ([capabilities.rs](https://github.com/ReagentX/imessage-exporter/blob/develop/imessage-database/src/tables/capabilities.rs)): probe `PRAGMA table_info(message)`, never the OS version.
+- **Version drift:** emoji tapbacks need the `associated_message_emoji` column (macOS 15, from memory); the `any;` GUID prefix arrived with macOS 26; exporter 4.3.0 "macOS Golden Gate and iOS 27 Support" added `filter_action`/`filter_sub_action` ([releases](https://github.com/ReagentX/imessage-exporter/releases)). Schemas vary: "even on a single macOS build, two machines can carry different `message` columns" ([capabilities.rs](https://github.com/ReagentX/imessage-exporter/blob/develop/imessage-database/src/tables/capabilities.rs)). Probe `PRAGMA table_info(message)`, never the OS version.
 
 ### 2. attributedBody
 
@@ -63,7 +63,7 @@ WHERE j.message_id = :msg;
 ### 3. Full Disk Access
 
 - **Who needs it:** the responsible process — for a CLI, the terminal app or whichever parent launched it (editor, SSH, automation gateway); for a native app, the app itself. Relaunch after granting ([imsg permissions.md](https://github.com/steipete/imsg/blob/main/docs/permissions.md)).
-- **Error without it:** `unable to open database file` (imsg), or `NSPOSIXErrorDomain Code=1 "Operation not permitted"` ([Apple forum](https://developer.apple.com/forums/thread/799832)).
+- **Error without it:** `unable to open database file` (imsg), or `NSPOSIXErrorDomain Code=1 "Operation not permitted"` (reported for `~/Library/Mail`, the same protection class — [Apple forum](https://developer.apple.com/forums/thread/799832)).
 - **No API** tests for or requests FDA: "do what you're really trying to do and then handle errors" ([Apple DTS](https://developer.apple.com/forums/thread/114452)).
 - **Finder:** yes. Finder "always has Full Disk Access but never appears in the Full Disk Access pane" ([SentinelOne](https://www.sentinelone.com/labs/bypassing-macos-tcc-user-privacy-protections-by-accident-and-design/), search snippet only). Go to Folder → `~/Library/Messages` → copy `chat.db`, `chat.db-wal`, `chat.db-shm`.
 - **Browser picker: probably yes, UNVERIFIED.** Apple DTS: "When a user selects a 'protected' file or folder in an NSOpenPanel in a non-sandboxed app on Catalina, consent is inferred and the app can access it" ([thread 124121](https://developer.apple.com/forums/thread/124121)). I found no web analyzer relying on this, and one blog (search snippet) has users copy `chat.db` to the Desktop first. Test: browser without FDA, `<input type=file>`, ⌘⇧G to `~/Library/Messages/chat.db`, read the bytes; repeat with drag-from-Finder, in Safari, Chrome and Firefox on 15/26/27. A lone `chat.db` omits whatever is still in the WAL.
@@ -88,7 +88,7 @@ end run
 - **Source:** [imsg MessageSender.swift](https://github.com/steipete/imsg/blob/main/Sources/IMsgCore/MessageSender.swift), [BlueBubbles scripts.ts](https://github.com/BlueBubblesApp/bluebubbles-server/blob/master/packages/server/src/server/api/apple/scripts.ts).
 - **GUID format:** `iMessage;+;chat…` through macOS 15, `any;+;chat…` from macOS 26 ([imessage-kit platform.ts](https://github.com/photon-hq/imessage-kit/blob/main/src/infra/platform.ts)).
 - **Tahoe failure:** on 26.3.1, `chat.db` held `any;+;chat…` while AppleScript exposed `any;-;chat…`; the `+` form returned `-1728`, the `-` form reported success but wrote an empty SMS row joined to no chat ([imsg #90](https://github.com/steipete/imsg/issues/90)). imsg now checks `chat.db` for up to eight seconds after every send ([send.md](https://github.com/steipete/imsg/blob/main/docs/send.md)); imessage-kit ships `any;+;` as working. Whether group sends work on a given 26/27 Mac is **UNVERIFIED**. Test: `osascript -e 'tell application "Messages" to get id of every chat'`, send, confirm on a second device.
-- **Files:** Messages reads only `~/Pictures`, `~/Downloads`, `~/Documents` ([imessage-kit](https://github.com/photon-hq/imessage-kit/blob/main/src/domain/messages-app.ts)); imsg stages under `~/Library/Messages/Attachments/imsg/`.
+- **Files:** the two projects disagree. imessage-kit treats `~/Pictures`, `~/Downloads`, `~/Documents` as readable by Messages and copies everything else into `~/Pictures` ([source](https://github.com/photon-hq/imessage-kit/blob/main/src/domain/messages-app.ts)); imsg says `~/Desktop` and `~/Downloads` "can hit sandbox-related send failures" and stages under `~/Library/Messages/Attachments/imsg/`.
 - **Automation prompt:** "'Terminal' wants to control 'Messages'"; denied sends fail with `not authorized to send Apple events`. An app needs [`NSAppleEventsUsageDescription`](https://developer.apple.com/documentation/bundleresources/information-property-list/nsappleeventsusagedescription).
 - **Also:** `-1728` when the chat is missing from Messages' live `chats` collection; `osascript` can hang.
 - **Link previews: UNVERIFIED.** AppleScript sends plain text; Messages may later add a `com.apple.messages.URLBalloonProvider` row. A guaranteed card needs imsg's injected bridge. Test: send a URL, check a second device.
@@ -142,7 +142,7 @@ end run
 
 - Decode `attributedBody` for every new row; `WHERE text = '/wrapped'` can miss commands.
 - Pass `chat.guid` verbatim to `chat id`; on `-1728` try the `;+;`/`;-;` swap; then require a joined outgoing row before reporting success. Never blind-retry.
-- Stage the card under `~/Pictures` before sending.
+- Stage the card under `~/Pictures` or `~/Library/Messages/Attachments/<app>/` before sending; never send from a temp directory.
 - Count tapbacks from 2000–2007 rows; exclude `item_type != 0` and `associated_message_type >= 1000` from message totals (0, 2 and 3 are ordinary or app messages).
 - Ignore the bot's own rows, or it answers itself.
 - First real-Mac test: the group send on macOS 26 and 27. If it fails, this path is read-only.
