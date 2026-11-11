@@ -492,6 +492,10 @@
   // string the Python engine gets. Numbers are CAST to INTEGER; a REAL date
   // is truncated.
   function asText(column) { return 'CAST(CAST(' + column + ' AS TEXT) AS BLOB)'; }
+  // A name (chat name, handle id, contact name or value): the first 4,096 bytes
+  // of its text, enough for the 1,024 characters the engine looks at, so a
+  // name of a million characters costs no more than a short one.
+  function asName(column) { return 'substr(CAST(CAST(' + column + ' AS TEXT) AS BLOB), 1, 4096)'; }
   function asDate(prefix) { return 'CAST(' + prefix + 'date AS INTEGER)'; }
   // ... and NULL instead when it cannot be a date (zero, negative, after 2100),
   // so one damaged row does not become "the first message" or "the last"
@@ -541,7 +545,7 @@
     var merged = new Map();
     var order = [];
     handle.each('SELECT ROWID, ' + asText('guid') + ', ' + asText('chat_identifier') + ', ' +
-      asText('display_name') + ', ' + asText('service_name') + ' FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID',
+      asName('display_name') + ', ' + asText('service_name') + ' FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID',
     [GROUP_STYLE], function (r) {
       var row = [r[0], text(r[1]), text(r[2]), text(r[3]), text(r[4])];
       var key = row[2] ? 'i:' + row[2] : 'r:' + row[0];
@@ -608,7 +612,7 @@
     });
     var handles = new Map();
     if (handle.tables().has('chat_handle_join')) {     // optional: without it, members are unknown
-      handle.each('SELECT j.chat_id, ' + asText('h.id') + ' FROM chat_handle_join j JOIN handle h ' +
+      handle.each('SELECT j.chat_id, ' + asName('h.id') + ' FROM chat_handle_join j JOIN handle h ' +
         'ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id', null, function (r) {
         var id = text(r[1]);
         if (!id) return;
@@ -701,7 +705,7 @@
     var body = columns.has('attributedBody')
       ? "CASE WHEN m.text IS NULL OR CAST(m.text AS TEXT) = '' THEN CAST(m.attributedBody AS BLOB) END" : 'NULL';
     var sql = 'SELECT m.ROWID, ' + asText('m.guid') + ', CAST(' + asDate('m.') + ' AS TEXT), ' +
-      'CAST(m.is_from_me AS INTEGER), ' + asText('h.id') + ', ' + asText('m.text') + ', ' + body + ', ' +
+      'CAST(m.is_from_me AS INTEGER), ' + asName('h.id') + ', ' + asText('m.text') + ', ' + body + ', ' +
       integer('cache_has_attachments') + ', ' + integer('item_type') + ', ' + integer('associated_message_type') +
       ', ' + (columns.has('associated_message_guid') ? asText('m.associated_message_guid') : 'NULL') +
       ' FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id WHERE m.ROWID IN ' +
@@ -751,11 +755,15 @@
   // contacts
   // ------------------------------------------------------------------ //
 
+  /**
+   * "First Last", else the nickname, else the organisation: as a sender
+   * label, so cleaned, capped and masked like any other.
+   */
   function displayName(first, last, nickname, organization) {
-    var clean = Engine.cleanName;
+    var clean = function (part) { return Engine.cleanName(part, Engine.NAME_LIMIT); };
     var parts = [clean(first), clean(last)].filter(function (part) { return part; });
-    if (parts.length) return parts.join(' ');
-    return clean(nickname) || clean(organization);
+    var name = parts.length ? parts.join(' ') : (clean(nickname) || clean(organization));
+    return Engine._internals.personLabel(name);
   }
 
   /**
@@ -763,7 +771,9 @@
    * AddressBook-v22.abcddb or an iPhone AddressBook.sqlitedb (detected from
    * its tables). Identifiers are phone numbers and e-mail addresses as
    * stored; the engine normalises them. The name is "First Last", else the
-   * nickname, else the organisation, cleaned of control characters.
+   * nickname, else the organisation, as a sender label: cleaned, capped at 40
+   * characters and masked, because people do save contacts under a number or
+   * an address.
    */
   function loadContacts(handle) {
     var tables = handle.tables();
@@ -773,24 +783,24 @@
     if (tables.has('ZABCDRECORD')) {
       columns = handle.columns('ZABCDRECORD');
       nameSql = ['ZFIRSTNAME', 'ZLASTNAME', 'ZNICKNAME', 'ZORGANIZATION'].map(function (c) {
-        return columns.has(c) ? asText('r.' + c) : 'NULL';
+        return columns.has(c) ? asName('r.' + c) : 'NULL';
       }).join(', ');
       if (tables.has('ZABCDPHONENUMBER')) {
-        queries.push('SELECT ' + nameSql + ', ' + asText('p.ZFULLNUMBER') + ' FROM ZABCDPHONENUMBER p ' +
+        queries.push('SELECT ' + nameSql + ', ' + asName('p.ZFULLNUMBER') + ' FROM ZABCDPHONENUMBER p ' +
           'JOIN ZABCDRECORD r ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK');
       }
       if (tables.has('ZABCDEMAILADDRESS')) {
         var address = handle.columns('ZABCDEMAILADDRESS').has('ZADDRESS')
           ? 'COALESCE(e.ZADDRESS, e.ZADDRESSNORMALIZED)' : 'e.ZADDRESSNORMALIZED';
-        queries.push('SELECT ' + nameSql + ', ' + asText(address) + ' FROM ZABCDEMAILADDRESS e ' +
+        queries.push('SELECT ' + nameSql + ', ' + asName(address) + ' FROM ZABCDEMAILADDRESS e ' +
           'JOIN ZABCDRECORD r ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK');
       }
     } else if (tables.has('ABPerson') && tables.has('ABMultiValue')) {
       columns = handle.columns('ABPerson');
       nameSql = ['First', 'Last', 'Nickname', 'Organization'].map(function (c) {
-        return columns.has(c) ? asText('p.' + c) : 'NULL';
+        return columns.has(c) ? asName('p.' + c) : 'NULL';
       }).join(', ');
-      queries.push('SELECT ' + nameSql + ', ' + asText('v.value') + ' FROM ABMultiValue v JOIN ABPerson p ' +
+      queries.push('SELECT ' + nameSql + ', ' + asName('v.value') + ' FROM ABMultiValue v JOIN ABPerson p ' +
         'ON p.ROWID = v.record_id WHERE v.property IN (3, 4) ORDER BY p.ROWID, v.UID');
     } else {
       throw fail('contacts_schema', MESSAGES.contacts_schema);

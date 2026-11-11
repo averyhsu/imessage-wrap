@@ -29,8 +29,8 @@ import tempfile
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from .product import PRODUCT_NAME
-from .stats import (WHITESPACE, _Names, _chat_label, _distinct, _fallback_name, _owner_name,
-                    _split_date, build_contact_lookup, clean_name)
+from .stats import (NAME_LIMIT, WHITESPACE, _Names, _chat_label, _distinct, _fallback_name,
+                    _owner_name, _split_date, build_contact_lookup, clean_name, person_label)
 
 __all__ = [
     "DatabaseError", "open_database", "open_backup", "find_backup", "locate_in_backup",
@@ -439,6 +439,17 @@ def _countable_sql(cols: set) -> str:
     return " AND ".join(parts) or "1"
 
 
+# A name (chat name, handle id, contact name or value) as the first 4,096 bytes
+# of its UTF-8 text: enough for the 1,024 characters the engine looks at, so a
+# name of a million characters costs no more than a short one. Read as bytes
+# and decoded here, like the JavaScript engine does.
+_NAME = "substr(CAST(CAST(%s AS TEXT) AS BLOB), 1, 4096)"
+
+
+def _text(value: Any) -> Optional[str]:
+    return value.decode("utf-8", "replace") if isinstance(value, bytes) else None
+
+
 # message.date as an integer whatever type the cell has (a REAL is truncated)
 _DATE = "CAST(%sdate AS INTEGER)"
 # ... and NULL instead when it cannot be a date (zero, negative, after 2100),
@@ -480,10 +491,12 @@ def _group_rows(con: sqlite3.Connection) -> List[List[tuple]]:
     """Group-chat rows, merged when they share a non-empty chat_identifier.
     Text columns are CAST so a cell of another type cannot surprise anyone."""
     rows = _fetch(con, "SELECT ROWID, CAST(guid AS TEXT), CAST(chat_identifier AS TEXT), "
-                       "CAST(display_name AS TEXT), CAST(service_name AS TEXT) "
-                       "FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID", (GROUP_STYLE,))
+                       "%s, CAST(service_name AS TEXT) "
+                       "FROM chat WHERE CAST(style AS INTEGER) = ? ORDER BY ROWID"
+                  % (_NAME % "display_name"), (GROUP_STYLE,))
     merged: Dict[Any, List[tuple]] = {}
     for row in rows:
+        row = (row[0], row[1], row[2], _text(row[3]), row[4])
         key = row[2] if row[2] else ("rowid", row[0])
         merged.setdefault(key, []).append(row)
     return list(merged.values())
@@ -518,10 +531,10 @@ def list_group_chats(con: sqlite3.Connection, contacts: Any = None,
     handles: Dict[int, List[str]] = {}
     if "chat_handle_join" in _tables(con):      # optional: without it, members are unknown
         for chat_id, handle in _fetch(
-                con, "SELECT j.chat_id, CAST(h.id AS TEXT) FROM chat_handle_join j JOIN handle h "
-                     "ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id"):
+                con, "SELECT j.chat_id, %s FROM chat_handle_join j JOIN handle h "
+                     "ON h.ROWID = j.handle_id ORDER BY j.chat_id, j.handle_id" % (_NAME % "h.id")):
             if handle:
-                handles.setdefault(chat_id, []).append(handle)
+                handles.setdefault(chat_id, []).append(_text(handle))
 
     chats = []
     for group in _group_rows(con):
@@ -610,14 +623,26 @@ def load_rows(con: sqlite3.Connection, chat_ids: Iterable[int]) -> List[Dict[str
             "THEN CAST(m.attributedBody AS BLOB) END" if "attributedBody" in cols else "NULL")
     sql = (
         "SELECT m.ROWID, CAST(m.guid AS TEXT), %s, CAST(m.is_from_me AS INTEGER), "
-        "CAST(h.id AS TEXT), CAST(m.text AS TEXT), %s, %s, %s, %s, %s "
+        "%s, CAST(m.text AS TEXT), %s, %s, %s, %s, %s "
         "FROM message m LEFT JOIN handle h ON h.ROWID = m.handle_id "
         "WHERE m.ROWID IN (SELECT message_id FROM chat_message_join WHERE chat_id IN (%s)) "
         "ORDER BY m.ROWID"
-        % (_DATE % "m.", body, col("cache_has_attachments", "INTEGER"), col("item_type", "INTEGER"),
+        % (_DATE % "m.", _NAME % "h.id", body, col("cache_has_attachments", "INTEGER"),
+           col("item_type", "INTEGER"),
            col("associated_message_type", "INTEGER"), col("associated_message_guid", "TEXT"),
            ",".join("?" for _ in ids)))
-    return [dict(zip(_ROW_KEYS, row)) for row in _fetch(con, sql, ids)]
+    rows = []
+    decoded: Dict[bytes, str] = {}                  # a chat has few distinct handles
+    for row in _fetch(con, sql, ids):
+        item = dict(zip(_ROW_KEYS, row))
+        raw = item["handle"]
+        if raw is not None:
+            handle = decoded.get(raw)
+            if handle is None:
+                handle = decoded[raw] = raw.decode("utf-8", "replace")
+            item["handle"] = handle
+        rows.append(item)
+    return rows
 
 
 def load_chat(con: sqlite3.Connection, chat: Dict[str, Any]) -> Dict[str, Any]:
@@ -635,15 +660,16 @@ def chat_for_message(con: sqlite3.Connection, message_rowid: int) -> Optional[Di
     """The chat a message belongs to: ``{"rowid", "guid", "display_name",
     "style", "chat_identifier", "is_group"}`` or ``None`` when the message is
     not (yet) joined to a chat. ``display_name`` is cleaned and masked."""
-    row = con.execute(
-        "SELECT c.ROWID, CAST(c.guid AS TEXT), CAST(c.display_name AS TEXT), "
-        "CAST(c.style AS INTEGER), "
+    rows = _fetch(
+        con, "SELECT c.ROWID, CAST(c.guid AS TEXT), %s, CAST(c.style AS INTEGER), "
         "CAST(c.chat_identifier AS TEXT) "
         "FROM chat_message_join j JOIN chat c ON c.ROWID = j.chat_id "
-        "WHERE j.message_id = ? ORDER BY c.ROWID LIMIT 1", (int(message_rowid),)).fetchone()
-    if row is None:
+        "WHERE j.message_id = ? ORDER BY c.ROWID LIMIT 1" % (_NAME % "c.display_name"),
+        (int(message_rowid),))
+    if not rows:
         return None
-    return {"rowid": row[0], "guid": row[1] or "", "display_name": _chat_label(row[2]),
+    row = rows[0]
+    return {"rowid": row[0], "guid": row[1] or "", "display_name": _chat_label(_text(row[2])),
             "style": row[3],
             "chat_identifier": row[4] or "", "is_group": row[3] == GROUP_STYLE}
 
@@ -653,10 +679,12 @@ def chat_for_message(con: sqlite3.Connection, message_rowid: int) -> Optional[Di
 # --------------------------------------------------------------------------- #
 
 def _display_name(first: Any, last: Any, nickname: Any, organization: Any) -> str:
-    name = " ".join(p for p in (clean_name(first), clean_name(last)) if p)
-    if name:
-        return name
-    return clean_name(nickname) or clean_name(organization)
+    """ "First Last", else the nickname, else the organisation: as a sender
+    label, so cleaned, capped and masked like any other."""
+    name = " ".join(p for p in (clean_name(first, NAME_LIMIT), clean_name(last, NAME_LIMIT)) if p)
+    if not name:
+        name = clean_name(nickname, NAME_LIMIT) or clean_name(organization, NAME_LIMIT)
+    return person_label(name)
 
 
 def _contacts_from(con: sqlite3.Connection) -> List[Tuple[str, str]]:
@@ -664,30 +692,33 @@ def _contacts_from(con: sqlite3.Connection) -> List[Tuple[str, str]]:
     pairs: List[Tuple[str, str]] = []
     if "ZABCDRECORD" in tables:                       # macOS AddressBook-v22.abcddb
         cols = _columns(con, "ZABCDRECORD")
-        name_sql = ", ".join("CAST(r.%s AS TEXT)" % c if c in cols else "NULL" for c in
+        name_sql = ", ".join(_NAME % ("r." + c) if c in cols else "NULL" for c in
                              ("ZFIRSTNAME", "ZLASTNAME", "ZNICKNAME", "ZORGANIZATION"))
         queries = []
         if "ZABCDPHONENUMBER" in tables:
-            queries.append("SELECT %s, CAST(p.ZFULLNUMBER AS TEXT) FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r "
-                           "ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK" % name_sql)
+            queries.append("SELECT %s, %s FROM ZABCDPHONENUMBER p JOIN ZABCDRECORD r "
+                           "ON r.Z_PK = p.ZOWNER ORDER BY r.Z_PK, p.Z_PK"
+                           % (name_sql, _NAME % "p.ZFULLNUMBER"))
         if "ZABCDEMAILADDRESS" in tables:
             email_cols = _columns(con, "ZABCDEMAILADDRESS")
             address = "COALESCE(e.ZADDRESS, e.ZADDRESSNORMALIZED)" if "ZADDRESS" in email_cols \
                 else "e.ZADDRESSNORMALIZED"
-            queries.append("SELECT %s, CAST(%s AS TEXT) FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r "
-                           "ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK" % (name_sql, address))
+            queries.append("SELECT %s, %s FROM ZABCDEMAILADDRESS e JOIN ZABCDRECORD r "
+                           "ON r.Z_PK = e.ZOWNER ORDER BY r.Z_PK, e.Z_PK"
+                           % (name_sql, _NAME % address))
     elif "ABPerson" in tables and "ABMultiValue" in tables:   # iPhone AddressBook.sqlitedb
         cols = _columns(con, "ABPerson")
-        name_sql = ", ".join("CAST(p.%s AS TEXT)" % c if c in cols else "NULL" for c in
+        name_sql = ", ".join(_NAME % ("p." + c) if c in cols else "NULL" for c in
                              ("First", "Last", "Nickname", "Organization"))
-        queries = ["SELECT %s, CAST(v.value AS TEXT) FROM ABMultiValue v JOIN ABPerson p "
+        queries = ["SELECT %s, %s FROM ABMultiValue v JOIN ABPerson p "
                    "ON p.ROWID = v.record_id WHERE v.property IN (3, 4) "
-                   "ORDER BY p.ROWID, v.UID" % name_sql]
+                   "ORDER BY p.ROWID, v.UID" % (name_sql, _NAME % "v.value")]
     else:
         raise DatabaseError("This file is not an address book this program knows how to read.",
                             "schema")
     for sql in queries:
-        for first, last, nickname, organization, value in _fetch(con, sql):
+        for row in _fetch(con, sql):
+            first, last, nickname, organization, value = (_text(cell) for cell in row)
             name = _display_name(first, last, nickname, organization)
             if name and isinstance(value, str) and value.strip(WHITESPACE):
                 pairs.append((value, name))
@@ -699,7 +730,9 @@ def load_contacts(path: str) -> List[Tuple[str, str]]:
     Mac ``AddressBook-v22.abcddb`` or an iPhone ``AddressBook.sqlitedb`` (the
     format is detected from the tables). Identifiers are phone numbers and
     e-mail addresses exactly as stored; :func:`compute_stats` normalises them.
-    The name is "First Last", else the nickname, else the organisation."""
+    The name is "First Last", else the nickname, else the organisation, as a
+    sender label: cleaned, capped at 40 characters and masked, because people
+    do save contacts under a number or an address."""
     con = open_database(path)
     try:
         return _contacts_from(con)
