@@ -1,0 +1,103 @@
+# XcodeGen spec. Generate the project with:  cd ios && ./scripts/sync-web.sh && xcodegen
+# The generated Wrapped.xcodeproj is gitignored on purpose.
+name: Wrapped
+
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    TARGETED_DEVICE_FAMILY: "1"
+    # Public product name (docs/SCHEMA.md §7). The only place it is spelled out:
+    # both Info.plists use it as CFBundleDisplayName and Swift reads it from the bundle.
+    PRODUCT_DISPLAY_NAME: Threadback
+    GENERATE_INFOPLIST_FILE: "NO"
+    # Simulator builds are ad-hoc signed ("Sign to Run Locally") and need no team.
+    # For a real device set DEVELOPMENT_TEAM here or in Xcode's Signing & Capabilities tab.
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  Wrapped:
+    type: application
+    platform: iOS
+    sources:
+      - path: App
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped
+        PRODUCT_NAME: Wrapped
+        INFOPLIST_FILE: App/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+    dependencies:
+      - target: WrappedMessages
+        embed: true
+
+  WrappedMessages:
+    type: app-extension.messages
+    platform: iOS
+    sources:
+      - path: MessagesExtension
+      - path: Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped.MessagesExtension
+        PRODUCT_NAME: WrappedMessages
+        INFOPLIST_FILE: MessagesExtension/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: "iMessage App Icon"
+        SKIP_INSTALL: "YES"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    dependencies:
+      - sdk: Messages.framework
+
+  WrappedTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests/Unit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Wrapped.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Wrapped"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+    dependencies:
+      - target: Wrapped
+
+  WrappedUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: Tests/UI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: Wrapped
+    dependencies:
+      - target: Wrapped
+
+schemes:
+  Wrapped:
+    build:
+      targets:
+        Wrapped: all
+        WrappedTests: [test]
+        WrappedUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - name: WrappedTests
+        - name: WrappedUITests
+    archive:
+      config: Release

@@ -1,0 +1,167 @@
+# Builds the iOS app + iMessage app extension on a macOS runner (there is no local Xcode in
+# the development sandbox), runs the tests on an iOS Simulator and captures screenshots.
+name: iOS
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "ios/**"
+      - "web/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    name: Build, test and screenshot (Simulator)
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DERIVED: ${{ github.workspace }}/build/DerivedData
+      OUT: ${{ github.workspace }}/build/out
+      APP_ID: io.github.averyhsu.wrapped
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+          mkdir -p "$OUT/logs" "$OUT/screenshots"
+
+      - name: Install XcodeGen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: |
+          brew install xcodegen
+          xcodegen --version
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          xcodegen generate
+          xcodebuild -list -project Wrapped.xcodeproj
+
+      - name: Pick a simulator
+        id: sim
+        run: |
+          xcrun simctl list devices available | grep -E "^-- |iPhone" | head -n 60 || true
+          python3 ios/scripts/pick-simulator.py | tee -a "$GITHUB_OUTPUT"
+
+      - name: Boot the simulator
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          xcrun simctl boot "$UDID" || true
+          xcrun simctl bootstatus "$UDID" -b | tail -n 5
+          xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3 || true
+
+      - name: Build
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/build.log" \
+            build-for-testing \
+            -project ios/Wrapped.xcodeproj \
+            -scheme Wrapped \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED"
+
+      - name: Verify the iMessage extension is embedded
+        run: |
+          APP="$DERIVED/Build/Products/Debug-iphonesimulator/Wrapped.app"
+          APPEX="$APP/PlugIns/WrappedMessages.appex"
+          echo "== $APP"
+          ls "$APP"
+          echo "== PlugIns"
+          ls -la "$APP/PlugIns"
+          test -d "$APPEX"
+          test -f "$APPEX/WrappedMessages"
+          echo "== extension Info.plist"
+          plutil -p "$APPEX/Info.plist"
+          POINT=$(/usr/libexec/PlistBuddy -c "Print :NSExtension:NSExtensionPointIdentifier" "$APPEX/Info.plist")
+          test "$POINT" = "com.apple.message-payload-provider"
+          echo "== signatures"
+          codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature|TeamIdentifier" || true
+          codesign -dv "$APPEX" 2>&1 | grep -E "Identifier|Signature|TeamIdentifier" || true
+          echo "EMBEDDED_OK: WrappedMessages.appex is embedded in Wrapped.app ($POINT)"
+
+      - name: Test
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/test.log" \
+            test-without-building \
+            -project ios/Wrapped.xcodeproj \
+            -scheme Wrapped \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -derivedDataPath "$DERIVED" \
+            -resultBundlePath "$OUT/Wrapped.xcresult"
+
+      - name: Screenshots (simctl)
+        env:
+          UDID: ${{ steps.sim.outputs.udid }}
+        run: |
+          APP="$DERIVED/Build/Products/Debug-iphonesimulator/Wrapped.app"
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" "$APP_ID" --screenshot-mode
+          sleep 8
+          xcrun simctl io "$UDID" screenshot "$OUT/screenshots/app-home.png"
+          xcrun simctl terminate "$UDID" "$APP_ID" || true
+          echo "== extension registration (best effort)"
+          xcrun simctl spawn "$UDID" pluginkit -m -v -p com.apple.message-payload-provider 2>&1 | head -n 20 || true
+          ls -la "$OUT/screenshots"
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-screenshots
+          path: build/out/screenshots
+          if-no-files-found: warn
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-logs
+          path: build/out/logs
+          if-no-files-found: warn
+
+      - name: Summary
+        if: always()
+        env:
+          SIM_NAME: ${{ steps.sim.outputs.name }}
+          SIM_OS: ${{ steps.sim.outputs.os }}
+        run: |
+          {
+            echo "## iOS build"
+            echo ""
+            echo "- Xcode: $(xcodebuild -version | tr '\n' ' ')"
+            echo "- Simulator: ${SIM_NAME:-none} (iOS ${SIM_OS:-?})"
+            if [ -d "$DERIVED/Build/Products/Debug-iphonesimulator/Wrapped.app/PlugIns/WrappedMessages.appex" ]; then
+              echo "- iMessage extension: embedded (\`Wrapped.app/PlugIns/WrappedMessages.appex\`)"
+            else
+              echo "- iMessage extension: NOT found in the app bundle"
+            fi
+            if [ -f "$OUT/logs/test.log" ]; then
+              echo "- Tests: $(grep -E "Executed [0-9]+ tests?" "$OUT/logs/test.log" | tail -n 1 | sed 's/^[[:space:]]*//')"
+            else
+              echo "- Tests: not run"
+            fi
+            echo "- Screenshots: $(ls "$OUT/screenshots" 2>/dev/null | tr '\n' ' ')"
+          } >> "$GITHUB_STEP_SUMMARY"
