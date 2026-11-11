@@ -96,7 +96,11 @@ function cli(args, tz = LA) {
   });
 }
 const cliChats = (args) => JSON.parse(cli(['chats', '--json', ...args]));
-const cliStats = (args, tz) => cli(['stats', ...args, '--compact'], tz).replace(/\n$/, '');
+// The page is compared with the engine's own output for the names it was given. Once the
+// command-line tool shortens names by default (docs/SCHEMA.md section 2, "Short names"),
+// that is what its --full-names prints; until then the flag does not exist.
+const FULL_NAMES = /--full-names/.test(cli(['stats', '--help'])) ? ['--full-names'] : [];
+const cliStats = (args, tz) => cli(['stats', ...args, ...FULL_NAMES, '--compact'], tz).replace(/\n$/, '');
 const brief = (chat) => ({ id: chat.id, name: chat.name, members: chat.members, messages: chat.messages, last_unix: chat.last_unix });
 
 // Every raw phone number and e-mail address in the fixture: none may ever reach a link.

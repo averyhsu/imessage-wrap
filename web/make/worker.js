@@ -142,8 +142,12 @@ function identify(handle, names) {
   var name = names.handle(handle);
   var contact = Engine.contactKey(handle);
   if (contact !== null && names.table.get(contact) === name) return { key: 'n:' + name, name: name, named: true };
-  if (name !== handle) return { key: 'h:' + (contact || handle), name: name, named: false };   // masked
-  return { key: 'n:' + name, name: name, named: true };                   // a name from an export
+  // No contact name. The engine has masked the label if it held a phone number (an
+  // ellipsis and four digits) or an e-mail address (the part before the @): that person
+  // has no name yet. Anything else is a name as an export gave it.
+  var masked = name.charAt(0) === '\u2026' || (handle.indexOf('@') !== -1 && name.indexOf('@') === -1);
+  if (masked) return { key: 'h:' + (contact || handle), name: name, named: false };
+  return { key: 'n:' + name, name: name, named: true };
 }
 
 /**
