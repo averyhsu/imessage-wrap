@@ -1552,7 +1552,7 @@
       : '.']);
 
     renderQuotes(quotesOn);
-    if ($('raw').open) $('raw-json').textContent = JSON.stringify(link.stats, null, 2);
+    $('raw-json').textContent = JSON.stringify(link.stats, null, 2);
 
     $('share').hidden = typeof navigator.share !== 'function';
   }
@@ -1786,10 +1786,6 @@
     $('replay').addEventListener('click', replayPreview);
     $('preview').addEventListener('load', onPreviewLoad);
     $('link').addEventListener('focus', function () { $('link').select(); });
-    $('raw').addEventListener('toggle', function () {
-      var link = currentFit();
-      if ($('raw').open && link) $('raw-json').textContent = JSON.stringify(link.stats, null, 2);
-    });
 
     doc.addEventListener('click', function (event) {
       var button = event.target.closest ? event.target.closest('.mk-copy') : null;
