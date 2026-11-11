@@ -428,10 +428,15 @@
 
   // ── 5. late night ──────────────────────────────────────────────────────────
 
+  // The night sky. Stars are decoration and never share space with words: each one lives
+  // in the band of sky above the text or the band below it, and is placed inside that band
+  // when the stage is laid out. [band, across (0..1), down (0..1), size, twinkle seconds]
+  // Stars above the text keep to the left: the moon has the right.
   var STARS = [
-    [8, 9, 9, 2.6], [22, 20, 6, 3.4], [38, 7, 7, 2.2], [52, 16, 5, 4], [6, 34, 6, 3.1], [90, 33, 8, 2.4],
-    [72, 41, 5, 3.6], [14, 55, 7, 2.9], [94, 58, 6, 3.3], [84, 74, 9, 2.5], [10, 82, 6, 3.8], [46, 90, 7, 2.7],
-    [70, 94, 5, 3.2], [30, 70, 5, 4.2], [60, 62, 4, 3]
+    ['top', 0.03, 0.10, 9, 2.6], ['top', 0.20, 0.62, 6, 3.4], ['top', 0.36, 0.05, 7, 2.2], ['top', 0.52, 0.48, 5, 4],
+    ['top', 0.09, 0.95, 6, 3.1], ['top', 0.60, 0.90, 5, 3.6], ['top', 0.30, 0.35, 4, 3],
+    ['bottom', 0.14, 0.12, 7, 2.9], ['bottom', 0.94, 0.20, 6, 3.3], ['bottom', 0.84, 0.62, 9, 2.5], ['bottom', 0.08, 0.72, 6, 3.8],
+    ['bottom', 0.46, 0.88, 7, 2.7], ['bottom', 0.70, 0.96, 5, 3.2], ['bottom', 0.30, 0.45, 5, 4.2], ['bottom', 0.60, 0.30, 4, 3]
   ];
 
   function late(s) {
@@ -440,8 +445,10 @@
     var n = l.messages;
     var slide = make('late', { ink: 'light', world: '#141a4d', duration: 6500, label: F.int(n) + ' messages between midnight and 5 AM' });
     var bg = slide.el.firstChild;
-    STARS.forEach(function (st) {
-      bg.appendChild(css(G.icon('star', 'late__star'), { '--x': st[0], '--y': st[1], '--sz': st[2], '--tw': st[3] }));
+    var stars = STARS.map(function (st) {
+      var node = css(G.icon('star', 'late__star'), { '--sz': st[3], '--tw': st[4] });
+      bg.appendChild(node);
+      return { node: node, band: st[0], across: st[1], down: st[2], size: st[3] * 1.7 };
     });
 
     var value = h('span', '', F.int(n));
@@ -480,6 +487,26 @@
     // run into it. The two spacers keep the text centred on the slide exactly as if the
     // moon were not there; when room is tight the lower one gives way first.
     add(slide.body, [G.icon('moon', 'late__moon'), h('div', 'late__space late__space--a')].concat(kids, [h('div', 'late__space late__space--b')]));
+
+    // Place the stars once the text has its final position (and again on every resize).
+    var firstText = kids[0];
+    var lastText = kids[kids.length - 1];
+    slide.fits.push(function (unit) {
+      var width = slide.el.clientWidth / unit;
+      var height = slide.el.clientHeight / unit;
+      var bodyTop = slide.body.offsetTop / unit;
+      var textTop = bodyTop + firstText.offsetTop / unit;
+      var textBottom = bodyTop + (lastText.offsetTop + lastText.offsetHeight) / unit;
+      var bands = { top: [bodyTop + 2, textTop - 10], bottom: [textBottom + 14, height - 10] };
+      stars.forEach(function (star) {
+        var band = bands[star.band];
+        var room = band[1] - band[0] - star.size;
+        if (!(room >= 0) || !(width > 0)) { star.node.style.display = 'none'; return; }
+        star.node.style.display = '';
+        star.node.style.left = u(star.across * (width - star.size));
+        star.node.style.top = u(band[0] + star.down * room);
+      });
+    });
     return slide;
   }
 

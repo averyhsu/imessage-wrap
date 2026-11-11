@@ -101,7 +101,9 @@ html.is-ready .landing { opacity: 1; animation: none; }
 
 .l-h1 {
   margin-top: 18px;
-  font: 900 clamp(44px, 7.2vw, 92px) / 0.9 var(--font-display);
+  /* Not tighter: Archivo's ink (descender + ascender) is 0.95em, so at 0.9 the "g" and
+     "p" of one line touched the "h" and "d" of the next. tests/e2e measures the gap. */
+  font: 900 clamp(44px, 7.2vw, 92px) / 1.04 var(--font-display);
   font-stretch: 108%;
   letter-spacing: -0.035em;
 }
@@ -261,7 +263,7 @@ html.is-ready .landing { opacity: 1; animation: none; }
 .l-section { padding: clamp(28px, 5vw, 56px) 0; }
 
 .l-h2 {
-  font: 900 clamp(30px, 4.6vw, 52px) / 0.98 var(--font-display);
+  font: 900 clamp(30px, 4.6vw, 52px) / 1.04 var(--font-display);
   font-stretch: 108%;
   letter-spacing: -0.03em;
   text-wrap: balance;
@@ -309,7 +311,7 @@ html.is-ready .landing { opacity: 1; animation: none; }
 
 .l-step h3 {
   margin-top: 18px;
-  font: 900 24px/1.05 var(--font-display);
+  font: 900 24px/1.08 var(--font-display);
   letter-spacing: -0.02em;
 }
 
