@@ -1,5 +1,6 @@
-# XcodeGen spec. Generate the project with:  cd ios && ./scripts/sync-web.sh && xcodegen
-# The generated Wrapped.xcodeproj is gitignored on purpose.
+# XcodeGen spec. Generate the project with:
+#   cd ios && ./scripts/sync-web.sh && xcodegen
+# The generated Wrapped.xcodeproj and the synced WebBundle/ are gitignored on purpose.
 name: Wrapped
 
 options:
@@ -30,6 +31,10 @@ targets:
     sources:
       - path: App
       - path: Shared
+      # The web story, bundled as a folder reference so it lands at Wrapped.app/web/.
+      - path: WebBundle/web
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped
@@ -47,12 +52,17 @@ targets:
     sources:
       - path: MessagesExtension
       - path: Shared
+      - path: WebBundle/web
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped.MessagesExtension
         PRODUCT_NAME: WrappedMessages
         INFOPLIST_FILE: MessagesExtension/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: "iMessage App Icon"
+        # iPhone only in v1, like the app (XcodeGen's extension preset would add iPad).
+        TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: "YES"
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
     dependencies:
@@ -63,6 +73,10 @@ targets:
     platform: iOS
     sources:
       - path: Tests/Unit
+      # Copied from tests/vectors/ by scripts/sync-web.sh.
+      - path: WebBundle/fixtures/payload-v1.json
+        buildPhase: resources
+        optional: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.wrapped.tests
