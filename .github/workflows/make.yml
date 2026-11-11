@@ -13,7 +13,10 @@ on:
       - 'web/**'
       - 'wrapped/**'
       - 'tests/e2e/make/**'
+      - 'tests/e2e/lib.mjs'
+      - 'tests/js/make-*.test.js'
       - 'tests/fixtures/**'
+      - 'package*.json'
       - '.github/workflows/make.yml'
   workflow_dispatch:
 

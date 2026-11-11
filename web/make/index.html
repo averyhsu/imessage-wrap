@@ -122,6 +122,12 @@
           </button>
         </div>
 
+        <p class="mk-touch"><span class="mk-ico" data-icon="info"></span><span>On a phone or tablet? A Messages history cannot be read from here. Open this page on your Mac, or on the computer that holds your iPhone backup. On this device you can paste an export or try the sample.</span></p>
+
+        <!-- What is happening, or what went wrong: right where the files were added. -->
+        <div class="mk-work" id="work-source" hidden></div>
+        <div class="mk-alert" id="error-source" role="alert" hidden></div>
+
         <!-- Mac -->
         <div class="mk-panel" role="tabpanel" id="panel-mac" aria-labelledby="tab-mac">
           <div class="mk-drop" id="drop-mac">
@@ -211,9 +217,6 @@
           </div>
         </div>
 
-        <div class="mk-work" id="work-source" hidden></div>
-        <div class="mk-alert" id="error-source" role="alert" hidden></div>
-
         <p class="mk-sample">
           <span>Just looking?</span>
           <button type="button" class="mk-linkbtn mk-linkbtn--strong" id="try-sample"><span class="mk-ico" data-icon="sparkle"></span>Try it with sample data</button>
@@ -237,6 +240,8 @@
 
       <div class="mk-step__body" id="chat-body" hidden>
         <p class="mk-diag" id="diag"></p>
+        <div class="mk-work" id="work-chat" hidden></div>
+        <div class="mk-alert" id="error-chat" role="alert" hidden></div>
         <div class="mk-search" id="chat-search-wrap" hidden>
           <span class="mk-ico" data-icon="search"></span>
           <label class="sr-only" for="chat-search">Search your group chats</label>
@@ -244,8 +249,6 @@
         </div>
         <ul class="mk-chats" id="chats"></ul>
         <p class="mk-empty" id="chats-empty" hidden>No group chat matches that search.</p>
-        <div class="mk-work" id="work-chat" hidden></div>
-        <div class="mk-alert" id="error-chat" role="alert" hidden></div>
       </div>
     </section>
 

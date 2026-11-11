@@ -263,15 +263,32 @@
       box.appendChild(dots);
       box.appendChild(words);
     }
+    var fresh = box.hidden;
     box.hidden = false;
     box.querySelector('.mk-work__label').textContent = text;
     var track = box.querySelector('.mk-work__bar');
     track.hidden = fraction == null;
     if (fraction != null) track.firstChild.style.transform = 'scaleX(' + Math.max(0.02, Math.min(1, fraction)).toFixed(3) + ')';
+    if (fresh) {
+      box.closest('.mk-step').classList.add('is-busy');
+      keepInView(box);
+    }
     say(text);
   }
 
-  function idle(slot) { $('work-' + slot).hidden = true; }
+  function idle(slot) {
+    var box = $('work-' + slot);
+    box.hidden = true;
+    box.closest('.mk-step').classList.remove('is-busy');
+  }
+
+  /** Scroll just enough to show `node` when it is off screen. */
+  function keepInView(node) {
+    var rect = node.getBoundingClientRect();
+    if (rect.top < 8 || rect.bottom > root.innerHeight - 8) {
+      node.scrollIntoView({ block: 'center', behavior: REDUCED ? 'auto' : 'smooth' });
+    }
+  }
 
   /** Progress messages from the worker, in plain words. */
   function progressFor(slot) {
@@ -326,6 +343,7 @@
       box.appendChild(row);
     }
     box.hidden = false;
+    keepInView(box);
   }
 
   function clearError(slot) {
@@ -1705,6 +1723,8 @@
     for (var j = 0; j < holders.length; j++) setIcon(holders[j], holders[j].getAttribute('data-icon'));
     var host = '';
     try { host = new URL(Config.BASE_URL).host; } catch (error) { host = ''; }
+    // No mouse, only fingers: a phone or a tablet, which cannot reach a Messages history.
+    if (root.matchMedia && root.matchMedia('(hover: none) and (pointer: coarse)').matches) $('page').classList.add('is-touch');
     var hosts = doc.querySelectorAll('[data-host]');
     for (var k = 0; k < hosts.length; k++) hosts[k].textContent = host;
     var select = $('tz');

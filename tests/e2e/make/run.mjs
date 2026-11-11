@@ -3,7 +3,8 @@
 //   npm run test:make                       everything; exits non-zero on any failure
 //   node tests/e2e/make/run.mjs --only=mac,paste
 //
-// Sections: mac, nowal, search, backup, paste, sample, rename, guards, keyboard, matrix, shots.
+// Sections: mac, nowal, progress, search, backup, paste, sample, rename, guards, keyboard,
+// matrix, shots.
 //
 // The invented Messages databases are built into a temporary folder with
 // tests/fixtures/build_fixture.py and deleted afterwards; nothing is read from a real device
@@ -384,10 +385,26 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   eq(await page.locator('.mk-step.is-locked').count(), 3, 'steps 2 to 4 are locked until there are messages');
   eq(await text(page, '.mk-brand__name'), Config.PRODUCT_NAME, 'the product name comes from config.js');
 
-  // Without contact names.
+  // Without contact names. Watch what the page announces and whether its main thread stalls.
+  await page.evaluate(() => {
+    window.__said = [];
+    new MutationObserver(() => {
+      const now = document.getElementById('status').textContent;
+      if (now && window.__said[window.__said.length - 1] !== now) window.__said.push(now);
+    }).observe(document.getElementById('status'), { childList: true, characterData: true, subtree: true });
+    window.__stall = 0;
+    let last = performance.now();
+    setInterval(() => { const now = performance.now(); window.__stall = Math.max(window.__stall, now - last); last = now; }, 10);
+  });
   await addMac(page, [CHAT_DB, CHAT_WAL]);
   const plain = cliChats(['--db', CHAT_DB, '--no-contacts']);
   eq(await listed(page), plain.chats.map(brief), 'chat list matches `wrapped chats` (no contacts)');
+  const said = await page.evaluate(() => window.__said);
+  const stages = ['Loading the database reader', 'Reading chat.db (', 'Reading chat.db-wal (', 'Opening the database', 'Finding your group chats', 'Found 4 group chats'];
+  const order = stages.map((stage) => said.findIndex((line) => line.startsWith(stage)));
+  ok(order.every((at, i) => at !== -1 && (i === 0 || at > order[i - 1])), `progress is announced stage by stage (${said.join(' | ')})`);
+  const stall = await page.evaluate(() => window.__stall);
+  ok(stall < 1000, `the page stayed responsive while the database was read (longest pause ${Math.round(stall)} ms)`);
   const diag = await text(page, '#diag');
   ok(diag.includes(plain.diagnostics.messages.toLocaleString('en-US') + ' messages') && diag.includes(`${plain.diagnostics.chats} conversations`),
     `diagnostics line shows the totals (${diag.slice(0, 80)}…)`);
@@ -532,6 +549,32 @@ await section('nowal', 'Mac: chat.db alone warns, adding chat.db-wal fixes it', 
   await s.close();
 });
 
+// ── while the files are read ───────────────────────────────────────────────────────────
+await section('progress', 'While files are read: progress sits by the drop zone, the rest steps back', async () => {
+  const s = await open({ viewport: VIEWPORTS['phone-390'] });
+  const { page } = s;
+  ok(await visible(page, '.mk-touch'), 'on a touch device the page says a Messages history needs a computer');
+  // Hold SQLite's download back for a moment so the working state can be looked at.
+  await s.context.route('**/make/vendor/sql-wasm.wasm', (route) => setTimeout(() => route.continue(), 1500));
+  await page.setInputFiles('#input-mac', [CHAT_DB, CHAT_WAL]);
+  await page.waitForSelector('#work-source:not([hidden])');
+  await page.waitForFunction(() => /database reader/.test(document.getElementById('work-source').textContent));
+  ok(await page.locator('#step-source.is-busy').count() === 1, 'step 1 is marked busy');
+  eq(await page.evaluate(() => getComputedStyle(document.getElementById('panel-mac')).pointerEvents), 'none', 'the instructions cannot be clicked meanwhile');
+  await page.waitForTimeout(600);
+  const box = await page.locator('#work-source').boundingBox();
+  ok(box && box.y >= 0 && box.y + box.height <= VIEWPORTS['phone-390'].height, 'the progress line is scrolled into view');
+  ok(await page.locator('#work-source .mk-typing i').count() === 3, 'with the typing dots');
+  await page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  ok(await page.locator('.mk-step.is-busy').count() === 0 && !(await visible(page, '#work-source')), 'and it goes away when the chats are listed');
+  s.clean('progress');
+  await s.close();
+
+  const d = await open();
+  ok(!(await visible(d.page, '.mk-touch')), 'with a mouse there is no such note');
+  await d.close();
+});
+
 // ── many chats: search ─────────────────────────────────────────────────────────────────
 await section('search', 'Many group chats: the list can be searched', async () => {
   const many = path.join(EXTRA, 'many/chat.db');
@@ -646,6 +689,15 @@ await section('backup', 'iPhone backup: folder, two files, -wal, several backups
   await s.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
   eq(await listed(s.page), cliChats(['--db', CHAT_DB, '--no-contacts']).chats.map(brief), 'dropping the ~/Library/Messages folder itself works too');
   ok(!(await s.page.locator('#source-notes [data-note="wal_missing"]').isVisible()), 'and its -wal is picked up');
+  // ... and then the AddressBook folder, whose address books sit in Sources/<id>/.
+  await dropFolder(s.page, 'AddressBook', {
+    'AddressBook-v22.abcddb': BOOKS[0],
+    Metadata: {},
+    Sources: { '0A1B2C3D-FAKE-FAKE-FAKE-000000000001': { 'AddressBook-v22.abcddb': BOOKS[1] } },
+  });
+  await s.page.waitForFunction(() => /contact/.test(document.getElementById('source-summary').textContent), null, { timeout: 60000 });
+  await s.page.waitForSelector('#step-chat.is-active');
+  eq(await listed(s.page), cliChats(['--db', CHAT_DB, '--contacts', BOOK_DIR]).chats.map(brief), 'dropping the AddressBook folder afterwards adds the names');
   s.clean('dropped Messages folder');
   await s.close();
 
@@ -844,6 +896,19 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   eq(decode(renamed.preview).chat.name, 'Cabin People', 'the preview follows');
   await page.waitForFunction(() => document.getElementById('preview').contentWindow.document.title.includes('Cabin People'), null, { timeout: 15000 });
   ok(true, 'the story in the frame restarts with the new name');
+
+  // The story's last slide links to this page. Followed inside the frame, it must not
+  // start a second maker in there: the frame goes back to the story.
+  const workersBefore = s.requests.filter((u) => u.endsWith('/make/worker.js')).length;
+  await page.evaluate(() => { document.getElementById('preview').contentWindow.location.href = new URL('./', location.href).href; });
+  await page.waitForFunction(() => {
+    const inner = document.getElementById('preview').contentWindow;
+    return /index\.html$/.test(inner.location.pathname) && inner.WrappedStory && inner.WrappedStory.isActive();
+  }, null, { timeout: 20000 });
+  ok(true, 'a maker opened inside the preview is replaced by the story again');
+  eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workersBefore, 'and it never started working in there');
+  await page.locator('#replay').click();
+  ok(await (await previewFrame(page)).evaluate(() => window.WrappedStory.index === 0), '"Play again" restarts the story from the cover');
   await page.click('#restart');
   ok(await visible(page, '#step-source.is-active') && await page.locator('.mk-step.is-locked').count() === 3, 'start over: back to step 1, later steps locked');
   eq((await snap(page)).stats, null, 'and nothing is kept');
