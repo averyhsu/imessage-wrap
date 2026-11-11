@@ -204,7 +204,7 @@ const visible = (page, selector) => page.locator(selector).isVisible();
 const text = (page, selector) => page.locator(selector).innerText();
 const listed = (page) => page.$$eval('.mk-chat', (els) => els.map((e) => ({
   id: Number(e.dataset.chatId),
-  name: e.querySelector('.mk-chat__name').textContent,
+  name: e.querySelector('.mk-chat__name').textContent.replace(/⁠/g, ''),     // minus the invisible "keep together" marks
   members: Number(e.dataset.members),
   messages: Number(e.dataset.messages),
   last_unix: e.dataset.lastUnix === '' ? null : Number(e.dataset.lastUnix),
@@ -231,7 +231,17 @@ async function quotes(page, on) {
   if ((await page.locator('#quotes').isChecked()) !== on) await page.locator('.mk-switch__text').click();
   await page.waitForFunction((want) => document.getElementById('quotes').checked === want, on, { timeout: 10000 });
 }
+/**
+ * Press "Create recap". A recap is not made until the owner has typed their name or has
+ * chosen to stay "Me"; a test that is not about that choice takes "Me", which is also what
+ * the command-line tool calls the owner unless told otherwise.
+ */
 async function create(page) {
+  await page.evaluate(() => {
+    const name = document.getElementById('me-name');
+    const stay = document.getElementById('me-as-me');
+    if (!name.value.trim() && !stay.checked) stay.click();
+  });
   await page.click('#create');
   await page.waitForFunction(() => {
     const s = window.WrappedMake.snapshot();
@@ -241,7 +251,10 @@ async function create(page) {
 }
 /** Type a display name for the person whose row carries this key. */
 async function rename(page, key, name) {
-  await page.locator(`.mk-person[data-person="${key}"] input`).fill(name);
+  if (key !== 'me') return page.locator(`.mk-person[data-person="${key}"] input`).fill(name);
+  // The owner has a field of their own, which is switched off while they stay "Me".
+  await page.evaluate(() => { const stay = document.getElementById('me-as-me'); if (stay.checked) stay.click(); });
+  return page.locator('#me-name').fill(name);
 }
 const nowYear = (tz = LA) => Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric' }).format(new Date()));
 
@@ -552,7 +565,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   state = await create(page);
   ok(state.link.steps === 0 && state.link.length < 3000, `largest chat, first names: the link is short (${state.link.length} characters) and nothing is trimmed`);
   await page.click('#first-names');                 // full names: fourteen enormous ones
-  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'largest chat, full names: byte-identical');
+  await matchesCli(page, [String(STRESS), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Avery'], LA, 'largest chat, full names (the owner keeps the name typed for the first chat): byte-identical');
   state = await snap(page);
   ok(state.link.length <= 4800, `largest chat: the link fits (${state.link.length} characters, quotes off)`);
   ok(await page.locator('#quotes').isEnabled(), 'largest chat: quotes can still be switched on');
@@ -572,7 +585,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
   await period(page, 'all');
   await create(page);
   await page.click('#first-names');
-  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time'], LA, 'unnamed chat, full names: byte-identical');
+  await matchesCli(page, [String(UNNAMED), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', 'Asia/Tokyo', '--all-time', '--me', 'Avery'], LA, 'unnamed chat, full names: byte-identical');
   state = await snap(page);
   ok(state.stats.chat.name.includes('…') && (await page.getAttribute('#chat-name', 'placeholder')) === state.stats.chat.name, 'unnamed chat: its name is built from the members, masked');
   eq(leaks(JSON.stringify(decode(state.link.url))), [], 'unnamed chat: nothing raw in the link');
@@ -885,6 +898,33 @@ await section('backup', 'iPhone backup: folder, two files, -wal, several backups
   await page.waitForSelector('#step-chat.is-active');
   eq(await listed(page), cliChats(['--backup', walBackup, '--no-contacts']).chats.map(brief), 'with its -wal added the list matches the CLI');
   s.clean('backup with -wal');
+  await s.close();
+
+  // The same database in a backup that has no -wal file at all. Picked as a whole folder,
+  // the page can see there is no second file, so it does not ask for one; picked as a
+  // single file it cannot know, and says what to look for.
+  const bare = path.join(TMP, 'bare-backup', '00008030-000FAKE0FAKE0FAKE');
+  fs.cpSync(walBackup, bare, { recursive: true });
+  fs.rmSync(hashed(bare, WAL));
+  s = await open();
+  page = s.page;
+  await page.click('#tab-backup');
+  await page.setInputFiles('#input-backup-folder', bare);
+  await page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  eq(await page.locator('#source-notes [data-note="wal_missing"]').count(), 0, 'a whole backup folder with no -wal file in it: no warning about a file that does not exist');
+  ok(!/cd47480f/.test(await text(page, '#step-source')), 'and nothing asks for it');
+  await page.click('#start-over');
+  await page.click('#tab-backup');
+  await dropFolder(page, '00008030-000FAKE0FAKE0FAKE', { '3d': { [SMS]: hashed(bare, SMS) }, 'Manifest.plist': path.join(bare, 'Manifest.plist') });
+  await page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  eq(await page.locator('#source-notes [data-note="wal_missing"]').count(), 0, 'the same folder dropped on the page: no warning either');
+  await page.click('#start-over');
+  await page.click('#tab-backup');
+  await page.setInputFiles('#input-backup-files', [hashed(bare, SMS)]);
+  await page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  const maybe = await text(page, '#source-notes [data-note="wal_missing"]');
+  ok(/cd47480f/.test(maybe) && /If it does not, nothing is missing/.test(maybe), `the messages file picked on its own: the page says what to look for, and that it may not exist ("${maybe.slice(0, 80)}…")`);
+  s.clean('backup without a -wal');
   await s.close();
 
   // A folder that holds two backups: the newer one is used, and the page says so.
@@ -1224,8 +1264,8 @@ await section('rename', 'Tune: renaming and merging people keeps the numbers rig
   const unnamed = state.people.filter((p) => !p.named);
   eq(unnamed.length, 7, 'without an address book, seven people have no name');
   ok(unnamed.every((p) => p.handles.length === 1 && (p.name.startsWith('…') || !p.name.includes('@'))), 'they are listed under masked names');
-  ok(/7 people have no name yet/.test(await text(page, '#unnamed-hint')), 'the page explains it');
-  ok(/never go into the recap/.test(await text(page, '#unnamed-hint')), 'and says the full numbers stay here');
+  eq(await text(page, '#unnamed-hint'), '7 people have no name yet. Name them, or add your contacts file to fill them in.', 'a note above the list says so, and what can be done');
+  ok(/never go into the recap/.test(await text(page, '#unnamed-privacy')), 'and says the full numbers stay here');
   eq(await page.getAttribute('.mk-person[data-person="h:p:5550100001"] input', 'placeholder'), 'Who is …0001?', 'each row asks who the person is');
   ok((await text(page, '.mk-person[data-person="h:p:5550100001"]')).includes('+15550100001'), 'with the full number as a hint, on this device only');
 
@@ -1285,6 +1325,320 @@ await section('rename', 'Tune: renaming and merging people keeps the numbers rig
   ok(typed.stats.senders.some((x) => x.name === '…0006') && leaks(typed.statsJson).length === 0, 'a phone number typed as a name is masked like any other');
 
   s.clean('rename');
+  await s.close();
+});
+
+/** `wrapped stats` as it comes: first names, the way the page starts out. */
+const cliShort = (args, tz) => cli(['stats', ...args, '--compact'], tz).replace(/\n$/, '');
+async function matchesShort(page, args, message) {
+  const expected = cliShort(args, LA);
+  const got = (await settled(page)).statsJson;
+  return ok(got === expected, got === expected ? message : `${message}: ${got ? firstDifference(got, expected) : 'the page has no stats'}`);
+}
+
+// ── your own name ──────────────────────────────────────────────────────────────────────
+await section('name', 'Your name: asked first, needed for a recap, "Me" only by choice', async () => {
+  const s = await open();
+  const { page } = s;
+  await addMac(page, [CHAT_DB, CHAT_WAL, ...BOOKS]);
+  await pick(page, TACO);
+  const base = [String(TACO), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', LA, '--all-time'];
+  const first = await page.evaluate(() => {
+    const field = [...document.querySelectorAll('#tune-body input, #tune-body select, #tune-body button, #tune-body textarea')]
+      .filter((el) => el.offsetParent !== null)[0];
+    return { id: field.id, label: document.querySelector('label[for="' + field.id + '"]').textContent, placeholder: field.placeholder, value: field.value };
+  });
+  eq(first, { id: 'me-name', label: 'Your name in the recap', placeholder: 'First name', value: '' },
+    'the first thing step 3 asks for is your name, and it starts empty');
+  eq(await page.getAttribute('#me-name', 'autocomplete'), 'given-name', 'the browser may offer the name it knows');
+  const mine = (await snap(page)).people.find((p) => p.me).messages;
+  ok((await text(page, '#me-hint')).includes(mine.toLocaleString('en-US') + ' messages'), 'it says how many messages will carry that name');
+  ok(!(await visible(page, '#me-error')), 'nothing is flagged before anything was tried');
+  eq(await page.locator('.mk-person[data-person="me"]').count(), 0, 'the owner is not asked for again in the list of people');
+
+  // Create without a name: nothing is made, the field says why and takes the focus.
+  await period(page, 'all');
+  await page.click('#create');
+  await page.waitForSelector('#me-error:not([hidden])');
+  let state = await snap(page);
+  ok(!state.created && state.stats === null && !(await visible(page, '#recap')) && await visible(page, '#step-recap.is-locked'), 'Create without a name makes no recap');
+  ok(/Type your first name/.test(await text(page, '#me-error')), 'the field says what is missing');
+  eq(await page.evaluate(() => document.activeElement.id), 'me-name', 'and it has the focus');
+  eq(await page.getAttribute('#me-name', 'aria-invalid'), 'true', 'it is marked as invalid');
+  ok((await page.getAttribute('#me-name', 'aria-describedby')).split(' ').includes('me-error'), 'with the message tied to it');
+  ok(/first name/i.test(await text(page, '#status')), 'and the live region says so');
+  await page.waitForTimeout(500);
+  const box = await page.locator('#me-field').boundingBox();
+  const tall = page.viewportSize().height;
+  ok(box.y >= 0 && box.y + box.height <= tall, 'the field is scrolled into view');
+
+  // Type it: the complaint goes, the recap is made with that name.
+  await page.keyboard.type('Avery');
+  ok(!(await visible(page, '#me-error')) && (await page.getAttribute('#me-name', 'aria-invalid')) === null, 'typing a name clears the message');
+  state = await create(page);
+  ok(state.created && state.options.me === 'Avery', 'now Create makes the recap');
+  ok(state.stats.senders.some((x) => x.name === 'Avery') && !state.stats.senders.some((x) => x.name === 'Me'), 'with the owner under their own name, not "Me"');
+  await matchesShort(page, [...base, '--me', 'Avery'], 'the recap is byte-identical to `wrapped stats --me Avery` (first names, as both start out)');
+
+  // Emptied afterwards: the recap on show is not remade for nobody.
+  await page.fill('#me-name', '');
+  await page.waitForSelector('#me-error:not([hidden])');
+  await page.waitForTimeout(700);
+  state = await snap(page);
+  ok(!state.busy && state.stats.senders.some((x) => x.name === 'Avery'), 'emptying the field afterwards asks again and leaves the recap as it was');
+
+  // A first name someone else already goes by: they get an initial, nobody is merged.
+  await page.fill('#me-name', 'Ines');
+  state = await settled(page);
+  eq(await page.inputValue('.mk-person[data-person="n:Ines Calloway"] input'), 'Ines C.', 'someone who shares the owner\'s first name gets an initial');
+  ok(state.stats.senders.some((x) => x.name === 'Ines') && state.stats.senders.some((x) => x.name === 'Ines C.'), 'so the two are still two people');
+  await matchesShort(page, [...base, '--me', 'Ines'], 'exactly as the command-line tool does it with --me Ines');
+  await rename(page, 'n:Ines Calloway', 'Ines');
+  ok(/counted together/i.test(await text(page, '#me-hint')), 'giving someone the owner\'s exact name is allowed, and the page says what that does');
+  await rename(page, 'n:Ines Calloway', '');
+
+  // Staying "Me" is a choice.
+  await page.locator('.mk-check').click();
+  ok(await page.locator('#me-name').isDisabled() && await page.locator('#me-as-me').isChecked(), '"Leave me as Me" is a box to tick, and it switches the field off');
+  state = await settled(page);
+  ok(state.options.me === 'Me' && state.stats.senders.some((x) => x.name === 'Me'), 'then, and only then, the owner is "Me"');
+  ok(/under .Me./.test(await text(page, '#me-hint')), 'and the page says that everyone will see "Me"');
+  eq(await page.inputValue('.mk-person[data-person="n:Ines Calloway"] input'), 'Ines', 'nobody needs an initial because of the owner any more');
+  await matchesShort(page, base, 'byte-identical to `wrapped stats` with its default owner');
+
+  // Another chat from the same messages: the same person, so the choice is kept.
+  await page.click('#another');
+  await page.waitForSelector('#step-chat.is-active');
+  await pick(page, UNNAMED);
+  ok(await page.locator('#me-as-me').isChecked(), 'choosing another chat keeps the choice');
+  await page.locator('.mk-check').click();
+  eq(await page.inputValue('#me-name'), 'Ines', 'and the name that was typed');
+  ok(await page.locator('#me-name').isEnabled(), 'unticking the box brings the field back');
+
+  // Starting over forgets it; the sample brings an invented owner of its own.
+  await page.click('#start-over');
+  await page.click('#try-sample');
+  await page.waitForSelector('#step-tune.is-active', { timeout: 30000 });
+  eq(await page.inputValue('#me-name'), 'Marisol', 'the sample chat comes with an invented name for its owner');
+  await page.click('#create');
+  await page.waitForFunction(() => { const x = window.WrappedMake.snapshot(); return x.created && !x.busy; }, null, { timeout: 30000 });
+  ok((await snap(page)).stats.senders.some((x) => x.name === 'Marisol'), 'so the sample recap can be made with one click');
+  await page.click('#restart');
+  await addMac(page, [CHAT_DB, CHAT_WAL]);
+  await pick(page, TACO);
+  eq([await page.inputValue('#me-name'), await page.locator('#me-as-me').isChecked()], ['', false], 'other messages after that start with an empty name again');
+
+  s.clean('name');
+  await s.close();
+});
+
+// ── people without a name, and contact names added late ────────────────────────────────
+await section('contacts', 'People without a name: a note, listed first, the contacts file one click away', async () => {
+  const s = await open();
+  const { page } = s;
+  await addMac(page, [CHAT_DB, CHAT_WAL]);
+  await pick(page, TACO);
+  const rows = () => page.$$eval('.mk-person', (els) => els.map((e) => ({ key: e.dataset.person, unnamed: e.classList.contains('is-unnamed') })));
+  const firstNamed = (list) => { const at = list.findIndex((r) => !r.unnamed); return at < 0 ? list.length : at; };
+
+  ok(await visible(page, '#unnamed-box'), 'a note sits at the top of the list of people');
+  eq(await text(page, '#unnamed-hint'), '7 people have no name yet. Name them, or add your contacts file to fill them in.', 'it says how many have no name and what to do');
+  eq(await text(page, '#add-contacts'), 'Add your contacts file', 'with a button for the contacts file right there');
+  const above = await page.evaluate(() => document.getElementById('unnamed-box').getBoundingClientRect().bottom <= document.getElementById('people').getBoundingClientRect().top);
+  ok(above, 'above the first person');
+  await page.locator('#contacts-where summary').click();
+  ok(await visible(page, '#contacts-where-mac') && !(await visible(page, '#contacts-where-backup')) &&
+    (await text(page, '#contacts-where-mac')).includes('~/Library/Application Support/AddressBook'), '"Where is it?" gives the folder on a Mac');
+  ok(await page.locator('#create').isEnabled() && !(await visible(page, '#error-tune')), 'none of this stands in the way of creating');
+
+  // Say who you are, pick a period and name one person by hand; then make the recap.
+  await rename(page, 'me', 'Avery');
+  await period(page, 'all');
+  await rename(page, 'h:p:5550100002', 'Bramble');
+  eq(await text(page, '#unnamed-hint'), '6 people have no name yet. Name them, or add your contacts file to fill them in.', 'the count follows as names are typed');
+  let state = await create(page);
+  ok(state.stats.senders.some((x) => x.name === '…0001') && state.stats.senders.some((x) => x.name === 'Bramble'), 'a recap can be made with people still unnamed');
+  const workers = s.requests.filter((u) => u.endsWith('/make/worker.js')).length;
+
+  // A contacts file that does not know these people.
+  await page.setInputFiles('#input-contacts', [BOOKS[0]]);
+  await page.waitForSelector('#contacts-note:not([hidden])', { timeout: 30000 });
+  ok(/none of them is one of the people without a name/.test(await text(page, '#contacts-note')) && /Sources/.test(await text(page, '#contacts-note')),
+    `a contacts file without these people says so, and where else to look: "${await text(page, '#contacts-note')}"`);
+  eq(await text(page, '#add-contacts'), 'Add another contacts file', 'the button now offers another one');
+  eq(await text(page, '#unnamed-hint'), '6 people have no name yet: they are not in the contacts you added. Name them, or add another contacts file.', 'and the note says where things stand');
+
+  // The one that does.
+  await page.setInputFiles('#input-contacts', [BOOKS[1]]);
+  await page.waitForFunction(() => /more people have a name now/.test(document.getElementById('contacts-note').textContent), null, { timeout: 30000 });
+  ok(/6 more people have a name now/.test(await text(page, '#contacts-note')), `the page says what the contacts did: "${await text(page, '#contacts-note')}"`);
+  state = await settled(page);
+  ok(await visible(page, '#step-tune.is-active') && state.chat.id === TACO, 'the chosen chat stays chosen');
+  eq([await page.inputValue('#me-name'), await page.locator('input[name="period"]:checked').getAttribute('value')], ['Avery', 'all'], 'your name and the period are as you left them');
+  eq(await page.inputValue('.mk-person[data-person="n:Bram Okoye"] input'), 'Bramble', 'a name typed by hand stays with its person');
+  ok((await text(page, '.mk-person[data-person="n:Bram Okoye"]')).includes('Bram Okoye'), 'with the name from the contacts beside it as a hint');
+  eq(await page.inputValue('.mk-person[data-person="n:Sam Rivera"] input'), 'Sam R.', 'the others get the first names from the contacts');
+  let list = await rows();
+  eq(list[0], { key: 'h:p:5550100006', unnamed: true }, 'the one person who is still unnamed is listed first');
+  ok(list.slice(firstNamed(list)).every((r) => !r.unnamed), 'nobody without a name comes after someone with one');
+  eq(await text(page, '#unnamed-hint'), 'One person has no name yet: they are not in the contacts you added. Name them, or add another contacts file.', 'the note counts one');
+  ok(/contacts?/.test(await text(page, '#source-summary')) && (await page.locator('#source-notes [data-note="no_contacts"]').count()) === 0, 'step 1\'s summary now shows the contacts');
+  eq(state.stats.senders.map((x) => x.name).sort(), ['Avery', 'Bramble', 'Ines', 'Sam C.', 'Sam R.', 'Zoë', '…0006'].sort(), 'the recap that was showing is remade with the names');
+  eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workers, 'without starting over: the same reader, the database is not read again');
+  await rename(page, 'n:Bram Okoye', '');
+  await matchesShort(page, [String(TACO), '--db', CHAT_DB, '--contacts', BOOK_DIR, '--tz', LA, '--all-time', '--me', 'Avery'],
+    'and, the hand-typed name aside, it is byte-identical to `wrapped stats --contacts`');
+  eq(leaks(JSON.stringify(decode((await snap(page)).link.url))), [], 'nothing raw in the link');
+
+  // The same file again, and a file that is no contacts file.
+  await page.setInputFiles('#input-contacts', [BOOKS[1]]);
+  await page.waitForFunction(() => /already added/.test(document.getElementById('contacts-note').textContent));
+  ok(true, 'the same contacts file twice is read once');
+  await page.setInputFiles('#input-contacts', [path.join(EXTRA, 'other/library.db')]);
+  await page.waitForSelector('#error-tune:not([hidden])', { timeout: 30000 });
+  ok(/not a contacts file/i.test(await text(page, '#error-tune')) && /\.abcddb/.test(await text(page, '#error-tune')), 'another kind of file is refused in words, with what to look for');
+  ok(await visible(page, '#step-tune.is-active') && (await page.inputValue('.mk-person[data-person="n:Sam Rivera"] input')) === 'Sam R.' && !(await snap(page)).busy, 'and nothing changed');
+  s.clean('contacts');
+  await s.close();
+
+  // Dropped on the page while tuning: same thing.
+  const d = await open();
+  await addMac(d.page, [CHAT_DB, CHAT_WAL]);
+  await pick(d.page, TACO);
+  await rename(d.page, 'h:p:5550100003', 'Samwise');
+  await dropFiles(d.page, [BOOKS[1]]);
+  await d.page.waitForFunction(() => /have a name now/.test(document.getElementById('contacts-note').textContent), null, { timeout: 30000 });
+  eq(await d.page.inputValue('.mk-person[data-person="n:Sam Rivera"] input'), 'Samwise', 'a contacts file dropped on the page while tuning fills in the names and keeps what was typed');
+  d.clean('contacts dropped');
+  await d.close();
+
+  // An iPhone backup read from its messages file alone: the note points into the backup.
+  const b = await open();
+  const inBackup = (id) => path.join(BACKUP, id.slice(0, 2), id);
+  await b.page.click('#tab-backup');
+  await b.page.setInputFiles('#input-backup-files', [inBackup('3d0d7e5fb2ce288813306e4d4636395e047a3d28')]);
+  await b.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  await pick(b.page, TACO);
+  await b.page.locator('#contacts-where summary').click();
+  ok(await visible(b.page, '#contacts-where-backup') && (await text(b.page, '#contacts-where-backup')).includes('31bb7ba8'), 'for an iPhone backup, "Where is it?" names the file inside the backup');
+  await b.page.setInputFiles('#input-contacts', [inBackup('31bb7ba8914766d4ba40d6dfb6113c8b614be442')]);
+  await b.page.waitForFunction(() => /have a name now/.test(document.getElementById('contacts-note').textContent), null, { timeout: 30000 });
+  await period(b.page, 'all');
+  await create(b.page);
+  await b.page.click('#first-names');
+  await matchesCli(b.page, [String(TACO), '--backup', BACKUP, '--tz', LA, '--all-time'], LA, 'with the backup\'s contacts added late, the stats are byte-identical to `wrapped stats --backup`');
+  b.clean('contacts for a backup');
+  await b.close();
+
+  // An export has no contacts file to add: the note only asks for names.
+  const p = await open();
+  await p.page.click('#tab-paste');
+  await p.page.fill('#paste-text', '#dates\n2026-03-01T10:00:00-08:00\n2026-03-01T10:05:00-08:00\n2026-03-01T10:09:00-08:00\n#senders\n+15550107001\nMaya\n+15550107001\n');
+  await p.page.click('#paste-go');
+  await p.page.waitForSelector('#step-tune.is-active', { timeout: 30000 });
+  ok(/^One person has no name yet\. Name them below/.test(await text(p.page, '#unnamed-hint')) && !(await visible(p.page, '#add-contacts')), 'a pasted export: the note asks for the name, and offers no contacts file');
+  list = await p.page.$$eval('.mk-person', (els) => els.map((e) => e.classList.contains('is-unnamed')));
+  eq(list, [true, false], 'and the unnamed sender is listed first');
+  p.clean('contacts, pasted export');
+  await p.close();
+});
+
+// ── names every object already has ─────────────────────────────────────────────────────
+await section('hostile', 'People called constructor, toString or __proto__ are people like any other', async () => {
+  const HOSTILE = path.join(EXTRA, 'hostile/chat.db');
+  const HOSTILE_BOOK = path.join(EXTRA, 'hostile/AddressBook-v22.abcddb');
+  const names = (state) => state.stats.senders.map((x) => x.name).sort();
+
+  // As the sender itself, in a database.
+  let s = await open();
+  let page = s.page;
+  await addMac(page, [HOSTILE]);
+  await pick(page, 1);
+  ok(await visible(page, '#step-tune.is-active') && !(await visible(page, '#error-chat')), 'a chat whose senders are called constructor, toString and __proto__ opens');
+  eq((await snap(page)).people.filter((p) => !p.me).map((p) => p.name).sort(), ['__proto__', 'constructor', 'hasOwnProperty', 'toString', 'valueOf'], 'they are listed under those names');
+  await period(page, 'all');
+  let state = await create(page);
+  eq(names(state), ['Me', '__proto__', 'constructor', 'hasOwnProperty', 'toString', 'valueOf'], 'and counted under them');
+  await matchesCli(page, ['1', '--db', HOSTILE, '--no-contacts', '--tz', LA, '--all-time'], LA, 'sender names: byte-identical to the command-line tool');
+  eq(decode(state.link.url).senders.map((x) => x.name).sort(), names(state), 'the link carries the same names');
+  await rename(page, 'n:constructor', '__proto__');
+  state = await settled(page);
+  ok(!names(state).includes('constructor') && (await page.locator('.mk-tag--merge').count()) === 2, 'renaming one of them to another counts the two together, like anyone else');
+  await rename(page, 'me', 'toString');
+  state = await settled(page);
+  ok(state.options.me === 'toString' && /counted together/i.test(await text(page, '#me-hint')), 'the owner can be called that too');
+  s.clean('hostile handles');
+  await s.close();
+
+  // As names in the address book: first names by default, so the first word is what matters.
+  s = await open();
+  page = s.page;
+  await addMac(page, [HOSTILE, HOSTILE_BOOK]);
+  await pick(page, 2);
+  ok(await visible(page, '#step-tune.is-active'), 'a chat whose contacts are called constructor Jones and __proto__ Smith opens (it used to stop here, silently)');
+  await period(page, 'all');
+  state = await create(page);
+  eq(names(state), ['Me', '__proto__', 'constructor J.', 'constructor N.', 'hasOwnProperty', 'toString'], 'first names, with an initial for the two who share one');
+  await matchesShort(page, ['2', '--db', HOSTILE, '--contacts', HOSTILE_BOOK, '--tz', LA, '--all-time'], 'contact names, first names: byte-identical to the command-line tool');
+  await page.click('#first-names');
+  await matchesCli(page, ['2', '--db', HOSTILE, '--contacts', HOSTILE_BOOK, '--tz', LA, '--all-time'], LA, 'contact names in full: byte-identical too');
+  const story = await storyTotal((await snap(page)).link.url);
+  eq(story.total, (await snap(page)).stats.totals.messages, 'and the story plays the link');
+  s.clean('hostile contacts');
+  await s.close();
+
+  // The same people named late, from the contacts button in step 3.
+  s = await open();
+  page = s.page;
+  await addMac(page, [HOSTILE]);
+  await pick(page, 2);
+  await page.setInputFiles('#input-contacts', [HOSTILE_BOOK]);
+  await page.waitForFunction(() => /have a name now/.test(document.getElementById('contacts-note').textContent), null, { timeout: 30000 });
+  await period(page, 'all');
+  state = await create(page);
+  eq(names(state), ['Me', '__proto__', 'constructor J.', 'constructor N.', 'hasOwnProperty', 'toString'], 'added late, the same names');
+  s.clean('hostile contacts, late');
+  await s.close();
+
+  // Pasted.
+  s = await open();
+  page = s.page;
+  const senders = ['constructor', 'toString', '__proto__', '', 'constructor', 'valueOf', '__proto__', 'hasOwnProperty', 'toString', 'constructor'];
+  const source = '#dates\n' + senders.map((_, i) => `2026-04-0${1 + (i % 9)}T1${i % 10}:15:00-07:00`).join('\n') + '\n#senders\n' + senders.join('\n') + '\n';
+  await page.click('#tab-paste');
+  await page.fill('#paste-text', source);
+  await page.click('#paste-go');
+  await page.waitForSelector('#step-tune.is-active', { timeout: 30000 });
+  await period(page, 'all');
+  state = await create(page);
+  eq(names(state), ['Me', '__proto__', 'constructor', 'hasOwnProperty', 'toString', 'valueOf'], 'a pasted export with those senders is read and counted');
+  eq(state.statsJson, exportStats(source, LA), 'exactly as the engine counts that text');
+  s.clean('hostile paste');
+  await s.close();
+
+  // And if something on the page does throw one day, the person is told, on the page.
+  s = await open();
+  page = s.page;
+  await addMac(page, [CHAT_DB, CHAT_WAL]);
+  await page.evaluate(() => { window.__real = window.WrappedEngine.shortNames; window.WrappedEngine.shortNames = () => { throw new TypeError('names fell over'); }; });
+  await page.click(`.mk-chat[data-chat-id="${TACO}"]`);
+  await page.waitForSelector('#error-chat:not([hidden])', { timeout: 30000 });
+  const said = await text(page, '#error-chat');
+  ok(/Something went wrong on this page/.test(said) && /Nothing was sent anywhere/.test(said) && /names fell over/.test(said), `an exception while a step opens ends in a message on the page: "${said.replace(/\n/g, ' ').slice(0, 120)}…"`);
+  state = await snap(page);
+  ok(!state.busy && state.chat === null && await visible(page, '#step-chat.is-active') && (await page.locator('.mk-step.is-busy').count()) === 0, 'nothing is left spinning: the page is back on the step before');
+  ok(/went wrong/i.test(await text(page, '#status')), 'and it is announced');
+  await page.evaluate(() => { window.WrappedEngine.shortNames = window.__real; });
+  await pick(page, TACO);
+  ok(await visible(page, '#step-tune.is-active') && !(await visible(page, '#error-chat')), 'trying again works once the cause is gone');
+  // The same for a throw in a plain click, far from any step change.
+  await page.evaluate(() => { window.WrappedEngine.shortNames = () => { throw new RangeError('toggle fell over'); }; });
+  await rename(page, 'h:p:5550100001', 'Ines Calloway');
+  await page.click('#first-names');
+  await page.waitForSelector('#error-tune:not([hidden])', { timeout: 30000 });
+  ok(/toggle fell over/.test(await text(page, '#error-tune')), 'an exception in an ordinary click is shown too');
+  eq(s.foreign, [], 'none of this left the origin');
+  ok(s.problems.length > 0 && s.problems.every((line) => /fell over/.test(line)), 'the only errors in the console are the two that were planted');
   await s.close();
 });
 
@@ -1375,6 +1729,29 @@ await section('guards', 'Errors are sentences with a next step', async () => {
 
   s.clean('guards');
   await s.close();
+
+  // Several files called chat.db: one is read, and the page says which.
+  const twinA = path.join(EXTRA, 'twins/a/chat.db');
+  const twinB = path.join(EXTRA, 'twins/b/chat.db');
+  fs.utimesSync(twinA, new Date('2026-05-02T12:00:00Z'), new Date('2026-05-02T12:00:00Z'));
+  fs.utimesSync(twinB, new Date('2026-06-03T12:00:00Z'), new Date('2026-06-03T12:00:00Z'));
+  const t = await open();
+  await addMac(t.page, [twinA, twinB]);
+  let twins = await text(t.page, '#source-notes [data-note="twins"]');
+  ok(/You added 2 files called chat\.db/.test(twins) && /this is the one that was used: chat\.db \(\d+ KB, last changed May 2, 2026\)/.test(twins) && /start over and add only that one/.test(twins),
+    `two files with the same name: the page says which was read and how to pick the other ("${twins}")`);
+  eq((await listed(t.page)).map((c) => c.name), ['Folder A'], 'and that is the one whose chats are listed');
+  // The same two inside one folder: the path tells them apart.
+  await t.page.click('#start-over');
+  await t.page.click('#tab-backup');
+  await t.page.setInputFiles('#input-backup-folder', path.join(EXTRA, 'twins'));
+  await t.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
+  twins = await text(t.page, '#source-notes [data-note="twins"]');
+  const used = (/was used: (twins\/[ab]\/chat\.db) \(/.exec(twins) || [])[1];
+  ok(!!used, `picked as a folder, the note gives the path of the one that was read ("${twins}")`);
+  eq((await listed(t.page)).map((c) => c.name), [used === 'twins/a/chat.db' ? 'Folder A' : 'Folder B'], 'which is the one whose chats are listed');
+  t.clean('same-named files');
+  await t.close();
 });
 
 // ── 8. keyboard, focus, live status, reduced motion ────────────────────────────────────
@@ -1402,7 +1779,18 @@ await section('keyboard', 'Keyboard only, focus, announcements, reduced motion',
   eq(await active(), 'h-tune', 'focus moves to the step that opened');
   ok(/sample chat is ready/i.test(await text(page, '#status')), 'and the live region announces it');
   await page.keyboard.press('Tab');
-  ok(await page.evaluate(() => document.activeElement.name === 'period'), 'the next Tab stop is the first control of that step');
+  eq(await active(), 'me-name', 'the next Tab stop is the first field of that step: your name');
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await page.focus('#create');
+  await page.keyboard.press('Enter');
+  eq([await active(), (await snap(page)).created], ['me-name', false], 'Create without a name puts the focus back in that field instead');
+  ok(/first name/i.test(await text(page, '#status')), 'and says why');
+  await page.keyboard.type('Kit');
+  await page.keyboard.press('Tab');
+  eq(await active(), 'me-as-me', 'next comes the "Leave me as Me" box');
+  await page.keyboard.press('Tab');
+  ok(await page.evaluate(() => document.activeElement.name === 'period'), 'and then the period');
   const chosen = () => page.locator('input[name="period"]:checked').getAttribute('value');
   const first = await chosen();
   await page.keyboard.press('ArrowRight');
@@ -1441,6 +1829,24 @@ await section('matrix', 'No sideways overflow at 360, 390, 768 and 1440 px, at e
     await page.setInputFiles('#input-mac', [fx(P.backup_sms)]);       // a wrong name is fine: it is still a Messages database
     await page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
     await check('step 2, chat list');
+    // A chat is picked by its name, so the name is never cut short (it may take two
+    // lines), and the line under it wraps instead of ending in an ellipsis.
+    const cut = await page.$$eval('.mk-chat', (els) => els.flatMap((chat) => {
+      const name = chat.querySelector('.mk-chat__name');
+      const meta = chat.querySelector('.mk-chat__meta');
+      const lines = Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight));
+      const out = [];
+      if (name.scrollHeight > name.clientHeight + 1 && lines < 2) out.push('name cut on one line: ' + name.textContent);
+      if (meta.scrollWidth > meta.clientWidth + 1) out.push('meta cut: ' + meta.textContent);
+      if (getComputedStyle(name).whiteSpace === 'nowrap' || getComputedStyle(meta).textOverflow === 'ellipsis') out.push('still set to cut: ' + name.textContent);
+      if ([...meta.children].some((part) => part.getClientRects().length !== 1)) out.push('a piece of the meta line is split: ' + meta.textContent);
+      return out;
+    }));
+    eq(cut, [], `${name}: chat names wrap instead of being cut, and the line under them stays whole`);
+    if (viewport.width <= 360) {
+      const taco = await page.$eval(`.mk-chat[data-chat-id="${TACO}"] .mk-chat__name`, (el) => ({ shown: el.scrollHeight <= el.clientHeight + 1, text: el.textContent }));
+      ok(taco.shown && taco.text.includes('Taco Tuesday Crew'), `${name}: "Taco Tuesday Crew" is shown in full`);
+    }
     await pick(page, STRESS);                                          // 14 people with enormous names
     await check('step 3, tune (longest names)');
     await period(page, 'custom');

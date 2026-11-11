@@ -50,9 +50,11 @@
     chats: [],
     chat: null,         // {id, name, named, members, messages, last_unix, single}
     people: [],         // from the worker: [{key, name, named, handles, messages, me}]
-    names: {},          // person key -> the name to show for them (typed, or a first name)
+    names: table(),     // person key -> the name to show for them (typed, or a first name)
     shortened: null,    // person key -> {short, before}: who was switched to a first name
-    me: 'Me',
+    firstNames: true,   // first names are in use (the default)
+    me: '',             // the owner's name as typed; a recap is not made without it ...
+    meAsMe: false,      // ... unless they chose to stay "Me"
     chatName: '',       // typed chat name ("" = the chat's own)
     period: 'year',
     start: '',
@@ -91,16 +93,24 @@
     return error;
   }
 
-  var dayFormats = {};
+  // A note on tables. Wherever a string that came from the person's data (a name, a
+  // time zone, a key) is used to look something up, the table is a Map or an object with
+  // no prototype, never a plain {}: a plain object already "has" constructor, toString
+  // and __proto__, and someone in a chat may well be called that.
+  function table() { return Object.create(null); }
+
+  var dayFormats = new Map();
   function dayFormat(tz) {
-    var key = tz || 'local';
-    if (!dayFormats[key]) {
+    var key = tz || '';
+    if (!dayFormats.has(key)) {
       var options = { month: 'short', day: 'numeric', year: 'numeric' };
       if (tz) options.timeZone = tz;
-      try { dayFormats[key] = new Intl.DateTimeFormat('en-US', options); }
-      catch (error) { dayFormats[key] = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+      var format;
+      try { format = new Intl.DateTimeFormat('en-US', options); }
+      catch (error) { format = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); }
+      dayFormats.set(key, format);
     }
-    return dayFormats[key];
+    return dayFormats.get(key);
   }
 
   /** Unix seconds -> "Nov 10, 2026" in the chosen time zone. */
@@ -143,6 +153,16 @@
     } catch (error) {
       return new Date(unix * 1000).getFullYear();
     }
+  }
+
+  /**
+   * A name as it is put on the page. A masked label is an ellipsis and four digits, and a
+   * browser is free to break the line between the two; an invisible "do not break here"
+   * (U+2060) after the ellipsis keeps it in one piece. For display only: what is counted,
+   * compared and put in the link is the name itself.
+   */
+  function unbroken(name) {
+    return String(name || '').replace(/\u2026(?=[0-9])/g, '\u2026\u2060');
   }
 
   function initial(name) {
@@ -575,7 +595,7 @@
     }
     if (hasChat) {
       var c = S.chat;
-      bubble($('chat-summary'), c.name, plural(c.members, 'person', 'people') + ' \u00B7 ' + plural(c.messages, 'message'));
+      bubble($('chat-summary'), unbroken(c.name), plural(c.members, 'person', 'people') + ' \u00B7 ' + plural(c.messages, 'message'));
       $('chat-meta').textContent = c.single ? (S.source.kind === 'sample' ? 'The sample has one chat.' : 'An export holds one chat.') : '';
     }
     var single = !hasChat || S.chat.single;
@@ -622,13 +642,17 @@
       S.source = null;
       S.chats = [];
       $('chat-search').value = '';
+      // The owner's name belongs to the source: another chat from the same messages is
+      // the same person's, other messages (or the sample) may be someone else's.
+      S.me = '';
+      S.meAsMe = false;
     }
     if (from <= 2) {
       S.chat = null;
       S.people = [];
-      S.names = {};
+      S.names = table();
       S.shortened = null;
-      S.me = 'Me';
+      S.firstNames = true;
       S.chatName = '';
     }
     S.created = false;
@@ -646,7 +670,7 @@
     computeBusy = false;
     computeAgain = false;
     ['source', 'chat', 'tune', 'recap'].forEach(clearError);
-    ['source', 'chat', 'recap'].forEach(idle);
+    ['source', 'chat', 'tune', 'recap'].forEach(idle);
   }
 
   function startOver() {
@@ -727,6 +751,26 @@
     return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
   }
 
+  function sameName(a, b) { return baseName(a).toLowerCase() === baseName(b).toLowerCase(); }
+
+  /** The folder a picked file sits in, where the browser says ("" for a loose file). */
+  function folderOf(file) {
+    var path = String(file.webkitRelativePath || '');
+    var cut = path.lastIndexOf('/');
+    return cut < 0 ? '' : path.slice(0, cut);
+  }
+
+  function sizeOf(bytes) {
+    var mb = bytes / (1024 * 1024);
+    return mb >= 10 ? Math.round(mb) + ' MB' : mb >= 0.1 ? mb.toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+  }
+
+  /** Enough about a file to tell it from another with the same name. */
+  function describeFile(file) {
+    var when = file.lastModified ? ', last changed ' + day(Math.floor(file.lastModified / 1000)) : '';
+    return (file.webkitRelativePath || file.name) + ' (' + sizeOf(file.size) + when + ')';
+  }
+
   function looksLikeExport(file) {
     return /\.(txt|csv|tsv|json|jsonl|ndjson)$/i.test(file.name || '') || /^text\//.test(file.type || '') ||
       file.type === 'application/json';
@@ -757,15 +801,30 @@
     }
 
     if (found.messages) {
+      // Several files called chat.db (a folder of copies, say): one is read, and the page
+      // says which. Its -wal is the one from the same folder, where that can be told.
+      var twins = chosen.files.filter(function (file) { return sameName(file, found.messages); });
+      var wal = found.messagesWal || null;
+      if (twins.length > 1 && found.kind !== 'backup' && folderOf(found.messages)) {
+        wal = wals.filter(function (file) { return folderOf(file) === folderOf(found.messages); })[0] || null;
+      }
       S.files = {
         db: found.messages,
-        wal: found.messagesWal || null,
+        wal: wal,
         contacts: found.contacts.slice(),
         kind: found.kind === 'backup' ? 'backup' : 'mac',
-        backups: Math.max(chosen.count, dropped.backups || 0)
+        backups: Math.max(chosen.count, dropped.backups || 0),
+        // A whole folder was handed over, so a file that is not here does not exist.
+        whole: !!(dropped.folder || folderOf(found.messages)),
+        twins: twins.length
       };
       S.rechoose = null;
       openFiles();
+      return;
+    }
+    if (S.files && S.source && S.chat && !wals.length && found.contacts.length) {
+      // contact names for the chat that is already being tuned: nothing else is touched
+      addContacts(found.contacts);
       return;
     }
     if (S.files && S.source && (wals.length || found.contacts.length)) {
@@ -816,6 +875,54 @@
     }
   }
 
+  /**
+   * Something on this page threw where nothing was expecting it. The person must never be
+   * left watching a line that says "Reading..." for ever: stop waiting, go back to the last
+   * step that was sound, and say so there, with the detail, so that it can be reported.
+   *
+   * `back` is the step to fall back to when a move between steps failed half way: 1 forgets
+   * the source, 2 the chosen chat, 3 only the recap. Without it nothing is forgotten and
+   * the message goes to the step that is open.
+   */
+  var failing = false;
+  function unexpected(error, back) {
+    if (failing || (error && error.code === 'stale')) return;
+    failing = true;
+    var detail = String((error && error.message) || error || 'unknown');
+    try {
+      if (back === 1) S.files = null;
+      if (back) reset(back);
+      else {
+        ['source', 'chat', 'tune', 'recap'].forEach(idle);
+        clearTimeout(computeTimer);
+        computeTimer = 0;
+        computeRun += 1;
+        computePending = false;
+        computeBusy = false;
+        computeAgain = false;
+      }
+      render();
+      if (S.source && !S.chat) renderChats();
+    } catch (again) {
+      detail += ' (and then: ' + String((again && again.message) || again) + ')';
+    }
+    var slot = !S.source ? 'source' : !S.chat ? 'chat' : S.created ? 'recap' : 'tune';
+    try {
+      showError(slot, {
+        title: 'Something went wrong on this page',
+        body: ['The page ran into a problem it did not expect, and stopped rather than show you something wrong. Nothing was sent anywhere. Try that again; if it keeps happening, start over.',
+          'Details: ' + detail],
+        actions: slot === 'source' ? [] : [{ label: 'Start over', run: startOver }]
+      });
+      say('Something went wrong. See the message on the page.');
+    } catch (last) {
+      // Not even the message could be drawn: put the words where they will be seen.
+      var box = $('error-' + slot);
+      if (box) { box.hidden = false; box.textContent = 'Something went wrong on this page. Reload it and try again. Details: ' + detail; }
+    }
+    failing = false;
+  }
+
   function startOverQuietly() {
     stopWorker();
     S.files = null;
@@ -825,7 +932,11 @@
 
   function openFiles() {
     var files = S.files;
+    // The same messages read again with one more file (their -wal, say) are still the same
+    // person's: what they said they are called is kept.
+    var owner = S.rechoose != null ? { me: S.me, meAsMe: S.meAsMe } : null;
     reset(1);
+    if (owner) { S.me = owner.me; S.meAsMe = owner.meAsMe; }
     startWorker();
     render();
     working('source', 'Getting ready\u2026');
@@ -838,7 +949,8 @@
         S.files = null;
         showError('source', explain(error, { file: files.db, hashed: isMessagesHash(files.db) }));
         say('That did not work. See the message on the page.');
-      });
+      })
+      .catch(function (error) { unexpected(error, 1); });
   }
 
   function sourceReady(files, result) {
@@ -856,10 +968,14 @@
     var notes = [];
     result.warnings.forEach(function (warning) {
       if (warning.code === 'wal_missing') {
+        // The database says newer messages may sit in a second file. When a whole backup
+        // folder was handed over and holds no such file, there are none: nothing to add.
+        // (A folder with a chat.db in it proves less: it may be a copy of that one file.)
+        if (files.whole && files.kind === 'backup') return;
         notes.push({
           code: 'wal_missing',
           text: files.kind === 'backup'
-            ? 'Recent messages may be missing: this backup keeps its newest messages in a second file. Add cd/cd47480f\u20263a59 from the same backup folder too.'
+            ? 'Recent messages may be missing. A backup can keep its newest messages in a second file, cd/cd47480f\u20263a59. If your backup folder has that file, add it too. If it does not, nothing is missing.'
             : 'Recent messages may be missing: your newest messages are in a second file. Add chat.db-wal too (it sits right next to chat.db).',
           action: {
             label: files.kind === 'backup' ? 'Add the second file' : 'Add chat.db-wal',
@@ -880,6 +996,13 @@
     if (files.backups > 1) {
       notes.push({ code: 'backups', quiet: true, text: 'That folder holds ' + files.backups + ' backups. The newest one was used.' });
     }
+    if (files.twins > 1) {
+      notes.push({
+        code: 'twins',
+        text: 'You added ' + files.twins + ' files called ' + baseName(files.db) + '. One is read at a time, and this is the one that was used: ' +
+          describeFile(files.db) + '. To use another, start over and add only that one.'
+      });
+    }
     if (!result.contacts) {
       notes.push({
         code: 'no_contacts',
@@ -887,11 +1010,9 @@
         text: 'No contact names were added, so people without a name show as the last four digits of their number. You can name them in step 3.'
       });
     }
-    var label = files.kind === 'backup' ? 'iPhone backup' : baseName(files.db) + (files.wal ? ' + ' + baseName(files.wal) : '');
-    if (result.contacts) label += ' + ' + plural(result.contacts, 'contact');
     S.source = {
       kind: files.kind,
-      title: label,
+      title: sourceTitle(files, result.contacts),
       detail: plural(d.messages, 'message') + (d.first_unix ? ', ' + day(d.first_unix) + ' to ' + day(d.last_unix) : ''),
       notes: notes
     };
@@ -1003,7 +1124,7 @@
     return Promise.all(folders.map(probeFolder)).then(function (sets) {
       var backups = 0;
       sets.forEach(function (set) { plain = plain.concat(set.files); backups = Math.max(backups, set.backups); });
-      return { files: plain, backups: backups };
+      return { files: plain, backups: backups, folder: folders.length > 0 };
     });
   }
 
@@ -1123,7 +1244,7 @@
         showError('source', explain(error));
       }
       say('That did not work. See the message on the page.');
-    });
+    }).catch(function (error) { unexpected(error, 1); });
   }
 
   function trySample() {
@@ -1143,12 +1264,12 @@
       };
       S.chat = { id: null, name: result.chat_name, named: true, members: result.people.length, messages: s.messages, last_unix: s.last_unix, single: true };
       S.people = result.people;
-      startTune(result.year);
+      startTune(result.year, result.owner);
       say('The sample chat is ready. Create the recap when you like.');
     }, function (error) {
       idle('source');
       showError('source', explain(error));
-    });
+    }).catch(function (error) { unexpected(error, 1); });
   }
 
   // -- step 2: chats --------------------------------------------------------------------
@@ -1173,9 +1294,15 @@
       avatar.setAttribute('data-tone', index % 8);
       avatar.setAttribute('aria-hidden', 'true');
       var main = el('span', 'mk-chat__main');
-      main.appendChild(el('span', 'mk-chat__name', chat.name));
-      main.appendChild(el('span', 'mk-chat__meta', plural(chat.members, 'person', 'people') +
-        (chat.last_unix ? ' \u00B7 last active ' + day(chat.last_unix) : '')));
+      main.appendChild(el('span', 'mk-chat__name', unbroken(chat.name)));
+      // Two pieces that each stay whole: on a narrow screen the line wraps between them.
+      var meta = el('span', 'mk-chat__meta');
+      meta.appendChild(el('span', '', plural(chat.members, 'person', 'people') + (chat.last_unix ? '\u00A0\u00B7' : '')));
+      if (chat.last_unix) {
+        meta.appendChild(doc.createTextNode(' '));
+        meta.appendChild(el('span', '', 'last active ' + day(chat.last_unix)));
+      }
+      main.appendChild(meta);
       if (chat.people.length) {
         main.appendChild(el('span', 'mk-chat__with', 'With ' + chat.people.join(', ') +
           (chat.people_more ? ' and ' + chat.people_more + ' more' : '')));
@@ -1215,19 +1342,34 @@
       idle('chat');
       for (var j = 0; j < buttons.length; j++) { buttons[j].disabled = false; buttons[j].classList.remove('is-picked'); }
       showError('chat', explain(error));
-    });
+    }).catch(function (error) { unexpected(error, 2); });
   }
 
   // -- step 3: tune ---------------------------------------------------------------------
 
-  /** Open step 3 for S.chat. `year` (optional): the calendar year the chat is known to cover. */
-  function startTune(year) {
-    S.names = {};
+  /**
+   * Open step 3 for S.chat. `year` (optional): the calendar year the chat is known to
+   * cover. `owner` (optional): the owner's name where the source itself knows it (the
+   * sample does). A browser cannot know what the person is called, so otherwise the field
+   * starts empty and a recap is not made until it is filled in.
+   */
+  function startTune(year, owner) {
+    S.people = arrange(S.people);
+    S.names = table();
     S.shortened = null;
+    if (typeof owner === 'string') {
+      S.me = owner;
+      S.meAsMe = false;
+    }
     // First names to begin with. A full name from an address book ("Dave plumber") is the
     // owner's private label for someone, not something to hand to the whole chat.
-    useFirstNames();
-    S.me = 'Me';
+    S.firstNames = true;
+    useFirstNames(true);
+    $('me-name').value = S.me;
+    $('me-name').disabled = S.meAsMe;
+    $('me-as-me').checked = S.meAsMe;
+    meProblem(false);
+    contactsNote('');
     S.chatName = S.chat.named ? S.chat.name : '';
     S.start = '';
     S.end = '';
@@ -1284,17 +1426,81 @@
     return !trouble;
   }
 
+  /** The owner's name as the recap will show it; "" until they have said. */
+  function ownerName() {
+    return S.meAsMe ? 'Me' : S.me.trim();
+  }
+
   function shownName(person) {
-    if (person.me) return S.me.trim() || 'Me';
+    if (person.me) return ownerName() || 'Me';
     return (S.names[person.key] || '').trim() || person.name;
   }
+
+  /** Show or hide "type your name" by the field at the top of step 3. */
+  function meProblem(show) {
+    var input = $('me-name');
+    $('me-error').hidden = !show;
+    $('me-hint').hidden = show;
+    $('me-field').classList.toggle('is-missing', show);
+    if (show) input.setAttribute('aria-invalid', 'true'); else input.removeAttribute('aria-invalid');
+  }
+
+  /** The line under the owner's name: how much of the chat it stands for. */
+  function ownerNote() {
+    var mine = 0;
+    var twin = '';
+    var name = ownerName();
+    S.people.forEach(function (person) {
+      if (person.me) mine = person.messages;
+      else if (name && shownName(person) === name) twin = name;
+    });
+    var hint = $('me-hint');
+    hint.classList.toggle('is-note', !!twin);
+    if (twin) {
+      hint.textContent = 'Someone else here is called \u201C' + twin + '\u201D too, so your messages and theirs are counted together. Change one of the two names to keep them apart.';
+    } else if (S.meAsMe) {
+      hint.textContent = 'Everyone who opens the recap will see your messages under \u201CMe\u201D.';
+    } else {
+      hint.textContent = 'Everyone who opens the recap sees your ' + (mine ? plural(mine, 'message') : 'part of the chat') + ' under this name.';
+    }
+  }
+
+  function onMeInput() {
+    S.me = $('me-name').value;
+    if (ownerName()) meProblem(false);
+    reshorten();
+    peopleTags();
+    changed();
+  }
+
+  function onMeAsMe() {
+    S.meAsMe = $('me-as-me').checked;
+    $('me-name').disabled = S.meAsMe;
+    meProblem(false);
+    reshorten();
+    peopleTags();
+    changed();
+  }
+
+  /** People without a name first (they are the ones to look at), then the rest, busiest first. */
+  function arrange(people) {
+    var unnamed = [];
+    var named = [];
+    var owner = [];
+    people.forEach(function (person) { (person.me ? owner : person.named ? named : unnamed).push(person); });
+    return unnamed.concat(named, owner);
+  }
+
+  var personRows = new Map();     // person key -> {input, meta, avatar}
 
   function renderPeople() {
     var list = $('people');
     list.textContent = '';
-    var unnamed = 0;
-    S.people.forEach(function (person, index) {
-      var item = el('li', 'mk-person' + (person.me ? ' is-me' : '') + (person.named ? '' : ' is-unnamed'));
+    personRows = new Map();
+    S.people.forEach(function (person) {
+      if (person.me) return;          // the owner has a field of their own, at the top
+      var index = personRows.size;
+      var item = el('li', 'mk-person' + (person.named ? '' : ' is-unnamed'));
       item.setAttribute('data-person', person.key);
       var avatar = el('span', 'mk-av');
       avatar.setAttribute('data-tone', index % 8);
@@ -1305,29 +1511,25 @@
       input.autocomplete = 'off';
       input.spellcheck = false;
       input.id = 'person-' + index;
-      if (person.me) {
-        input.value = S.me;
-        input.placeholder = 'Me';
-        input.setAttribute('aria-label', 'Your name in the recap');
-      } else if (person.named) {
+      if (person.named) {
         input.value = S.names[person.key] || person.name;
         input.placeholder = person.name;
         input.setAttribute('aria-label', 'Name shown for ' + person.name);
       } else {
-        unnamed += 1;
         input.value = S.names[person.key] || '';
         input.placeholder = 'Who is ' + person.name + '?';
         input.setAttribute('aria-label', 'Name for ' + (person.handles[0] || person.name));
       }
       input.addEventListener('input', function () {
         var typed = input.value.trim();
-        var first = S.shortened && S.shortened[person.key] ? S.shortened[person.key].short : '';
-        if (person.me) S.me = input.value;
-        else if (typed && typed !== person.name) S.names[person.key] = input.value;
-        else if (!typed && first && person.named) S.names[person.key] = first;   // emptied: back to the first name
-        else {
+        if (typed && (typed !== person.name || S.firstNames)) {
+          S.names[person.key] = input.value;      // typed by hand: kept exactly as typed
+        } else {
+          // Emptied (or the default typed out in full): back to the default, which is a
+          // first name while those are in use.
           delete S.names[person.key];
           if (S.shortened) delete S.shortened[person.key];
+          if (!typed) reshorten();
         }
         peopleTags();
         changed();
@@ -1337,45 +1539,67 @@
       item.appendChild(input);
       item.appendChild(meta);
       list.appendChild(item);
+      personRows.set(person.key, { item: item, input: input, meta: meta, avatar: avatar });
     });
-    list.classList.toggle('is-long', S.people.length > 9);
-    var hint = $('unnamed-hint');
-    hint.hidden = !unnamed;
-    if (unnamed) {
-      hint.textContent = (unnamed === 1 ? 'One person has' : unnamed + ' people have') +
-        ' no name yet, so they would show as the last four digits of their number, like \u201C\u20261234\u201D. Type a name to replace it. ' +
-        'The full numbers shown next to each field are only there to help you: they never go into the recap.';
+    list.classList.toggle('is-long', personRows.size > 9);
+    // Whether the note about people without a name is there at all is decided here, once:
+    // it must not appear or vanish (and move the fields) while someone is typing in them.
+    var anyone = S.people.some(function (person) { return !person.me && !person.named; });
+    $('unnamed-box').hidden = !anyone;
+    $('contacts-row').hidden = !S.files;
+    $('contacts-where').open = false;
+    if (S.files) {
+      $('contacts-where-mac').hidden = S.files.kind === 'backup';
+      $('contacts-where-backup').hidden = S.files.kind !== 'backup';
+      $('add-contacts').textContent = S.files.contacts.length ? 'Add another contacts file' : 'Add your contacts file';
     }
     peopleTags();
   }
 
+  /** "3 people have no name yet", kept up to date as names are typed. */
+  function unnamedNote() {
+    var left = 0;
+    S.people.forEach(function (person) {
+      if (!person.me && !person.named && !(S.names[person.key] || '').trim()) left += 1;
+    });
+    var who = left === 1 ? 'One person has' : left + ' people have';
+    var text;
+    if (!left) text = 'Everyone has a name now.';
+    else if (!S.files) text = who + ' no name yet. Name them below, or leave them as the last digits of their number.';
+    else if (S.files.contacts.length) text = who + ' no name yet: they are not in the contacts you added. Name them, or add another contacts file.';
+    else text = who + ' no name yet. Name them, or add your contacts file to fill them in.';
+    $('unnamed-hint').textContent = text;
+    $('unnamed-box').classList.toggle('is-done', !left);
+  }
+
   /** Avatars, the small print under each name, and who is being counted together. */
   function peopleTags() {
-    var counts = {};
+    var counts = new Map();
     S.people.forEach(function (person) {
       var name = shownName(person);
-      counts[name] = (counts[name] || 0) + 1;
+      counts.set(name, (counts.get(name) || 0) + 1);
     });
     var spaced = false;
-    var items = $('people').children;
-    S.people.forEach(function (person, index) {
-      var item = items[index];
+    S.people.forEach(function (person) {
+      var row = personRows.get(person.key);
+      if (!row) return;
       var name = shownName(person);
-      item.querySelector('.mk-av').textContent = initial(name);
-      if (!person.me && person.named) {
-        item.querySelector('input').placeholder = S.shortened && S.shortened[person.key] ? S.shortened[person.key].short : person.name;
+      row.avatar.textContent = initial(name);
+      if (person.named) {
+        row.input.placeholder = S.shortened && S.shortened[person.key] ? S.shortened[person.key].short : person.name;
       }
-      var meta = item.querySelector('.mk-person__meta');
+      var meta = row.meta;
       meta.textContent = '';
-      if (person.me) meta.appendChild(el('span', 'mk-tag mk-tag--you', 'You'));
-      if (!person.me && !person.named && !(S.names[person.key] || '').trim()) meta.appendChild(el('span', 'mk-tag mk-tag--new', 'No name yet'));
-      if (counts[name] > 1) meta.appendChild(el('span', 'mk-tag mk-tag--merge', 'Counted together'));
+      var blank = !person.named && !(S.names[person.key] || '').trim();
+      row.item.classList.toggle('is-blank', blank);
+      if (blank) meta.appendChild(el('span', 'mk-tag mk-tag--new', 'No name yet'));
+      if (counts.get(name) > 1) meta.appendChild(el('span', 'mk-tag mk-tag--merge', 'Counted together'));
       // Hints for the person at the keyboard only: the name as their address book has it,
       // and the raw number or address. Neither goes into the recap.
-      if (!person.me && person.named && name !== person.name) meta.appendChild(el('span', 'mk-raw-handle', person.name));
+      if (person.named && name !== person.name) meta.appendChild(el('span', 'mk-raw-handle', person.name));
       if (person.handles.length) meta.appendChild(el('span', 'mk-raw-handle', person.handles.join(', ')));
       meta.appendChild(el('span', '', plural(person.messages, 'message')));
-      if (!person.me && /\s/.test(name)) spaced = true;
+      if (/\s/.test(name)) spaced = true;
     });
     var shortened = S.shortened && Object.keys(S.shortened).length > 0;
     $('names-row').hidden = !(spaced || shortened);
@@ -1383,82 +1607,197 @@
       ? 'First names to start with: the names in your address book are your own labels for people.'
       : 'Full names are your own labels for people. The recap can use first names instead.';
     $('first-names').textContent = shortened ? 'Use the full names' : 'Use first names only';
+    unnamedNote();
+    ownerNote();
   }
 
   /**
-   * The short form of each name, by the rule in docs/SCHEMA.md section 2 ("Short names"):
-   * the first word; when two different people share it, each gets the first word, a space,
-   * the first character of their last word and a full stop ("Sam R."); and if that still
-   * clashes, those people keep their full names. `names` are distinct display names, the
-   * owner and masked labels left out. Returns {name: short name}.
+   * The short form of each name: Map(name -> short name). The rule is the engine's own
+   * (docs/SCHEMA.md section 2, "Short names"): the first word; "Sam R." and "Sam C." when
+   * two people share it; the full name when even that clashes. `me` is the owner's name,
+   * which is never shortened but does take part: nobody may be shortened into it.
    *
-   * This runs before counting, on everyone in the chat, because the page lets each name be
-   * edited; the engine's own helper renames a finished recap instead.
+   * The engine's helper renames a finished recap. Here it is handed a stand-in that holds
+   * nothing but the names, because this runs before counting: the page lets each name be
+   * edited, and people are renamed before the engine sees them.
    */
-  function shortNames(names) {
-    var groups = {};
-    names.forEach(function (name) {
-      var first = name.split(/\s+/)[0];
-      if (!groups[first]) groups[first] = [];
-      groups[first].push(name);
-    });
-    var short = {};
-    Object.keys(groups).forEach(function (first) {
-      var group = groups[first];
-      if (group.length === 1) { short[group[0]] = first; return; }
-      var initialled = {};
-      group.forEach(function (name) {
-        var words = name.split(/\s+/);
-        var form = words[0] + ' ' + Array.from(words[words.length - 1])[0] + '.';
-        if (!initialled[form]) initialled[form] = [];
-        initialled[form].push(name);
-      });
-      Object.keys(initialled).forEach(function (form) {
-        var same = initialled[form];
-        same.forEach(function (name) { short[name] = same.length === 1 ? form : name; });
-      });
-    });
-    return short;
+  function shortNames(names, me) {
+    var stand = { senders: names.map(function (name) { return { name: name }; }) };
+    var short = Engine.shortNames(stand, me);
+    var out = new Map();
+    names.forEach(function (name, i) { out.set(name, short.senders[i].name); });
+    return out;
   }
 
-  /** Switch everyone to the short form of their name. Remembers what it replaced. */
-  function useFirstNames() {
-    var names = [];
+  /**
+   * Switch people to the short form of their name, remembering what it replaced. With
+   * `gently`, names that were typed by hand are left exactly as typed.
+   */
+  function useFirstNames(gently) {
+    var names = S.people.map(shownName);
+    var short = shortNames(names, ownerName() || 'Me');
+    var record = table();
     S.people.forEach(function (person) {
-      var name = shownName(person);
-      if (!person.me && name.charAt(0) !== '\u2026' && names.indexOf(name) === -1) names.push(name);
-    });
-    var short = shortNames(names);
-    S.shortened = {};
-    S.people.forEach(function (person, index) {
       if (person.me) return;
+      if (gently && S.names[person.key] !== undefined) return;
       var from = shownName(person);
-      var to = short[from];
+      var to = short.get(from);
       if (!to || to === from) return;
-      S.shortened[person.key] = { short: to, before: S.names[person.key] };
+      record[person.key] = { short: to, before: S.names[person.key] };
       S.names[person.key] = to;
-      var input = $('person-' + index);
-      if (input) input.value = to;
+      setField(person, to);
     });
+    S.shortened = record;
+  }
+
+  /** Put a name in someone's field, unless that is the field being typed in right now. */
+  function setField(person, value) {
+    var row = personRows.get(person.key);
+    if (row && row.input !== doc.activeElement) row.input.value = value;
   }
 
   /** Undo useFirstNames for every name that has not been changed by hand since. */
   function useFullNames() {
-    var record = S.shortened || {};
-    S.people.forEach(function (person, index) {
+    var record = S.shortened || table();
+    S.people.forEach(function (person) {
       var was = record[person.key];
       if (!was || S.names[person.key] !== was.short) return;
       if (was.before === undefined) delete S.names[person.key]; else S.names[person.key] = was.before;
-      var input = $('person-' + index);
-      if (input) input.value = S.names[person.key] || person.name;
+      setField(person, S.names[person.key] || person.name);
     });
     S.shortened = null;
   }
 
+  /** The names changed under the short forms (the owner's, or new contacts): work them out again. */
+  function reshorten() {
+    if (!S.firstNames) return;
+    useFullNames();
+    useFirstNames(true);
+  }
+
   function toggleFirstNames() {
-    if (S.shortened && Object.keys(S.shortened).length) useFullNames(); else useFirstNames();
+    if (S.shortened && Object.keys(S.shortened).length) {
+      useFullNames();
+      S.firstNames = false;
+    } else {
+      S.firstNames = true;
+      useFirstNames(false);
+    }
     peopleTags();
     changed();
+  }
+
+  // -- step 3: contact names, added late ------------------------------------------------
+
+  function sourceTitle(files, contacts) {
+    var label = files.kind === 'backup' ? 'iPhone backup' : baseName(files.db) + (files.wal ? ' + ' + baseName(files.wal) : '');
+    return contacts ? label + ' + ' + plural(contacts, 'contact') : label;
+  }
+
+  function contactsNote(text) {
+    var note = $('contacts-note');
+    note.hidden = !text;
+    note.textContent = text || '';
+    if (text) say(text);
+  }
+
+  /**
+   * The same chat with more contact names. What was typed by hand stays: a name typed for
+   * a number goes with that number, whatever the address book calls its owner.
+   */
+  function adoptPeople(people) {
+    if (S.firstNames) useFullNames();           // leaves only what was typed by hand in S.names
+    var typed = S.names;
+    var holder = new Map();                     // raw handle -> the key of who has it now
+    var keys = new Set();
+    people.forEach(function (person) {
+      keys.add(person.key);
+      person.handles.forEach(function (handle) { holder.set(handle, person.key); });
+    });
+    var next = table();
+    S.people.forEach(function (person) {
+      var name = typed[person.key];
+      if (person.me || typeof name !== 'string' || !name.trim()) return;
+      var target = keys.has(person.key) ? person.key : null;
+      for (var i = 0; target === null && i < person.handles.length; i++) {
+        if (holder.has(person.handles[i])) target = holder.get(person.handles[i]);
+      }
+      if (target !== null && next[target] === undefined) next[target] = name;
+    });
+    S.people = arrange(people);
+    S.names = next;
+    S.shortened = null;
+    if (S.firstNames) useFirstNames(true);
+    renderPeople();
+  }
+
+  /** Address books picked in step 3: read them and fill in the names, keeping everything else. */
+  function addContacts(list) {
+    var files = Array.prototype.slice.call(list || []).filter(Boolean);
+    if (!files.length || !S.files || !S.chat) return;
+    clearError('tune');
+    contactsNote('');
+    var source = S.files;
+    var fresh = files.filter(function (file) {
+      return !source.contacts.some(function (have) { return sameFile(have, file); });
+    });
+    if (!fresh.length) {
+      contactsNote(files.length === 1 ? 'That contacts file was already added.' : 'Those contacts files were already added.');
+      return;
+    }
+    var unnamed = function () { return S.people.filter(function (person) { return !person.me && !person.named; }).length; };
+    var before = unnamed();
+    working('tune', 'Reading contact names\u2026');
+    ask('contacts', { contacts: fresh }, progressFor('tune')).then(function (result) {
+      idle('tune');
+      if (S.files !== source || !S.chat) return;
+      var read = fresh.filter(function (file) { return result.skipped.indexOf(file.name) === -1; });
+      source.contacts = source.contacts.concat(read);
+      S.source.title = sourceTitle(source, result.contacts);
+      S.source.notes = S.source.notes.filter(function (note) { return note.code !== 'no_contacts'; });
+      S.chats = result.chats;
+      S.chats.forEach(function (chat) {
+        if (chat.id !== S.chat.id) return;
+        S.chat.name = chat.name;
+        S.chat.named = chat.named;
+      });
+      $('chat-name').placeholder = S.chat.name;
+      adoptPeople(result.people);
+      render();
+      var gained = before - unnamed();
+      var some = plural(result.added, 'contact');
+      if (!result.added) {
+        contactsNote('That contacts file is empty. On a Mac the full one is usually inside one of the Sources folders.');
+      } else if (gained <= 0) {
+        contactsNote('Read ' + some + ', but none of them is one of the people without a name here.' +
+          (source.kind === 'backup' ? '' : ' A Mac keeps one contacts file for each account: look in the other Sources folders.'));
+      } else {
+        contactsNote('Read ' + some + '. ' + (gained === 1 ? 'One more person has' : gained + ' more people have') + ' a name now.');
+      }
+      if (result.skipped.length) {
+        showError('tune', {
+          info: true,
+          title: result.skipped.length === 1 ? 'One file was left out' : result.skipped.length + ' files were left out',
+          body: [[{ b: result.skipped.join(', ') }, result.skipped.length === 1 ? ' is not a contacts file, so it was skipped.' : ' are not contacts files, so they were skipped.']]
+        });
+      }
+      changed();
+    }, function (error) {
+      idle('tune');
+      if (error && error.code === 'not_contacts') {
+        showError('tune', {
+          title: files.length === 1 ? 'That is not a contacts file' : 'None of those is a contacts file',
+          body: [source.kind === 'backup'
+            ? ['In an iPhone backup the contacts are in the folder called ', { b: '31' }, ', in the file whose name starts with ', { code: '31bb7ba8' }, '.']
+            : ['On a Mac the contacts files end in ', { b: '.abcddb' }, ' and live in ', { code: '~/Library/Application Support/AddressBook' },
+              ', most of them inside its ', { b: 'Sources' }, ' folders.'],
+            'Nothing changed. You can also type the names yourself.']
+        });
+      } else {
+        showError('tune', explain(error));
+      }
+      say('That did not work. See the message on the page.');
+    }).catch(function (error) { unexpected(error, 3); });
   }
 
   function fillZones() {
@@ -1486,6 +1825,11 @@
   /** Something in step 3 changed. */
   function changed() {
     var fine = periodHint();
+    if (!ownerName()) {
+      // The recap that is showing was made with a name; it is not remade without one.
+      if (S.created) meProblem(true);
+      fine = false;
+    }
     if (!S.created || !fine) return;
     $('recap').classList.add('is-stale');
     clearTimeout(computeTimer);
@@ -1494,7 +1838,7 @@
   }
 
   function computeOptions() {
-    var options = { tz: S.tz || '', me: S.me.trim() || 'Me', names: {} };
+    var options = { tz: S.tz || '', me: ownerName() || 'Me', names: table() };
     Object.keys(S.names).forEach(function (key) {
       if (S.names[key].trim()) options.names[key] = S.names[key].trim();
     });
@@ -1508,6 +1852,15 @@
 
   function createRecap() {
     clearError('tune');
+    if (!ownerName()) {
+      // Without it the recap would call the owner "Me", which means someone else to
+      // everyone who opens it. Staying "Me" is allowed, but only as a choice.
+      meProblem(true);
+      $('me-name').focus();
+      keepInView($('me-field'));
+      say('Type your first name: it is the first thing asked in this step.');
+      return;
+    }
     if (!periodHint()) { $('period-hint').scrollIntoView({ block: 'center', behavior: REDUCED ? 'auto' : 'smooth' }); return; }
     S.created = true;
     render();
@@ -1547,7 +1900,7 @@
       $('recap').hidden = true;
       S.stats = null;
       showError('recap', explain(error));
-    });
+    }).catch(function (error) { if (run === computeRun) unexpected(error, 3); });
   }
 
   // -- step 4: the recap ----------------------------------------------------------------
@@ -1655,10 +2008,10 @@
   }
 
   function namesIn(stats) {
-    var seen = {};
+    var seen = new Set();
     var out = [];
     function add(name) {
-      if (typeof name === 'string' && name && !seen[name]) { seen[name] = true; out.push(name); }
+      if (typeof name === 'string' && name && !seen.has(name)) { seen.add(name); out.push(name); }
     }
     (stats.senders || []).forEach(function (s) { add(s.name); });
     if (stats.late_night && stats.late_night.top) add(stats.late_night.top.name);
@@ -1719,7 +2072,7 @@
     if (!stats || !link) return;
     var quotesOn = S.quotes && !!S.fits.on;
 
-    $('recap-title').textContent = stats.chat.name;
+    $('recap-title').textContent = unbroken(stats.chat.name);
     $('recap-facts').textContent = plural(stats.totals.messages, 'message') + ' \u00B7 ' +
       plural(stats.chat.members, 'person', 'people') + ' \u00B7 ' + span(stats.period.start, stats.period.end);
 
@@ -1739,8 +2092,8 @@
     var list = $('inside-list');
     list.textContent = '';
     var names = namesIn(link.stats);
-    insideItem(list, 'bubble', ['The chat\u2019s name: ', { b: link.stats.chat.name }]);
-    insideItem(list, 'people', [{ b: plural(names.length, 'name') }, ': ' + names.join(', ')]);
+    insideItem(list, 'bubble', ['The chat\u2019s name: ', { b: unbroken(link.stats.chat.name) }]);
+    insideItem(list, 'people', [{ b: plural(names.length, 'name') }, ': ' + unbroken(names.join(', '))]);
     insideItem(list, 'chart', [{ b: 'Counts, not conversations' }, ': messages, words, photos and tapbacks per person and by hour, weekday and month, plus the busiest day, streaks and awards.']);
     if (quotesOn) {
       var n = (link.stats.most_reacted || []).filter(function (m) { return m.text; }).length;
@@ -1923,7 +2276,7 @@
       $(id).addEventListener('change', function () {
         var files = Array.prototype.slice.call($(id).files || []);
         $(id).value = '';
-        takeFiles(files);
+        takeFiles(files, { folder: id === 'input-backup-folder' });
       });
     });
     $('input-export').addEventListener('change', function () {
@@ -1953,7 +2306,8 @@
       event.preventDefault();
       dragDepth = 0;
       setDragging(false);
-      collectDropped(event.dataTransfer).then(function (dropped) { takeFiles(dropped.files, dropped); });
+      collectDropped(event.dataTransfer).then(function (dropped) { takeFiles(dropped.files, dropped); })
+        .catch(function (error) { unexpected(error); });
     });
 
     $('paste-btn').addEventListener('click', pasteFromClipboard);
@@ -1984,6 +2338,14 @@
       fillPeriod();
       changed();
     });
+    $('me-name').addEventListener('input', onMeInput);
+    $('me-as-me').addEventListener('change', onMeAsMe);
+    $('add-contacts').addEventListener('click', function () { $('input-contacts').click(); });
+    $('input-contacts').addEventListener('change', function () {
+      var files = Array.prototype.slice.call($('input-contacts').files || []);
+      $('input-contacts').value = '';
+      addContacts(files);
+    });
     $('first-names').addEventListener('click', toggleFirstNames);
     $('create').addEventListener('click', createRecap);
 
@@ -1999,6 +2361,15 @@
       if (button) copyPath(button);
     });
     root.addEventListener('hashchange', onHash);
+
+    // The net under everything else on this page: an exception nobody caught, in a click
+    // or a keystroke or a promise, ends in a message on the page, not in silence.
+    root.addEventListener('error', function (event) {
+      if (event && event.error) unexpected(event.error);
+    });
+    root.addEventListener('unhandledrejection', function (event) {
+      unexpected(event && event.reason);
+    });
   }
 
   fillStatic();

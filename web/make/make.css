@@ -934,10 +934,13 @@ kbd {
 .mk-av[data-tone="7"] { --av: var(--indigo); }
 
 .mk-chat__main { min-width: 0; }
-.mk-chat__name { display: block; font: 800 17.5px/1.2 var(--font-display); letter-spacing: -0.012em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The name may take two lines (it is what the chat is picked by); the line under it is
+   never cut, it wraps. Only the list of members, a hint, is shortened to fit. */
+.mk-chat__name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font: 800 17.5px/1.2 var(--font-display); letter-spacing: -0.012em; overflow: hidden; overflow-wrap: anywhere; }
 .mk-chat__meta,
-.mk-chat__with { display: block; margin-top: 3px; font: 500 13.5px/1.3 var(--font-text); color: rgba(255, 255, 255, 0.58); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mk-chat__with { color: rgba(255, 255, 255, 0.52); }
+.mk-chat__with { display: block; margin-top: 3px; font: 500 13.5px/1.3 var(--font-text); color: rgba(255, 255, 255, 0.58); }
+.mk-chat__meta > span { display: inline-block; }
+.mk-chat__with { color: rgba(255, 255, 255, 0.52); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mk-chat.is-picked .mk-chat__meta,
 .mk-chat.is-picked .mk-chat__with { color: rgba(255, 255, 255, 0.8); }
 .mk-chat__count { text-align: right; font: 900 19px/1 var(--font-display); font-stretch: 90%; letter-spacing: -0.01em; }
@@ -971,7 +974,45 @@ kbd {
 
 .mk-field__hint { margin-top: 8px; font: 500 13.5px/1.45 var(--font-text); color: rgba(255, 255, 255, 0.54); }
 .mk-field__hint.is-error { color: #ff8a80; font-weight: 600; }
-.mk-field__hint--note { padding: 10px 13px; border-radius: 14px; background: rgba(255, 214, 10, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 214, 10, 0.3); color: rgba(255, 255, 255, 0.84); }
+.mk-field__hint.is-note { color: var(--yellow); }
+
+/* The owner's name: the one thing a recap cannot do without, so it comes first and stands out. */
+.mk-me { padding: 15px 15px 12px; border-radius: 20px; background: rgba(10, 132, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(10, 132, 255, 0.45); transition: background-color 0.2s ease, box-shadow 0.2s ease; }
+.mk-me .mk-field__label { color: #fff; }
+.mk-me > .mk-input { background: rgba(0, 0, 0, 0.3); }
+.mk-me > .mk-input:disabled { opacity: 0.45; }
+.mk-me .mk-field__hint { color: rgba(255, 255, 255, 0.7); }
+.mk-me .mk-field__hint.is-error { color: #ffb4ab; }
+.mk-me .mk-field__hint.is-note { color: var(--yellow); }
+.mk-me.is-missing { background: rgba(255, 69, 58, 0.16); box-shadow: inset 0 0 0 2px #ff8a80; }
+.mk-me.is-missing > .mk-input { box-shadow: inset 0 0 0 2px #ff8a80; }
+.mk-me.is-missing > .mk-input:focus-visible { box-shadow: inset 0 0 0 2px #ff8a80, 0 0 0 4px rgba(255, 138, 128, 0.3); }
+
+.mk-check { display: inline-flex; align-items: center; gap: 9px; min-height: 36px; margin-top: 6px; font: 600 14px/1.3 var(--font-text); color: rgba(255, 255, 255, 0.82); cursor: pointer; }
+.mk-check > input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--blue); cursor: pointer; }
+
+/* People without a name: a nudge above the list, with the way to fix it right there. */
+.mk-unnamed { margin-top: 12px; padding: 13px 14px 12px; border-radius: 18px; background: rgba(255, 214, 10, 0.1); box-shadow: inset 0 0 0 1px rgba(255, 214, 10, 0.3); transition: background-color 0.2s ease, box-shadow 0.2s ease; }
+.mk-unnamed.is-done { background: rgba(48, 209, 88, 0.1); box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.32); }
+.mk-unnamed__text { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font: 600 15px/1.4 var(--font-text); color: #fff; }
+.mk-unnamed__text > .mk-ico { margin-top: 1px; font-size: 20px; color: var(--yellow); }
+.mk-unnamed.is-done .mk-unnamed__text > .mk-ico { color: var(--green); }
+.mk-unnamed__add { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px 14px; margin-top: 11px; }
+.mk-unnamed__add > .mk-btn { flex: none; background: rgba(255, 255, 255, 0.16); }
+.mk-unnamed__add > .mk-btn:hover { background: rgba(255, 255, 255, 0.24); }
+.mk-where { flex: 1 1 180px; min-width: 0; }
+.mk-where > summary { display: inline-flex; align-items: center; min-height: 40px; padding: 0 2px; border-radius: 6px; cursor: pointer; list-style: none; font: 700 13px/1.2 var(--font-display); color: #6db7ff; text-decoration: underline; text-decoration-color: rgba(109, 183, 255, 0.4); text-underline-offset: 3px; }
+.mk-where > summary::-webkit-details-marker { display: none; }
+.mk-where > summary:hover { color: #9dceff; }
+.mk-where > p { margin-top: 4px; font: 500 14px/1.6 var(--font-text); color: rgba(255, 255, 255, 0.8); }
+.mk-unnamed > .mk-work { margin-top: 10px; }
+.mk-unnamed__note { margin-top: 10px; font: 600 14px/1.45 var(--font-text); color: #fff; }
+.mk-unnamed__small { margin-top: 9px; font: 500 12.5px/1.45 var(--font-text); color: rgba(255, 255, 255, 0.62); }
+
+/* While contact names are being read, the list they will change waits. */
+.mk-step.is-busy .mk-people,
+.mk-step.is-busy .mk-unnamed__add,
+.mk-step.is-busy .mk-step__cta { opacity: 0.4; pointer-events: none; }
 
 .mk-seg {
   display: grid;
@@ -1045,7 +1086,7 @@ input[type="date"].mk-input { color-scheme: dark; }
 }
 
 .mk-person .mk-av { width: 40px; height: 40px; font-size: 17px; }
-.mk-person.is-unnamed .mk-av { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.8); box-shadow: inset 0 0 0 2px rgba(255, 214, 10, 0.55); }
+.mk-person.is-blank .mk-av { background: rgba(255, 255, 255, 0.12); color: rgba(255, 255, 255, 0.8); box-shadow: inset 0 0 0 2px rgba(255, 214, 10, 0.55); }
 .mk-person__meta { min-width: 0; display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: center; font: 500 12.5px/1.35 var(--font-text); color: rgba(255, 255, 255, 0.5); overflow-wrap: anywhere; }
 .mk-person__meta > .mk-raw-handle { color: rgba(255, 255, 255, 0.72); font-variant-numeric: tabular-nums; }
 

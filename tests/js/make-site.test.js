@@ -153,6 +153,30 @@ test('the page\'s own scripts make no network calls and do not eval', () => {
   assert.doesNotMatch(code('make.js'), /insertAdjacentHTML|outerHTML/);
 });
 
+test('no table on the page is a plain object that a name could fall into', () => {
+  // A plain {} already has constructor, toString and __proto__; someone in a chat may be
+  // called that. Tables keyed by data are Maps, Sets or Object.create(null) (table()).
+  for (const file of ['make.js', 'worker.js', 'sample.js']) {
+    const empties = code(file).match(/[^\n]*(?:=|:)\s*\{\}\s*[,;)][^\n]*/g) || [];
+    assert.deepStrictEqual(empties, [], `${file}: no empty object literal is used as a table`);
+  }
+  assert.match(code('make.js'), /function table\(\) \{ return Object\.create\(null\); \}/);
+  assert.match(code('make.js'), /Engine\.shortNames\(/, 'short names come from the engine, not from a copy of its rule');
+});
+
+test('an exception nobody caught ends in a message on the page', () => {
+  const src = code('make.js');
+  assert.match(src, /root\.addEventListener\('error', function \(event\) \{\s*if \(event && event\.error\) unexpected\(event\.error\);/);
+  assert.match(src, /root\.addEventListener\('unhandledrejection', function \(event\) \{\s*unexpected\(event && event\.reason\);/);
+  // Every request to the reader is followed, somewhere down its chain, by a catch.
+  const asks = src.split(/\bask\('(?:open|paste|sample|chat|contacts|compute)'/).slice(1);
+  assert.equal(asks.length, 6, 'the six requests the page makes');
+  for (const rest of asks) {
+    const chain = rest.slice(0, rest.indexOf('\n  }\n'));
+    assert.match(chain, /\.catch\(function \(error\) \{[^}]*unexpected\(error, [123]\)/, 'a step that fails half way falls back and says so');
+  }
+});
+
 test('the stylesheet loads nothing remote', () => {
   const css = fs.readFileSync(path.join(MAKE, 'make.css'), 'utf8');
   assert.doesNotMatch(css, /@import/);

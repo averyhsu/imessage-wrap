@@ -266,6 +266,14 @@
       <div class="mk-step__body" id="tune-body" hidden>
         <div class="mk-tune">
           <div class="mk-tune__col">
+            <div class="mk-field mk-me" id="me-field">
+              <label class="mk-field__label" for="me-name">Your name in the recap</label>
+              <input class="mk-input" type="text" id="me-name" maxlength="40" placeholder="First name" autocomplete="given-name" autocapitalize="words" spellcheck="false" aria-describedby="me-error me-hint">
+              <p class="mk-field__hint is-error" id="me-error" hidden>Type your first name. Everyone who opens the recap sees your messages under it.</p>
+              <p class="mk-field__hint" id="me-hint"></p>
+              <label class="mk-check"><input type="checkbox" id="me-as-me"><span>Leave me as “Me”</span></label>
+            </div>
+
             <fieldset class="mk-field">
               <legend class="mk-field__label">Which period?</legend>
               <div class="mk-seg" id="period">
@@ -299,7 +307,21 @@
             <div class="mk-field">
               <h3 class="mk-field__label" id="people-label">Who’s who</h3>
               <p class="mk-field__hint" id="people-hint">Names appear in the recap exactly as written here. Give two people the same name to count them as one.</p>
-              <p class="mk-field__hint mk-field__hint--note" id="unnamed-hint" hidden></p>
+              <div class="mk-unnamed" id="unnamed-box" hidden>
+                <p class="mk-unnamed__text"><span class="mk-ico" data-icon="people"></span><span id="unnamed-hint"></span></p>
+                <div class="mk-unnamed__add" id="contacts-row">
+                  <button type="button" class="mk-btn mk-btn--small" id="add-contacts">Add your contacts file</button>
+                  <input type="file" id="input-contacts" multiple hidden>
+                  <details class="mk-where" id="contacts-where">
+                    <summary>Where is it?</summary>
+                    <p id="contacts-where-mac">In Finder, choose <b>Go to Folder…</b> from the <b>Go</b> menu and open <span class="mk-path"><code>~/Library/Application Support/AddressBook</code><button type="button" class="mk-copy" data-copy="~/Library/Application Support/AddressBook" aria-label="Copy this folder path"><span class="mk-ico" data-icon="copy"></span></button></span>. Add every file whose name ends in <b>.abcddb</b>, and look inside the <b>Sources</b> folders too: a Mac keeps one for each account.</p>
+                    <p id="contacts-where-backup" hidden>In the same backup folder, open the folder called <b>31</b> and add the file whose name starts with <code class="mk-code">31bb7ba8</code>.</p>
+                  </details>
+                </div>
+                <div class="mk-work" id="work-tune" hidden></div>
+                <p class="mk-unnamed__note" id="contacts-note" hidden></p>
+                <p class="mk-unnamed__small" id="unnamed-privacy">The numbers next to the fields are only there to help you tell people apart. They never go into the recap.</p>
+              </div>
               <ul class="mk-people" id="people" aria-labelledby="people-label"></ul>
               <p class="mk-names" id="names-row" hidden><span id="names-note"></span> <button type="button" class="mk-linkbtn" id="first-names">Use first names only</button></p>
             </div>
