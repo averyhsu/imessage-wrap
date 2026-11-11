@@ -153,13 +153,13 @@ Candidates are computed per sender (only senders with >= 5 messages qualify; the
 | order | id | emoji | title | winner | detail template |
 |-------|----|-------|-------|--------|-----------------|
 | 1 | `yapper` | 🗣️ | The Yapper | most messages | `{n} messages. Nobody asked.` |
-| 2 | `night_owl` | 🦉 | The Night Owl | most late-night messages (>= 3) | `{n} messages after midnight.` |
-| 3 | `comedian` | 😂 | The Comedian | most standing "laugh" tapbacks received (>= 3) | `Made the chat laugh {n} times.` |
-| 4 | `hype` | 📣 | The Hype Machine | most tapbacks given (>= 3) | `Handed out {n} tapbacks.` |
-| 5 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages) | `{x} words per message. A paragraph person.` |
-| 6 | `paparazzi` | 📸 | The Paparazzi | most attachment messages (>= 3) | `{n} photos, videos and memes.` |
-| 7 | `favorite` | ⭐ | The Crowd Favorite | most standing tapbacks received (>= 3) | `{n} tapbacks received.` |
-| 8 | `lurker` | 👻 | The Lurker | fewest messages among qualifying senders | `{n} messages. Reads everything, says little.` |
+| 2 | `lurker` | 👻 | The Lurker | fewest messages among qualifying senders | `{n} messages. Reads everything, says little.` |
+| 3 | `night_owl` | 🦉 | The Night Owl | most late-night messages (>= 3) | `{n} messages after midnight.` |
+| 4 | `comedian` | 😂 | The Comedian | most standing "laugh" tapbacks received (>= 3) | `Made the chat laugh {n} times.` |
+| 5 | `hype` | 📣 | The Hype Machine | most tapbacks given (>= 3) | `Handed out {n} tapbacks.` |
+| 6 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages) | `{x} words per message. A paragraph person.` |
+| 7 | `paparazzi` | 📸 | The Paparazzi | most attachment messages (>= 3) | `{n} photos, videos and memes.` |
+| 8 | `favorite` | ⭐ | The Crowd Favorite | most standing tapbacks received (>= 3) | `{n} tapbacks received.` |
 
 Selection: walk the table in order; an award whose winner already holds an award is
 deferred. Take up to 6 non-deferred awards, then fill remaining slots (up to 6 total) with
