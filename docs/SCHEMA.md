@@ -227,8 +227,11 @@ native through `window.webkit.messageHandlers.wrapped.postMessage(obj)`:
 | `{type: "share", png: "data:image/png;base64,…", text: "…"}` | open the share sheet with the summary card |
 | `{type: "send"}` | "Send to this chat" tapped: native inserts the recap bubble |
 | `{type: "close"}` | story dismissed |
+| `{type: "error", message: "…"}` | the recap could not be read or shown; native shows its own notice |
 
-Native may call `window.WrappedStory.pause()`, `.resume()` and `.goTo(i)`.
+Native may call `window.WrappedStory.pause()`, `.resume()` and `.goTo(i)`, and may hand a
+recap over directly with `window.WrappedApp.load(statsOrJson)` instead of putting it in the
+URL.
 
 ## 7. Naming
 
