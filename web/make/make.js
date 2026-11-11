@@ -681,8 +681,12 @@
     if (S.files && S.source && (wals.length || found.contacts.length)) {
       // more files for the database that is already open: its -wal, or address books
       if (wals.length) S.files.wal = wals[0];
+      // An address book added twice is read once. Only books that were already here count
+      // as "twice": a Mac keeps several files with the same name (one per account), and
+      // two of them arriving together are two different books even if they look alike.
+      var held = S.files.contacts.slice();
       found.contacts.forEach(function (book) {
-        if (!S.files.contacts.some(function (have) { return sameFile(have, book); })) S.files.contacts.push(book);
+        if (!held.some(function (have) { return sameFile(have, book); })) S.files.contacts.push(book);
       });
       S.rechoose = S.chat && !S.chat.single ? S.chat.id : null;
       openFiles();
@@ -1292,46 +1296,55 @@
   }
 
   /**
-   * "Sam Rivera" -> "Sam", or "Sam R." when someone else is a Sam too, for every name in
-   * `names` that has more than one word. `taken` holds the names that stay as they are.
-   * Works on distinct names, so people who are counted together stay together and nobody
-   * is merged by accident. Returns {full name: short name}.
+   * The short form of each name, by the rule in docs/SCHEMA.md section 2 ("Short names"):
+   * the first word; when two different people share it, each gets the first word, a space,
+   * the first character of their last word and a full stop ("Sam R."); and if that still
+   * clashes, those people keep their full names. `names` are distinct display names, the
+   * owner and masked labels left out. Returns {name: short name}.
+   *
+   * This runs before counting, on everyone in the chat, because the page lets each name be
+   * edited; the engine's own helper renames a finished recap instead.
    */
-  function shortNames(names, taken) {
-    var used = {};
-    Object.keys(taken).forEach(function (name) { used[name] = true; });
-    var firsts = {};
+  function shortNames(names) {
+    var groups = {};
     names.forEach(function (name) {
       var first = name.split(/\s+/)[0];
-      firsts[first] = (firsts[first] || 0) + 1;
+      if (!groups[first]) groups[first] = [];
+      groups[first].push(name);
     });
     var short = {};
-    names.forEach(function (name) {
-      var tokens = name.split(/\s+/);
-      var candidate = tokens[0];
-      if (firsts[candidate] > 1 || used[candidate]) candidate = tokens[0] + ' ' + Array.from(tokens[tokens.length - 1])[0] + '.';
-      if (used[candidate]) return;              // still a clash: this name stays as it is
-      used[candidate] = true;
-      short[name] = candidate;
+    Object.keys(groups).forEach(function (first) {
+      var group = groups[first];
+      if (group.length === 1) { short[group[0]] = first; return; }
+      var initialled = {};
+      group.forEach(function (name) {
+        var words = name.split(/\s+/);
+        var form = words[0] + ' ' + Array.from(words[words.length - 1])[0] + '.';
+        if (!initialled[form]) initialled[form] = [];
+        initialled[form].push(name);
+      });
+      Object.keys(initialled).forEach(function (form) {
+        var same = initialled[form];
+        same.forEach(function (name) { short[name] = same.length === 1 ? form : name; });
+      });
     });
     return short;
   }
 
-  /** Switch everyone with a longer name to a first name. Remembers what it replaced. */
+  /** Switch everyone to the short form of their name. Remembers what it replaced. */
   function useFirstNames() {
-    var taken = {};
-    var long = [];
+    var names = [];
     S.people.forEach(function (person) {
       var name = shownName(person);
-      if (person.me || !/\s/.test(name)) taken[name] = true;
-      else if (long.indexOf(name) === -1) long.push(name);
+      if (!person.me && name.charAt(0) !== '\u2026' && names.indexOf(name) === -1) names.push(name);
     });
-    var short = shortNames(long, taken);
+    var short = shortNames(names);
     S.shortened = {};
     S.people.forEach(function (person, index) {
       if (person.me) return;
-      var to = short[shownName(person)];
-      if (!to) return;
+      var from = shownName(person);
+      var to = short[from];
+      if (!to || to === from) return;
       S.shortened[person.key] = { short: to, before: S.names[person.key] };
       S.names[person.key] = to;
       var input = $('person-' + index);

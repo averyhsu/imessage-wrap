@@ -334,7 +334,9 @@ async function dropFolder(page, name, tree) {
       const bin = atob(node.b64);
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return new File([bytes], key);
+      // One fixed time stamp for every file: a Mac's address books share a name and often
+      // a size, so two of them must not be mistaken for the same file added twice.
+      return new File([bytes], key, { lastModified: 1794000000000 });
     };
     const fileEntry = (key, node) => ({ isFile: true, isDirectory: false, name: key, file: (done) => done(fileOf(key, node)) });
     const dirEntry = (key, nodes) => ({
