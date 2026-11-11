@@ -92,7 +92,9 @@ function cli(args, tz = LA) {
     cwd: ROOT,
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, PYTHONPATH: ROOT, PYTHONIOENCODING: 'utf-8', TZ: tz },
+    // Without --me the tool would look up the first name of this computer's account (on a
+    // Mac); the tests say "Me" where they mean the page's "Leave me as Me".
+    env: { ...process.env, PYTHONPATH: ROOT, PYTHONIOENCODING: 'utf-8', TZ: tz, WRAPPED_ME: 'Me' },
   });
 }
 const cliChats = (args) => JSON.parse(cli(['chats', '--json', ...args]));
@@ -1614,6 +1616,36 @@ await section('hostile', 'People called constructor, toString or __proto__ are p
   eq(names(state), ['Me', '__proto__', 'constructor', 'hasOwnProperty', 'toString', 'valueOf'], 'a pasted export with those senders is read and counted');
   eq(state.statsJson, exportStats(source, LA), 'exactly as the engine counts that text');
   s.clean('hostile paste');
+  await s.close();
+
+  // Contacts saved under a number, an address, or a name of a million characters (the
+  // shared fixture's "numbered" cards). A card that is only a number is no name: the
+  // page still asks who that is, and never shows or sends the number itself.
+  s = await open();
+  page = s.page;
+  const EVIL = fx(P.evil_db);
+  const EVIL_BOOK = fx(P.evil_address_book);
+  const numbered = fixture.evil.chats.long_name.rowid;
+  await addMac(page, [EVIL, EVIL_BOOK]);
+  await pick(page, numbered);
+  const cards = (await snap(page)).people.filter((p) => !p.me);
+  const card = (handle) => cards.find((p) => p.handles.includes(handle)) || {};
+  eq([card('+15550100402').name, card('+15550100402').named], ['…0402', false], 'a contact saved under a phone number is not a name');
+  eq(await page.getAttribute('.mk-person[data-person="h:p:5550100402"] input', 'placeholder'), 'Who is …0402?', 'so the page asks who that is');
+  ok(await visible(page, '.mk-person[data-person="h:p:5550100402"] .mk-tag--new'), 'and marks them "No name yet"');
+  eq([card('+15550100403').named, card('okafor@example.com').named], [false, false], 'the same for a name that ends in a number, and for a company saved with one');
+  eq([card('+15550100401').name, card('+15550100401').named], ['jane.doe', true], 'a contact saved as an e-mail address goes by the part before the @');
+  ok(card('+15550100405').named && Array.from(card('+15550100405').name).length === 41 && card('+15550100405').name.endsWith('…'), 'a name of a million characters is cut to 40 and an ellipsis');
+  ok(/^3 people have no name yet/.test(await text(page, '#unnamed-hint')), 'the note counts the three');
+  await period(page, 'all');
+  state = await create(page);
+  await matchesShort(page, [String(numbered), '--db', EVIL, '--contacts', EVIL_BOOK, '--tz', LA, '--all-time'], 'numbered contacts, first names: byte-identical to the command-line tool');
+  await page.click('#first-names');
+  await matchesCli(page, [String(numbered), '--db', EVIL, '--contacts', EVIL_BOOK, '--tz', LA, '--all-time'], LA, 'numbered contacts, names in full: byte-identical too');
+  state = await snap(page);
+  ok(!/555\D{0,2}010|example\.com|@/.test(JSON.stringify(decode(state.link.url))) && !/555\D{0,2}010|example\.com|@/.test(state.statsJson), 'no number or address from those cards is in the stats or the link');
+  ok(state.link.length <= 4800, `and the link fits (${state.link.length} characters)`);
+  s.clean('numbered contacts');
   await s.close();
 
   // And if something on the page does throw one day, the person is told, on the page.

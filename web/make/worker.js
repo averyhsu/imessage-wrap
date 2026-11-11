@@ -181,7 +181,12 @@
     if (!handle) return { key: 'u:', name: names.handle(null), named: false };
     var name = names.handle(handle);
     var contact = Engine.contactKey(handle);
-    if (contact !== null && names.table.get(contact) === name) return { key: 'n:' + name, name: name, named: true };
+    // A contact name counts as a name unless it is itself a number: people do save cards
+    // under one, and the engine masks such a label ("...0402") like any other. That
+    // person still has no name, so the page goes on asking who they are.
+    if (contact !== null && names.table.get(contact) === name && name.charAt(0) !== '\u2026') {
+      return { key: 'n:' + name, name: name, named: true };
+    }
     // No contact name. The engine has masked the label if it held a phone number (an
     // ellipsis and four digits) or an e-mail address (the part before the @): that person
     // has no name yet. Anything else is a name as an export gave it.
