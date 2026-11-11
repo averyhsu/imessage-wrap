@@ -8,20 +8,29 @@ Sub-commands are registered on one ``argparse`` sub-parser object and each
 sets ``func`` (a callable taking the parsed arguments and returning an exit
 status). The optional ``wrapped.mac`` package adds its own commands through
 ``wrapped.mac.cli.register(subparsers)`` using the same convention.
+
+Whatever goes wrong with the input (a damaged database, a file that cannot be
+written, a stats file that is not a recap) ends in one sentence on standard
+error and exit status 1, never in a traceback. Set ``WRAPPED_DEBUG=1`` to see
+the traceback of an unexpected error.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+import sqlite3
 import sys
 import time
 from typing import Any, List, Optional
 
 from . import api, payload
-from .db import DatabaseError
+from .db import DatabaseError, _damaged
 from .payload import LinkTooLongError
 from .product import PRODUCT_NAME, TAGLINE
+from .stats import _owner_name, short_names
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -54,6 +63,10 @@ def _add_period_options(parser: argparse.ArgumentParser) -> None:
     group.add_argument("--all-time", action="store_true", help="everything, not just one year")
     group.add_argument("--start", metavar="YYYY-MM-DD", help="first day (inclusive)")
     group.add_argument("--end", metavar="YYYY-MM-DD", help="last day (inclusive)")
+    parser.add_argument("--full-names", action="store_true",
+                        help="keep people's names exactly as they are in Contacts (by default "
+                             "the recap uses first names: \"Sam\", or \"Sam R.\" when two "
+                             "people share one)")
 
 
 def _open(args: argparse.Namespace) -> api.Source:
@@ -65,16 +78,32 @@ def _open(args: argparse.Namespace) -> api.Source:
     return api.open_source(db=args.db, backup=args.backup, contacts=contacts)
 
 
+_GARBLING = re.compile("[\x7f-\x9f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+
+
+def _pretty(value: Any) -> str:
+    """Indented JSON that is safe to print. ``json.dumps`` already escapes
+    the C0 control characters; the others that can garble a terminal (DEL,
+    C1, line separators, direction overrides) are escaped the same way."""
+    text = json.dumps(value, ensure_ascii=False, indent=2)
+    return _GARBLING.sub(lambda match: "\\u%04x" % ord(match.group(0)), text)
+
+
 def _day(unix: Optional[int]) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(unix)) if unix else "-"
 
 
 def _stats_for(args: argparse.Namespace) -> Any:
-    if sum(bool(x) for x in (args.year, args.all_time, args.start or args.end)) > 1:
+    if args.year is not None and not 1 <= args.year <= 9999:
+        raise ValueError("--year must be between 1 and 9999, for example --year 2026")
+    if sum(bool(x) for x in (args.year is not None, args.all_time, args.start or args.end)) > 1:
         raise ValueError("choose one of --year, --all-time or --start/--end")
     with _open(args) as source:
-        return source.stats(args.chat, year=args.year, me=args.me, tz=args.tz,
-                            all_time=args.all_time, start=args.start, end=args.end)
+        stats = source.stats(args.chat, year=args.year, me=args.me, tz=args.tz,
+                             all_time=args.all_time, start=args.start, end=args.end)
+    if not args.full_names:
+        stats = short_names(stats, me=_owner_name(args.me))
+    return stats
 
 
 def cmd_chats(args: argparse.Namespace) -> int:
@@ -83,9 +112,9 @@ def cmd_chats(args: argparse.Namespace) -> int:
         info = source.diagnostics()
         kind = source.kind
     if args.json:
-        json.dump({"source": kind, "diagnostics": info, "chats": chats}, sys.stdout,
-                  ensure_ascii=False, indent=2)
-        sys.stdout.write("\n")
+        # The listing for other programs: everything list_group_chats() knows,
+        # which includes the members' raw handle ids ("participants").
+        sys.stdout.write(_pretty({"source": kind, "diagnostics": info, "chats": chats}) + "\n")
         return EXIT_OK
     out = sys.stdout.write
     out("%s: %s messages in %s chats (%s group chats), %s to %s\n" % (
@@ -95,7 +124,7 @@ def cmd_chats(args: argparse.Namespace) -> int:
         out("No group chats in this database.\n")
         return EXIT_OK
     out("\n%6s  %9s  %7s  %-10s  %s\n" % ("id", "messages", "members", "last", "name"))
-    for chat in chats:
+    for chat in chats:          # names are cleaned by the engine: always one line each
         out("%6d  %9s  %7d  %-10s  %s\n" % (
             chat["id"], format(chat["messages"], ","), chat["members"],
             _day(chat["last_unix"]), chat["name"]))
@@ -105,11 +134,13 @@ def cmd_chats(args: argparse.Namespace) -> int:
 
 def cmd_stats(args: argparse.Namespace) -> int:
     stats = _stats_for(args)
-    text = (payload.canonical_json(stats) if args.compact
-            else json.dumps(stats, ensure_ascii=False, indent=2))
+    text = payload.canonical_json(stats) if args.compact else _pretty(stats)
     if args.output and args.output != "-":
-        with open(args.output, "w", encoding="utf-8") as handle:
-            handle.write(text + "\n")
+        try:
+            with open(args.output, "w", encoding="utf-8") as handle:
+                handle.write(text + "\n")
+        except OSError as exc:
+            raise ValueError("could not write %s (%s)" % (args.output, exc.strerror or exc))
         sys.stderr.write("%s: wrote %s (%s messages, %s)\n" % (
             PRODUCT_NAME, args.output, format(stats["totals"]["messages"], ","),
             stats["period"]["label"]))
@@ -118,12 +149,36 @@ def cmd_stats(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _read_stats_file(path: str) -> Any:
+    """A stats JSON file written earlier (``-`` is standard input)."""
+    shown = "standard input" if path == "-" else path
+    try:
+        if path == "-":
+            text = sys.stdin.read()
+        else:
+            with open(path, encoding="utf-8") as handle:
+                text = handle.read()
+    except OSError as exc:
+        raise ValueError("could not read %s (%s)" % (shown, exc.strerror or exc))
+    except UnicodeDecodeError:
+        raise ValueError("%s is not a text file, so it cannot be a recap" % shown)
+    try:
+        stats = json.loads(text)
+    except RecursionError:
+        raise ValueError("%s is nested too deeply to be a recap" % shown)
+    except ValueError as exc:
+        raise ValueError("%s is not valid JSON (%s)" % (shown, exc))
+    if not isinstance(stats, dict):
+        raise ValueError("%s does not hold a recap: expected a JSON object, found %s"
+                         % (shown, "a list" if isinstance(stats, list) else "a single value"))
+    return stats
+
+
 def cmd_link(args: argparse.Namespace) -> int:
     if args.stats:
         if args.chat:
             raise ValueError("give either a chat or --stats FILE, not both")
-        with (sys.stdin if args.stats == "-" else open(args.stats, encoding="utf-8")) as handle:
-            stats = json.load(handle)
+        stats = _read_stats_file(args.stats)        # used as it is: names are not changed
     elif args.chat:
         stats = _stats_for(args)
     else:
@@ -150,7 +205,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     chats = subparsers.add_parser("chats", help="list group chats with message counts")
     _add_source_options(chats)
-    chats.add_argument("--json", action="store_true", help="machine-readable output")
+    chats.add_argument("--json", action="store_true",
+                       help="the full listing for other programs; it includes the members' "
+                            "phone numbers and addresses, so do not share it")
     chats.set_defaults(func=cmd_chats)
 
     stats = subparsers.add_parser("stats", help="write the stats JSON for one chat")
@@ -164,7 +221,8 @@ def build_parser() -> argparse.ArgumentParser:
     link = subparsers.add_parser("link", help="print the share link for one chat")
     link.add_argument("chat", metavar="CHAT", nargs="?", help="chat id, or part of its name")
     link.add_argument("--stats", metavar="FILE",
-                      help="build the link from a stats JSON file instead of a chat")
+                      help="build the link from a stats JSON file instead of a chat (the "
+                           "file is used as it is)")
     link.add_argument("--quotes", action="store_true",
                       help="include the text of the most-reacted messages in the link "
                            "(off unless you ask for it)")
@@ -188,11 +246,29 @@ def _version() -> str:
     return __version__
 
 
+def _sentence(exc: BaseException) -> str:
+    """One line for the person at the keyboard."""
+    if isinstance(exc, (sqlite3.Error, sqlite3.Warning, UnicodeError)):
+        return str(_damaged(exc))
+    if isinstance(exc, RecursionError):
+        return "that file is nested too deeply to be a recap"
+    if isinstance(exc, MemoryError):
+        return "this needs more memory than the computer has free"
+    if isinstance(exc, OSError):
+        target = getattr(exc, "filename", None)
+        reason = exc.strerror or exc.__class__.__name__
+        return "could not use %s (%s)" % (target, reason) if target else reason
+    if isinstance(exc, (DatabaseError, LinkTooLongError, ValueError)):
+        return str(exc)
+    return "something unexpected went wrong (%s: %s). Set WRAPPED_DEBUG=1 to see the details." % (
+        exc.__class__.__name__, exc)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Run the CLI. Returns the process exit status."""
     for stream in (sys.stdout, sys.stderr):
         try:
-            stream.reconfigure(encoding="utf-8")
+            stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, ValueError):
             pass
     parser = build_parser()
@@ -203,16 +279,16 @@ def main(argv: Optional[List[str]] = None) -> int:
         return EXIT_OK
     try:
         return int(func(args) or 0)
-    except (DatabaseError, LinkTooLongError) as exc:
-        sys.stderr.write("%s: %s\n" % (PRODUCT_NAME, exc))
-        return EXIT_ERROR
-    except ValueError as exc:
-        sys.stderr.write("%s: %s\n" % (PRODUCT_NAME, exc))
-        return EXIT_ERROR
     except BrokenPipeError:
         return EXIT_OK
     except KeyboardInterrupt:
         return 130
+    except Exception as exc:        # never a traceback for the person at the keyboard
+        if os.environ.get("WRAPPED_DEBUG"):
+            raise
+        sys.stderr.write("%s: %s\n" % (PRODUCT_NAME, " ".join(_sentence(exc).splitlines())
+                                       if not isinstance(exc, DatabaseError) else _sentence(exc)))
+        return EXIT_ERROR
 
 
 if __name__ == "__main__":
