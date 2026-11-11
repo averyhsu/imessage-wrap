@@ -159,20 +159,15 @@ jobs:
           RECORDER=$!
           sleep 2
           xcrun simctl launch "$UDID" "$APP_ID" --autoplay-demo
-          sleep 6
+          sleep 10
           xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-02-demo-story.png"
-          sleep 16
+          sleep 14
           xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-03-demo-story-later.png"
           kill -INT "$RECORDER" || true
           wait "$RECORDER" || true
           xcrun simctl terminate "$UDID" "$APP_ID" || true
-
-          echo "== recap link opened through the custom URL scheme"
-          PAYLOAD=$(python3 -c "import json; print(json.load(open('tests/vectors/payload-v1.json'))['payload'])")
-          xcrun simctl openurl "$UDID" "imessagewrapped://recap#w1=$PAYLOAD" || true
-          sleep 8
-          xcrun simctl io "$UDID" screenshot "$SHOTS/simctl-04-opened-by-url-scheme.png"
-          xcrun simctl terminate "$UDID" "$APP_ID" || true
+          # (The custom URL scheme is exercised by a UI test: the system asks "Open in …?"
+          # first, which simctl cannot answer.)
 
           echo "== extension registration"
           xcrun simctl spawn "$UDID" pluginkit -m -v -p com.apple.message-payload-provider 2>&1 | grep -i "averyhsu" || echo "our extension is NOT registered with pluginkit"
@@ -207,8 +202,39 @@ jobs:
           fi
           exit "$STATUS"
 
+      - name: Collect test results
+        if: ${{ !cancelled() }}
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "Run:    $RUN_URL"
+            echo "Commit: $GITHUB_SHA"
+            echo "Xcode:  $(xcodebuild -version | tr '\n' ' ')"
+            echo ""
+            echo "== Unit tests and app UI tests (Simulator)"
+            if [ -f "$OUT/logs/test.log" ]; then
+              grep -E "Test Case .* (passed|failed|skipped)|Executed [0-9]+ tests?|\*\* TEST" "$OUT/logs/test.log" | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++' || true
+            else
+              echo "not run"
+            fi
+            echo ""
+            echo "== Notes printed by tests"
+            cat "$OUT"/logs/test.log "$OUT"/logs/messages.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-600 || true
+            echo ""
+            echo "== Extension inside the Simulator's Messages app (automation attempt, allowed to fail)"
+            if [ -f "$OUT/logs/messages.log" ]; then
+              grep -E "Test Case .* (passed|failed)|error:|\*\* TEST" "$OUT/logs/messages.log" | sed -E 's#^.*/ios/#ios/#' | awk '!seen[$0]++' | cut -c1-400 || true
+            else
+              echo "not run"
+            fi
+          } > "$SHOTS/TEST-RESULTS.txt"
+          cat "$SHOTS/TEST-RESULTS.txt"
+
+      # Only runs for native ("iOS …") commits publish, so a web-only push cannot overwrite
+      # newer native screenshots with an older build's.
       - name: Publish screenshots to the branch
-        if: ${{ !cancelled() && github.ref_type == 'branch' }}
+        if: ${{ !cancelled() && github.ref_type == 'branch' && (github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'iOS')) }}
         env:
           BRANCH: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

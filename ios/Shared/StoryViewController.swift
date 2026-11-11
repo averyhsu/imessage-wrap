@@ -49,6 +49,7 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
     private var webView: WKWebView?
     private var statusLabel: UILabel?
     private var failureLabel: UILabel?
+    private var loadingIndicator: UIActivityIndicatorView?
     private var reloadsAfterCrash = 0
 
     private(set) var slideCount = 0
@@ -134,6 +135,18 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
             installSwipeDownToClose()
         }
 
+        // A quiet native spinner until the page reports that the story is on screen.
+        let spinner = UIActivityIndicatorView(style: .large)
+        spinner.color = .white
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.startAnimating()
+        view.addSubview(spinner)
+        NSLayoutConstraint.activate([
+            spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        ])
+        loadingIndicator = spinner
+
         if StoryViewController.showsBridgeStatusForTesting {
             let label = UILabel(frame: CGRect(x: 0, y: 0, width: 4, height: 4))
             label.textColor = .clear
@@ -159,7 +172,24 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         webView?.loadFileURL(location.url, allowingReadAccessTo: location.directory)
     }
 
+    private func hideLoadingIndicator() {
+        guard let spinner = loadingIndicator else {
+            return
+        }
+        loadingIndicator = nil
+        UIView.animate(
+            withDuration: 0.2,
+            animations: {
+                spinner.alpha = 0
+            },
+            completion: { (_: Bool) in
+                spinner.removeFromSuperview()
+            }
+        )
+    }
+
     private func showFailure(_ text: String) {
+        hideLoadingIndicator()
         setStatus("error: \(text)")
         if failureLabel == nil {
             let label = UILabel()
@@ -231,9 +261,11 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         switch type {
         case "ready":
             isReady = true
+            hideLoadingIndicator()
             slideCount = intValue(body["slides"]) ?? slideCount
             setStatus("ready \(slideCount)")
         case "slide":
+            hideLoadingIndicator()
             currentSlide = intValue(body["index"]) ?? currentSlide
             slideCount = intValue(body["total"]) ?? slideCount
             setStatus("slide \(currentSlide)/\(slideCount)")
@@ -343,6 +375,13 @@ final class StoryViewController: UIViewController, WKScriptMessageHandler, WKNav
         decisionHandler(.cancel)
         if navigationAction.navigationType == .linkActivated, scheme == "https" || scheme == "http" {
             delegate?.story(self, didRequestOpen: url)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // Fallback: a page that never reports "ready" must not keep the spinner forever.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
+            self?.hideLoadingIndicator()
         }
     }
 

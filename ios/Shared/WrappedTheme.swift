@@ -103,10 +103,18 @@ struct ThemeBackground: View {
     }
 }
 
-/// A speech bubble with a tail at the lower left, in the proportions of the web brand mark.
+/// One half of a speech bubble with a tail at the lower left, in the proportions of the
+/// web brand mark. The body and the tail are separate shapes that are filled one over the
+/// other: as a single path, their opposite winding would cut a notch where they overlap.
 struct BubbleShape: Shape {
+    enum Part {
+        case body
+        case tail
+    }
+
+    var part: Part
+
     func path(in rect: CGRect) -> Path {
-        var path = Path()
         let tailRoom = rect.width * 0.1
         let body = CGRect(
             x: rect.minX + tailRoom,
@@ -115,20 +123,22 @@ struct BubbleShape: Shape {
             height: rect.height * 0.92
         )
         let radius = body.height / 2
-        path.addRoundedRect(in: body, cornerSize: CGSize(width: radius, height: radius), style: .continuous)
-
-        var tail = Path()
-        tail.move(to: CGPoint(x: body.minX + radius * 0.25, y: body.maxY - radius * 0.9))
-        tail.addQuadCurve(
-            to: CGPoint(x: rect.minX, y: rect.maxY),
-            control: CGPoint(x: body.minX + radius * 0.2, y: rect.maxY - rect.height * 0.08)
-        )
-        tail.addQuadCurve(
-            to: CGPoint(x: body.minX + radius * 1.1, y: body.maxY - radius * 0.08),
-            control: CGPoint(x: body.minX + radius * 0.5, y: rect.maxY)
-        )
-        tail.closeSubpath()
-        path.addPath(tail)
+        var path = Path()
+        switch part {
+        case .body:
+            path.addRoundedRect(in: body, cornerSize: CGSize(width: radius, height: radius), style: .continuous)
+        case .tail:
+            path.move(to: CGPoint(x: body.minX + radius * 0.25, y: body.maxY - radius * 0.9))
+            path.addQuadCurve(
+                to: CGPoint(x: rect.minX, y: rect.maxY),
+                control: CGPoint(x: body.minX + radius * 0.2, y: rect.maxY - rect.height * 0.08)
+            )
+            path.addQuadCurve(
+                to: CGPoint(x: body.minX + radius * 1.1, y: body.maxY - radius * 0.08),
+                control: CGPoint(x: body.minX + radius * 0.5, y: rect.maxY)
+            )
+            path.closeSubpath()
+        }
         return path
     }
 }
@@ -141,18 +151,20 @@ struct BrandMark: View {
     var dots: Color = Color.white
 
     var body: some View {
-        BubbleShape()
-            .fill(fill)
-            .frame(width: size * 1.3, height: size)
-            .overlay {
-                HStack(spacing: size * 0.11) {
-                    dot
-                    dot
-                    dot
-                }
-                .offset(x: size * 0.065, y: -size * 0.04)
+        ZStack {
+            BubbleShape(part: .body)
+                .fill(fill)
+            BubbleShape(part: .tail)
+                .fill(fill)
+            HStack(spacing: size * 0.11) {
+                dot
+                dot
+                dot
             }
-            .accessibilityHidden(true)
+            .offset(x: size * 0.065, y: -size * 0.04)
+        }
+        .frame(width: size * 1.3, height: size)
+        .accessibilityHidden(true)
     }
 
     private var dot: some View {

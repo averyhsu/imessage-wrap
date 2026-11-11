@@ -97,14 +97,13 @@ final class MessagesExtensionUITests: XCTestCase {
         checkpoint("03-conversation")
 
         // 2. Open the app drawer ("+" next to the text field on iOS 17 and later).
+        // On iOS 26 it is a button labelled "add" inside the element "MessageEntryView".
         let openedDrawer = tapFirst("app drawer", [
+            messages.buttons["add"],
+            messages.otherElements["MessageEntryView"].buttons.firstMatch,
             messages.buttons["Apps"],
-            messages.buttons["plusButton"],
             messages.buttons["Add"],
-            messages.buttons["More"],
-            messages.buttons["browserButton"],
-            messages.buttons["Messages Apps"],
-            anyElement(labelContaining: "Apps")
+            messages.buttons["browserButton"]
         ])
         pause(2.5)
         checkpoint("04-app-drawer")

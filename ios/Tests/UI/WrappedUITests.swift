@@ -124,6 +124,33 @@ final class WrappedUITests: XCTestCase {
         UIArtifacts.snap("app-08-story-opened-from-link", in: self)
     }
 
+    /// The registered custom scheme, routed by the system: iOS asks "Open in …?" first.
+    func testCustomURLSchemeOpensARecap() throws {
+        let app = launch([])
+        XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 30))
+
+        let link = try XCTUnwrap(URL(string: "imessagewrapped://recap#w1=" + WrappedUITests.linkTestPayload))
+        XCUIDevice.shared.system.open(link)
+
+        let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        let open = springboard.buttons["Open"]
+        let asked = open.waitForExistence(timeout: 10)
+        UIArtifacts.note("custom URL scheme: the system asked before opening=\(asked)")
+        if asked {
+            open.tap()
+        }
+
+        let status = waitForBridge(app, timeout: 45) { status in
+            return status.hasPrefix("ready") || status.hasPrefix("slide")
+        }
+        XCTAssertTrue(
+            status.hasPrefix("ready") || status.hasPrefix("slide"),
+            "an imessagewrapped:// link should open the story (last status: \(status))"
+        )
+        Thread.sleep(forTimeInterval: 1.2)
+        UIArtifacts.snap("app-09-story-opened-by-url-scheme", in: self)
+    }
+
     func testUnreadableLinkStaysOnHomeWithANotice() throws {
         let app = launch(["--open-url", "imessagewrapped://recap#w1=not-a-real-payload"])
         XCTAssertTrue(app.staticTexts["home.notice"].waitForExistence(timeout: 30))

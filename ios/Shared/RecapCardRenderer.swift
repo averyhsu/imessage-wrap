@@ -103,8 +103,9 @@ enum RecapCardRenderer {
             number = numberString(summary.formattedTotal, size: numberSize)
         }
         let numberFont = WrappedTheme.displayFont(ofSize: numberSize, weight: .black)
-        // Sit the digits' baseline a few points above the "messages" line.
-        let baseline = unitY - 1
+        // Sit the digits' baseline above the "messages" line, leaving room for the
+        // comma's tail so it does not run into the word below.
+        let baseline = unitY - numberSize * 0.12
         let numberY = baseline - numberFont.ascender
         number.draw(at: CGPoint(x: content.minX - 3, y: numberY))
     }
@@ -190,8 +191,11 @@ enum RecapCardRenderer {
             controlPoint: CGPoint(x: body.minX + radius * 0.5, y: rect.maxY)
         )
         tail.close()
+        // Fill the two shapes separately: as one path their opposite winding would punch
+        // a hole where the tail overlaps the bubble.
         context.setFillColor(UIColor.white.cgColor)
         context.addPath(bubble.cgPath)
+        context.fillPath()
         context.addPath(tail.cgPath)
         context.fillPath()
 

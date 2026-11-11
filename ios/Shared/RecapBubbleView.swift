@@ -79,7 +79,7 @@ final class RecapBubbleView: UIView {
         textStack.alignment = .leading
         textStack.spacing = 1
         textStack.setCustomSpacing(3, after: nameLabel)
-        textStack.setCustomSpacing(-5, after: countLabel)
+        textStack.setCustomSpacing(0, after: countLabel)
         textStack.translatesAutoresizingMaskIntoConstraints = false
         playLabel.translatesAutoresizingMaskIntoConstraints = false
 

@@ -1,12 +1,14 @@
 #!/bin/bash
 # CI only. Publishes this run's Simulator screenshots to docs/screenshots/ios/ on the
-# branch that triggered the run, as a bot commit marked [skip ci].
+# branch that triggered the run, as a bot commit that does not trigger CI again.
 #
 # Why commit them: the development sandbox cannot download Actions artifacts (the blob
-# host is blocked there), and the README wants these images anyway. Images are downscaled
-# to 600 px wide to keep the repository small; full-size ones are in the run's artifacts.
+# host is blocked there), and the README wants these images anyway. To keep the
+# repository small the committed copies are JPEGs, 600 px wide; the full-size PNGs are in
+# the run's `ios-screenshots` artifact.
 #
-# Needs: SHOTS (directory with *.png and optionally debug/*.txt), BRANCH, RUN_URL.
+# Needs: SHOTS (directory with *.png, optionally debug/*.txt and TEST-RESULTS.txt),
+#        BRANCH, RUN_URL.
 # Optional: WEB_SOURCE ("real" or "placeholder"), SIM_LABEL.
 set -euo pipefail
 
@@ -21,8 +23,10 @@ main() {
   shopt -s nullglob
   local count=0
   local file
+  local name
   for file in "$src"/*.png; do
-    sips --resampleWidth 600 "$file" --out "$stage/$(basename "$file")" > /dev/null
+    name="$(basename "$file" .png)"
+    sips -s format jpeg -s formatOptions 82 --resampleWidth 600 "$file" --out "$stage/$name.jpg" > /dev/null
     count=$((count + 1))
   done
   if [ "$count" -eq 0 ]; then
@@ -35,6 +39,9 @@ main() {
       cp "$file" "$stage/debug/"
     done
   fi
+  if [ -f "$src/TEST-RESULTS.txt" ]; then
+    cp "$src/TEST-RESULTS.txt" "$stage/TEST-RESULTS.txt"
+  fi
 
   {
     echo "# iOS Simulator screenshots"
@@ -44,6 +51,7 @@ main() {
     echo "- Run: ${run_url:-unknown}"
     echo "- Simulator: ${SIM_LABEL:-unknown}"
     echo "- Story shown in the app: the **${WEB_SOURCE:-unknown}** web story"
+    echo "- Test results and notes of that run: [TEST-RESULTS.txt](TEST-RESULTS.txt)"
     echo ""
     echo "What the file names mean:"
     echo ""
@@ -53,14 +61,13 @@ main() {
     echo "| \`simctl-\` | The containing app, launched and captured with \`xcrun simctl\`. |"
     echo "| \`gallery-\` | The extension's native views hosted in the app's debug gallery. **Not Messages.** |"
     echo "| \`render-\` | Offscreen renders from unit tests (share card, live bubble). **Not Messages.** |"
-    echo "| \`messages-\` | The real Messages app in the Simulator (Stage 3 automation attempt). |"
+    echo "| \`messages-\` | The real Messages app in the Simulator (automation attempt; see the test results for how far it got). |"
     echo ""
-    for file in "$stage"/*.png; do
-      local name
+    for file in "$stage"/*.jpg; do
       name="$(basename "$file")"
-      echo "### ${name%.png}"
+      echo "### ${name%.jpg}"
       echo ""
-      echo "<img src=\"$name\" width=\"300\" alt=\"${name%.png}\">"
+      echo "<img src=\"$name\" width=\"300\" alt=\"${name%.jpg}\">"
       echo ""
     done
   } > "$stage/README.md"

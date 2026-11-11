@@ -213,6 +213,11 @@ struct RecapSummary: Codable, Equatable {
     var subcaption: String {
         return "\(messagesLine) · Tap to play"
     }
+
+    /// "2026 · 48,213 messages": the second line of a compact list row.
+    var shortLine: String {
+        return periodLabel.isEmpty ? messagesLine : "\(periodLabel) · \(messagesLine)"
+    }
 }
 
 /// A recap as it travels: the opaque payload plus the decoded summary.

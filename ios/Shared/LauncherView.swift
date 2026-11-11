@@ -180,7 +180,7 @@ private struct RecentRecapRow: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color.white)
                             .lineLimit(1)
-                        Text("\(recap.summary.reviewLabel) · \(recap.summary.messagesLine)")
+                        Text(recap.summary.shortLine)
                             .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(Color.white.opacity(0.62))
                             .lineLimit(1)
