@@ -73,9 +73,9 @@ real Messages app in the iOS Simulator, driven by the test suite
   static files.
 - **The link is the recap.** The numbers are compressed into the part of the link after the
   `#`, which browsers never send to any website.
-- **What a link contains:** counts, the names in the chat, and nothing else, unless you
-  switch on quotes. People who are not in your contacts appear as `…1234`, never as a full
-  phone number. The words of the three most-reacted messages are added only if you ask.
+- **What a link contains:** counts, first names, the chat's name, and nothing else, unless
+  you switch on quotes. People who are not in your contacts appear as `…1234`, never as a
+  full phone number. The words of the three most-reacted messages are added only if you ask.
 - **No tracking.** No analytics, cookies or third-party scripts. A content security policy
   stops the pages from contacting anything but their own files.
 - Anyone holding a link can read that recap, so share it the way you would share a screenshot.
