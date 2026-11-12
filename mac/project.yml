@@ -27,6 +27,8 @@ settings:
     CODE_SIGN_IDENTITY: "-"
     DEVELOPMENT_TEAM: ""
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    # The commit shown in the app's test report; CI passes THREADBACK_COMMIT=<sha>.
+    THREADBACK_COMMIT: local
 
 targets:
   Threadback:

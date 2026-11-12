@@ -86,9 +86,13 @@ final class EngineTests: XCTestCase {
         let full = try engine.statsJSON(token: token, chat: "1", me: "Amara", tz: "America/Los_Angeles", period: "2026",
                                         contacts: contacts, shortNames: false)
         let short = try engine.shortNames(statsJSON: full, me: "Amara")
-        let text = try engine.recapText(statsJSON: short, withLink: true).message
-        XCTAssertEqual(text, python)
-        Fixture.note("recap text identical to the Python helper: \(text == python)")
+        let text = try engine.recapText(statsJSON: short, withLink: false).message
+        XCTAssertEqual(text, python, "no-link wording, as the Python helper with --no-link")
+        var pythonLink = try String(contentsOf: expected.appendingPathComponent("recap-taco-2026-link.txt"), encoding: .utf8)
+        if pythonLink.hasSuffix("\n") { pythonLink.removeLast() }
+        let withLink = try engine.recapText(statsJSON: short, withLink: true).message
+        XCTAssertEqual(withLink, pythonLink)
+        Fixture.note("recap text identical to the Python helper: no link \(text == python), with link \(withLink == pythonLink)")
     }
 
     func testLinkRoundTripsThroughSharedSwiftDecoder() throws {
@@ -180,6 +184,7 @@ final class AgentTests: XCTestCase {
     func testAnswersOnceInTheApprovedChatAndFollowsTheRules() throws {
         let sender = RecordingSender()
         let (agent, _) = try makeAgent(sender)
+        agent.config.link = true  // as when the story site is live
         var log: [String] = []
         agent.log = { log.append($0) }
 
@@ -208,6 +213,94 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(try agent.runOnce(), 0, "not a whole-message command")
         XCTAssertEqual(sender.sent.count, 3, "nothing else was sent")
         Fixture.note("agent log: " + log.joined(separator: " || "))
+    }
+
+    /// While the story site is not live, a reply is the image and the text, with no link
+    /// and no line pointing at one.
+    func testDefaultReplyHasNoLinkWhileTheSiteIsNotLive() throws {
+        XCTAssertFalse(MacConfig.storySiteIsLive)
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        XCTAssertFalse(agent.config.link)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped 2026", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 1)
+        XCTAssertEqual(sender.sent.map(\.kind), ["file", "text"])
+        XCTAssertFalse(sender.sent[1].payload.contains("https://"))
+        XCTAssertFalse(sender.sent[1].payload.contains("link below"))
+    }
+
+    /// "Copy test report" carries statuses, counts and error numbers, and nothing that
+    /// identifies a person or a chat.
+    func testTestReportHasNoNamesNumbersOrChats() throws {
+        let root = try Fixture.require()
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        var outcomes: [ReplyOutcome] = []
+        agent.onReply = { outcomes.append($0) }
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped 2026", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 1)
+        var records = outcomes.map { ReplyRecord($0, time: Date()) }
+        // and a reply as the real sender reports it: the id form and an AppleScript error
+        let chat = ChatRef(guid: "iMessage;+;\(Fixture.tacoIdentifier)", identifier: Fixture.tacoIdentifier,
+                           name: "Taco Tuesday Crew \u{1F32E}", rowid: 1, members: 7)
+        var failed = SendResult(status: .failed, reason: "not allowed to control Messages for Taco Tuesday Crew")
+        failed.errorNumber = -1743
+        failed.idForm = AppleScriptSender.idForm(chat.guid)
+        var outcome = ReplyOutcome(chat: chat, trigger: Trigger(command: "wrapped", period: nil))
+        outcome.results = [("card", failed)]
+        outcome.text = "secret message text"
+        records.append(ReplyRecord(outcome, time: Date()))
+
+        var facts = ReportFacts()
+        facts.groupChats = 4
+        facts.totalMessages = 4833
+        facts.replies = records
+        facts.directReadBeforeGrant = TestReport.shortRead("open failed: errno 1 (Operation not permitted)")
+        let report = TestReport.text(facts)
+        Fixture.note("test report sample: \(report)")
+        XCTAssertTrue(report.contains("iMessage;+;"))
+        XCTAssertTrue(report.contains("error -1743"))
+        XCTAssertTrue(report.contains("errno 1 (Operation not permitted)"))
+        XCTAssertTrue(report.contains("4 group chats, 4833 messages"))
+
+        // Nothing from the fixture: chat names, chat ids, contact names and handles, the owner.
+        let engine = try ThreadbackEngine()
+        let token = engine.open(try SQLiteDB(path: dbPath))
+        let contacts = engine.contacts(fromAddressBook: root.appendingPathComponent("mac/AddressBook").path)
+        let chats = try engine.listChats(token: token, me: "Amara", contacts: contacts)
+        var forbidden = ["Amara", "Taco", "Tuesday", "Book Club", "secret", "chat100000000000000001", "555", "@example.com"]
+        forbidden += chats.map(\.name) + chats.map(\.guid) + chats.map(\.chatIdentifier)
+        for pair in contacts { forbidden += pair.filter { $0.count >= 4 } }
+        for word in forbidden where !word.isEmpty {
+            XCTAssertFalse(report.contains(word), "the report contains \(word)")
+        }
+        XCTAssertGreaterThan(forbidden.count, 12)
+    }
+
+    func testIdFormIsACategory() {
+        XCTAssertEqual(AppleScriptSender.idForm("any;+;chat123456"), "any;+;")
+        XCTAssertEqual(AppleScriptSender.idForm("iMessage;-;+15550100001"), "iMessage;-;")
+        XCTAssertEqual(AppleScriptSender.idForm("SMS;+;chat1"), "SMS;+;")
+        XCTAssertEqual(AppleScriptSender.idForm("weird"), "other")
+        XCTAssertEqual(AppleScriptSender.idForm("x;+;chat1"), "other")
+    }
+
+    func testAppLocation() {
+        let home = "/Users/someone"
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/Applications/Threadback.app", home: home), .applications)
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/Users/someone/Applications/Threadback.app", home: home), .userApplications)
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/Users/someone/Downloads/Threadback.app", home: home), .downloads)
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/Users/someone/Downloads/Threadback-for-Mac/Threadback.app", home: home), .downloads)
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/private/var/folders/x/T/AppTranslocation/ABC/d/Threadback.app", home: home), .translocated)
+        XCTAssertEqual(AppLocation.classify(bundlePath: "/Users/someone/Desktop/Threadback.app", home: home), .other)
+        XCTAssertTrue(AppLocation.translocated.needsMove)
+        XCTAssertFalse(AppLocation.translocated.canMoveItself)
+        XCTAssertTrue(AppLocation.downloads.canMoveItself)
+        XCTAssertFalse(AppLocation.applications.needsMove)
+        XCTAssertEqual(TestReport.scrub("/Users/someone/Library and someone", home: "/Users/someone", user: "someone", fullName: "Some One"),
+                       "~/Library and <user>")
     }
 
     func testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing() throws {

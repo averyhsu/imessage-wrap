@@ -30,6 +30,21 @@ struct MenuContent: View {
 
     var body: some View {
         Text(model.status)
+        if model.accessLost {
+            Button(model.access) { model.reconnect() }
+        } else {
+            Text(model.access)
+        }
+        if let title = model.lastReplyTitle, let last = model.replies.last {
+            Divider()
+            Text(title)
+            if last.parts.isEmpty {
+                Text("could not build the reply")
+            }
+            ForEach(Array(last.parts.enumerated()), id: \.offset) { _, part in
+                Text("\(part.part.capitalized): \(part.status)" + (part.errorNumber.map { " (error \($0))" } ?? ""))
+            }
+        }
         Divider()
         if !model.approved.isEmpty {
             Button("Preview a reply…") { model.previewInFinder() }
@@ -39,6 +54,7 @@ struct MenuContent: View {
             Button("Reply in \(outcome.chat.name) not confirmed: send by hand…") { model.sendByHand() }
         }
         Toggle("Open at login", isOn: Binding(get: { model.loginItemOn }, set: { model.setLoginItem($0) }))
+        Button("Copy test report") { model.copyTestReport() }
         Button("Set up…") { NotificationCenter.default.post(name: .showOnboarding, object: nil) }
         Divider()
         Button("Quit Threadback") { NSApp.terminate(nil) }
@@ -60,7 +76,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
         if model.onboarded && !model.approved.isEmpty {
-            if !model.isFixture { _ = model.restoreFolder() }
+            if !model.isFixture { model.restoreFolder() }
+            model.checkAccess()
             model.startAgent()
         } else {
             showOnboarding()
@@ -80,7 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return window
         }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 600),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 640),
                               styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden

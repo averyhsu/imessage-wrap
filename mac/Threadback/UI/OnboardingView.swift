@@ -74,7 +74,7 @@ struct OnboardingView: View {
             }
             .padding(36)
         }
-        .frame(width: 720, height: 600)
+        .frame(width: 720, height: 640)
         .preferredColorScheme(.dark)
     }
 
@@ -104,6 +104,18 @@ struct OnboardingView: View {
                 bubble("2", "Choose a chat", Theme.green)
                 bubble("3", "Anyone types /wrapped", Color.white.opacity(0.14))
             }
+            if model.location.needsMove {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Threadback is running from \(model.location == .translocated ? "the download" : "Downloads"). Move it to Applications first, so its permissions and the login item last.")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    QuietButton(title: model.location.canMoveItself ? "Move to Applications" : "Show Downloads in Finder", identifier: "onboarding.move") { model.moveToApplications() }
+                    if !model.moveNote.isEmpty {
+                        Text(model.moveNote).font(.system(size: 12)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: MacPalette.rgb(0xFF9F0A, alpha: 0.22))))
+            }
             Spacer().frame(height: 4)
             PillButton(title: "Continue", identifier: "onboarding.continue") { model.continueFromWelcome() }
             Text("Your messages are read on this Mac only. Nothing is uploaded.").font(.system(size: 12)).foregroundStyle(Theme.muted)
@@ -123,38 +135,76 @@ struct OnboardingView: View {
 
     // MARK: 2. Connect your messages
 
+    private static let red = Color(nsColor: MacPalette.rgb(0xFF453A))
+
+    @ViewBuilder
     private var connect: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Connect your messages.").font(Theme.display(38)).foregroundStyle(.white)
-            Text("Threadback counts who said what in your group chats. In the window that opens, the Messages folder is already selected: click Grant Access.")
-                .font(.system(size: 15)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-            if model.connectedSummary.isEmpty {
-                PillButton(title: "Connect Messages…", identifier: "onboarding.connect") { model.connect() }
-            } else {
-                Label(model.connectedSummary, systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.green)
-                    .accessibilityIdentifier("onboarding.connected")
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Optional: show first names").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
-                    Text("With access to your contacts the recap says \u{201C}Sam\u{201D}; without it, \u{201C}\u{2026}1234\u{201D}.")
-                        .font(.system(size: 13)).foregroundStyle(Theme.muted)
-                    HStack(spacing: 10) {
-                        QuietButton(title: "Show first names", identifier: "onboarding.contacts") { model.askForContacts() }
-                        if !model.contactsNote.isEmpty {
-                            Text(model.contactsNote).font(.system(size: 12)).foregroundStyle(Theme.muted)
-                        }
+            switch model.connectState {
+            case .fullDiskAccess(let note):
+                fullDiskAccess(note)
+            default:
+                Text("Connect your messages.").font(Theme.display(38)).foregroundStyle(.white)
+                Text("Threadback counts who said what in your group chats. In the window that opens, the Messages folder is already selected: click Grant Access.")
+                    .font(.system(size: 15)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                connectBody
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var connectBody: some View {
+        switch model.connectState {
+        case .connected(let summary):
+            Label(summary, systemImage: "checkmark.circle.fill")
+                .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.green)
+                .accessibilityIdentifier("onboarding.connected")
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Optional: show first names").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                Text("With access to your contacts the recap says \u{201C}Sam\u{201D}; without it, \u{201C}\u{2026}1234\u{201D}.")
+                    .font(.system(size: 13)).foregroundStyle(Theme.muted)
+                HStack(spacing: 10) {
+                    QuietButton(title: "Show first names", identifier: "onboarding.contacts") { model.askForContacts() }
+                    if !model.contactsNote.isEmpty {
+                        Text(model.contactsNote).font(.system(size: 12)).foregroundStyle(Theme.muted)
                     }
                 }
-                .padding(16)
-                .background(RoundedRectangle(cornerRadius: 16).fill(Theme.card))
-                PillButton(title: "Continue", identifier: "onboarding.toChats") { model.continueToChats() }
             }
-            if !model.connectError.isEmpty {
-                Text(model.connectError).font(.system(size: 13)).foregroundStyle(Color(nsColor: MacPalette.rgb(0xFF453A)))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("onboarding.connectError")
-                QuietButton(title: "Open Full Disk Access settings", identifier: "onboarding.fda") { Permissions.openFullDiskAccessSettings() }
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Theme.card))
+            PillButton(title: "Continue", identifier: "onboarding.toChats") { model.continueToChats() }
+        case .failed(let message):
+            Label(message, systemImage: "xmark.octagon.fill")
+                .font(.system(size: 14, weight: .semibold)).foregroundStyle(OnboardingView.red)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("onboarding.connectError")
+            HStack(spacing: 10) {
+                PillButton(title: "Try again", identifier: "onboarding.retry") { model.connect() }
+                QuietButton(title: "Use Full Disk Access instead", identifier: "onboarding.useFDA") { model.showFullDiskAccess() }
             }
+        default:
+            PillButton(title: "Connect Messages\u{2026}", identifier: "onboarding.connect") { model.connect() }
+        }
+    }
+
+    private func fullDiskAccess(_ note: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Use Full Disk Access instead.").font(Theme.display(34)).foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 8) {
+                Text("1. Click Open System Settings.")
+                Text("2. In Full Disk Access, switch Threadback on (use + to add it from Applications if it is not listed).")
+                Text("3. Come back here and click Check again.")
+            }
+            .font(.system(size: 14)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                PillButton(title: "Open System Settings", identifier: "onboarding.openFDA") { Permissions.openFullDiskAccessSettings() }
+                QuietButton(title: "Check again", identifier: "onboarding.checkFDA") { model.checkFullDiskAccess() }
+            }
+            if !note.isEmpty {
+                Text(note).font(.system(size: 13)).foregroundStyle(OnboardingView.red).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("onboarding.fdaNote")
+            }
+            QuietButton(title: "Back to the folder", identifier: "onboarding.backToFolder") { model.connectState = .idle }
         }
     }
 
@@ -204,6 +254,10 @@ struct OnboardingView: View {
                     .padding(12).frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: MacPalette.rgb(0x2C2C2E))))
             }
+            if !MacConfig.storySiteIsLive {
+                Text("Each reply is this image and this text. The link to the full story is added once the story site is live.")
+                    .font(.system(size: 12)).foregroundStyle(Theme.muted)
+            }
             if !model.automationNote.isEmpty {
                 Text(model.automationNote).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
                     .accessibilityIdentifier("onboarding.automation")
@@ -212,7 +266,14 @@ struct OnboardingView: View {
                 Toggle("Open Threadback when I log in", isOn: Binding(get: { model.loginItemOn }, set: { model.setLoginItem($0) }))
                     .toggleStyle(.switch).foregroundStyle(.white).accessibilityIdentifier("onboarding.loginItem")
                 Spacer()
+                QuietButton(title: "Copy test report", identifier: "onboarding.copyReport") { model.copyTestReport() }
                 PillButton(title: "Done", identifier: "onboarding.done") { model.finishOnboarding() }
+            }
+            if !model.loginItemNote.isEmpty && model.location == .translocated {
+                Text(model.loginItemNote).font(.system(size: 12)).foregroundStyle(OnboardingView.red)
+            }
+            if !model.copiedNote.isEmpty {
+                Text(model.copiedNote).font(.system(size: 12)).foregroundStyle(Theme.green).accessibilityIdentifier("onboarding.copied")
             }
             Text("Threadback answers while this Mac is awake and you are logged in. It lives in the menu bar.")
                 .font(.system(size: 12)).foregroundStyle(Theme.muted)

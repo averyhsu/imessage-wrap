@@ -7,7 +7,7 @@ import AppKit
 ///   Threadback --tb-stats CHAT --db P [--contacts DIR | --no-contacts] [--me N] [--tz Z]
 ///              [--year Y | --all-time] [--full-names]       same as `python3 -m wrapped stats … --compact`
 ///   Threadback --tb-chats --db P [--contacts DIR] [--me N]
-///   Threadback --tb-preview --db P --chat NAME --out DIR [...]   card, recap.txt, link.txt (sends nothing)
+///   Threadback --tb-preview --db P --chat NAME --out DIR [--link] [...]   card, recap.txt, link.txt (sends nothing)
 ///   Threadback --tb-agent-once --db P --chat NAME --state F --out DIR [...]   one dry-run pass of the agent
 ///   Threadback --tb-decode-link URL                              the stats inside a link, canonical JSON
 ///   Threadback --tb-print-applescript DIR                        the send script, for osacompile
@@ -100,7 +100,8 @@ enum DebugCLI {
         config.contacts = contacts
         config.dryRun = true
         config.outFolder = URL(fileURLWithPath: outDir, isDirectory: true)
-        config.link = !args.flag("--no-link")
+        // The link follows MacConfig.storySiteIsLive unless --link / --no-link says otherwise.
+        config.link = args.flag("--link") || (MacConfig.storySiteIsLive && !args.flag("--no-link"))
         let sender = RecordingSender()
         let statePath = args.value("--state").map { URL(fileURLWithPath: $0) }
         let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { try SQLiteDB(path: dbPath) }, statePath: statePath)

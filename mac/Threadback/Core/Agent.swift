@@ -17,7 +17,7 @@ struct AgentConfig {
     var cooldown: TimeInterval = 120
     var staleAfter: TimeInterval = 600
     var futureSkew: TimeInterval = 30
-    var link = true
+    var link = MacConfig.storySiteIsLive  // no link while the story site is not live
     var quotes = false
     var fullNames = false
     var dryRun = false
@@ -79,6 +79,8 @@ final class Agent {
     let statePath: URL?
     var clock: () -> Date = Date.init
     var log: (String) -> Void = { _ in }
+    /// Called once per answered command (the menu and the test report show it).
+    var onReply: (ReplyOutcome) -> Void = { _ in }
     private(set) var state: AgentState
     /// The approved chats, by key, frozen at consent.
     private(set) var approved: [String: ChatRef] = [:]
@@ -174,6 +176,7 @@ final class Agent {
         state.cursor = row.rowid
         state.save(statePath)
         lastOutcome = outcome
+        onReply(outcome)
         return outcome.sentSomething
     }
 

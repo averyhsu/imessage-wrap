@@ -1,6 +1,7 @@
 import AppKit
 import Contacts
 import CoreServices
+import Security
 import ServiceManagement
 
 /// The three things macOS has to agree to, each asked for on purpose from onboarding.
@@ -176,6 +177,32 @@ enum Permissions {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { done(app != nil) }
             }
         }
+    }
+
+    // MARK: Code signature (for the test report)
+
+    /// "ad-hoc, hardened runtime" / "Developer ID TEAMID" / "unsigned" / "unknown".
+    static func signatureKind() -> String {
+        var code: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(), &code) == errSecSuccess, let code else { return "unknown" }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(code, SecCSFlags(), &staticCode) == errSecSuccess, let staticCode else { return "unknown" }
+        var info: CFDictionary?
+        let signingInformation = SecCSFlags(rawValue: 1 << 1) // kSecCSSigningInformation
+        guard SecCodeCopySigningInformation(staticCode, signingInformation, &info) == errSecSuccess,
+              let dict = info as? [String: Any] else { return "unknown" }
+        let flags = (dict[kSecCodeInfoFlags as String] as? NSNumber)?.uint32Value ?? 0
+        let team = dict[kSecCodeInfoTeamIdentifier as String] as? String
+        var parts: [String] = []
+        if flags & 0x2 != 0 {
+            parts.append("ad-hoc")
+        } else if let team {
+            parts.append("team \(team)")
+        } else {
+            parts.append(dict[kSecCodeInfoIdentifier as String] == nil ? "unsigned" : "signed, no team")
+        }
+        if flags & 0x10000 != 0 { parts.append("hardened runtime") }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: Login item

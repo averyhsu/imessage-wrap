@@ -21,6 +21,10 @@ struct SendResult: Equatable {
     var reason: String = ""
     var rowid: Int?
     var orphan = false
+    /// The AppleScript error number, when Messages refused.
+    var errorNumber: Int?
+    /// Which spelling of the chat id was used, as a category ("any;+;"), never the id.
+    var idForm = ""
 
     var sentSomething: Bool { status != .failed }
     var summary: String { reason.isEmpty ? status.rawValue : "\(status.rawValue) (\(reason))" }
@@ -151,9 +155,13 @@ final class AppleScriptSender: MessageSender {
             }
         }
         if case .failure(let number, let message) = outcome {
-            return SendResult(status: .failed, reason: AppleScriptSender.explain(number, message))
+            var failed = SendResult(status: .failed, reason: AppleScriptSender.explain(number, message))
+            failed.errorNumber = number
+            failed.idForm = AppleScriptSender.idForm(guid)
+            return failed
         }
-        let verdict = verify(chat, before: before, text: text, isFile: isFile)
+        var verdict = verify(chat, before: before, text: text, isFile: isFile)
+        verdict.idForm = AppleScriptSender.idForm(guid)
         if verdict.status == .delivered { workingGuid[chat.key] = guid }
         return verdict
     }
@@ -190,6 +198,14 @@ final class AppleScriptSender: MessageSender {
         event.setDescriptor(NSAppleEventDescriptor(string: name), forKeyword: snam)
         event.setDescriptor(parameters, forKeyword: directObject)
         return event
+    }
+
+    /// "any;+;", "iMessage;-;", "SMS;+;" ... or "other": the shape of a chat id, never the id.
+    static func idForm(_ guid: String) -> String {
+        let parts = guid.split(separator: ";", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3, ["any", "iMessage", "SMS", "RCS"].contains(String(parts[0])),
+              ["+", "-"].contains(String(parts[1])) else { return "other" }
+        return "\(parts[0]);\(parts[1]);"
     }
 
     static func swapGuidForm(_ guid: String) -> String {

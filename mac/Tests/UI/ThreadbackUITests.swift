@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// UI tests on the macOS runner: the onboarding screenshots (fixture data) and the
@@ -119,6 +120,19 @@ final class OnboardingUITests: ThreadbackUITestCase {
         XCTAssertTrue(ready.waitForExistence(timeout: 30))
         sleep(1)
         shootWindow(app, "onboarding-3b-on")
+
+        // "Copy test report": what the owner pastes back. No names, chats or numbers in it.
+        let copy = element(app, "onboarding.copyReport")
+        XCTAssertTrue(copy.exists)
+        NSPasteboard.general.clearContents()
+        copy.click()
+        sleep(1)
+        let report = NSPasteboard.general.string(forType: .string) ?? ""
+        note("test report copied by the app: \(report)")
+        XCTAssertTrue(report.hasPrefix("Threadback test report"))
+        for word in ["Amara", "Taco", "Book Club", "Ines", "Bram", "555", "chat1000"] {
+            XCTAssertFalse(report.contains(word), "the copied report contains \(word)")
+        }
         element(app, "onboarding.done").click()
         sleep(1)
 
