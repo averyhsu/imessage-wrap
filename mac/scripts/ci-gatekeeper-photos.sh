@@ -96,8 +96,10 @@ echo "quarantine set to: $QUARANTINE (as Safari writes it on a download)"
 echo "spctl assessment: $(spctl -a -vv -t exec "$GK/Threadback.app" 2>&1 | tr '\n' ' ')"
 
 echo "-- 1. open it, as a double-click does"
-open "$GK/Threadback.app" 2>&1 || true
-sleep 8
+# open waits for LaunchServices, which waits for the person to answer the dialog: background it.
+open "$GK/Threadback.app" > "$GK/open.txt" 2>&1 &
+OPEN_PID=$!
+sleep 10
 screencapture -x "$SHOTS/gatekeeper-1-first-open.png" 2>&1 || true
 if pgrep -f "$GK/Threadback.app/Contents/MacOS/Threadback" > /dev/null; then
   echo "RESULT: the app RAN; macOS did not block it on this runner"
@@ -111,6 +113,9 @@ read_ui "CoreServicesUIAgent" "UserNotificationCenter" "Threadback" | sed 's/^/ 
 echo "click Done: $(click_button "CoreServicesUIAgent" "Done")"
 sleep 2
 pkill -f "$GK/Threadback.app/Contents/MacOS/Threadback" 2>/dev/null || true
+sleep 2
+kill "$OPEN_PID" 2>/dev/null || true
+echo "open said: $(tr '\n' ' ' < "$GK/open.txt")"
 
 echo "-- 2. System Settings > Privacy & Security"
 LINK=""
@@ -118,7 +123,7 @@ for candidate in \
   "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Security" \
   "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension" \
   "x-apple.systempreferences:com.apple.preference.security?General"; do
-  open "$candidate" 2>&1 || true
+  perl -e 'alarm 20; exec @ARGV' open "$candidate" 2>&1 || true
   sleep 10
   UI="$(read_ui "System Settings")"
   if echo "$UI" | grep -q "Open Anyway"; then
