@@ -33,8 +33,10 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  # Needed only by the last step, which commits docs/screenshots/mac/.
+  # contents: the step that commits docs/screenshots/mac/. actions: read, so the job can
+  # download its own artifacts the way a browser does (the download check).
   contents: write
+  actions: read
 
 jobs:
   app:
@@ -430,6 +432,42 @@ jobs:
             echo "zipped for download: artifact Threadback-for-Mac -> Threadback-for-Mac.zip ($(du -h "$OUT/download/Threadback-for-Mac.zip" | cut -f1)); artifact Threadback-debug-with-probes ($(du -h "$OUT/download-debug/Threadback-debug-with-probes.zip" | cut -f1))"
           } 2>&1 | tee "$RES/12-release.txt"
 
+      # The owner's download: ONE file, the ditto zip of the app, not re-zipped by GitHub
+      # (archive: false), so the browser saves Threadback-for-Mac.zip and one double-click
+      # (or Safari by itself) gives Threadback.app. The artifact is named after the file.
+      - name: "Upload the app for the owner: Threadback-for-Mac.zip"
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.OUT }}/download/Threadback-for-Mac.zip
+          archive: false
+          if-no-files-found: error
+
+      - name: "Diagnosis only: the same zip inside an artifact zip (the old, broken way)"
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: diagnosis-nested-zip
+          path: ${{ env.OUT }}/download/Threadback-for-Mac.zip
+          retention-days: 3
+          if-no-files-found: warn
+
+      - name: Upload the Debug app (with the CI probes)
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Threadback-debug-with-probes
+          path: ${{ env.OUT }}/download-debug/Threadback-debug-with-probes.zip
+          if-no-files-found: warn
+
+      - name: "The owner's download, checked: browser path, real Archive Utility, the built app"
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          mac/scripts/ci-browser-download-check.sh 2>&1 | tee "$RES/13-download.txt"
+
       - name: Collect results
         if: ${{ !cancelled() }}
         env:
@@ -485,22 +523,6 @@ jobs:
           BRANCH: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: mac/scripts/ci-publish-screenshots.sh
-
-      - name: "Upload the app for the owner: Threadback-for-Mac (Release, universal)"
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: Threadback-for-Mac
-          path: ${{ env.OUT }}/download/Threadback-for-Mac.zip
-          if-no-files-found: error
-
-      - name: Upload the Debug app (with the CI probes)
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: Threadback-debug-with-probes
-          path: ${{ env.OUT }}/download-debug/Threadback-debug-with-probes.zip
-          if-no-files-found: warn
 
       - name: Upload logs and reports
         if: ${{ !cancelled() }}

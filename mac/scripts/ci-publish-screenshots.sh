@@ -25,6 +25,7 @@ describe() {
     automation-*) echo "Proof 7: the screen while the app asks macOS for permission to control Messages." ;;
     contacts-1-screen) echo "The screen while the app asks for Contacts access." ;;
     login-item-1-screen) echo "Proof 8: the screen right after SMAppService.mainApp.register()." ;;
+    download-archive-utility-stuck) echo "Archive Utility was still open 60 s after it was asked to expand a download (whole screen)." ;;
     system-1-messages-first-launch) echo "The runner's Messages app on first launch (not signed in), captured with screencapture." ;;
     *) echo "" ;;
   esac
@@ -61,11 +62,21 @@ main() {
     echo ""
     echo "## Download the app"
     echo ""
-    echo "Open the run above, scroll to **Artifacts** and download **Threadback-for-Mac** (you need to be"
-    echo "signed in to GitHub). It arrives as a zip that holds \`Threadback-for-Mac.zip\`; double-click both"
-    echo "to get **Threadback.app**, a universal Release build, ad-hoc signed (no Apple developer account),"
-    echo "with no link in its replies until the story site is live. Drag it to **Applications** before you"
-    echo "open it. \`Threadback-debug-with-probes\` is the Debug build CI drives; you do not need it."
+    echo "1. Open the run above while signed in to GitHub, scroll to **Artifacts** and click"
+    echo "   **Threadback-for-Mac.zip**. The download is that one zip (GitHub does not wrap it in"
+    echo "   another one)."
+    echo "2. Double-click **Threadback-for-Mac.zip** in Downloads once (Safari may already have done it"
+    echo "   for you). **Threadback.app** appears next to it."
+    echo "3. Drag **Threadback.app** onto **Applications** in the Finder sidebar and open it from there."
+    echo "   The first time, macOS blocks it because it is not notarized: click **Done**, then"
+    echo "   System Settings > Privacy & Security > **Open Anyway**."
+    echo ""
+    echo "Every run downloads this artifact the way a browser does, expands it with the real Archive"
+    echo "Utility and checks that the result is the app that was built (signature valid, every file"
+    echo "identical); see section 13 of [MAC-APP-RESULTS.txt](MAC-APP-RESULTS.txt). It is the universal"
+    echo "Release build, ad-hoc signed (no Apple developer account), with no link in its replies until"
+    echo "the story site is live. \`Threadback-debug-with-probes\` is the Debug build CI drives; you do"
+    echo "not need it."
     echo ""
     echo "| File | What it shows |"
     echo "|------|---------------|"
