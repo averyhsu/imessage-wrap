@@ -69,21 +69,43 @@ All chats in these pictures are invented.
 
 ## Two tests on your Mac (about two minutes each)
 
-Get the prototype: on GitHub, open **Actions → Mac app → the latest green run → Artifacts →
-`mac-app`**, and unzip `Threadback-debug-with-probes.zip`. Because this build is not
-notarized, the first launch needs System Settings → Privacy & Security → **Open Anyway**.
+Clicks only, no Terminal. You need macOS 14 or later, signed in to Messages.
 
-**A. Can it read your messages after one folder pick?**
-1. Check that Threadback is *not* listed under Privacy & Security → Full Disk Access.
-2. Open Threadback, click **Continue**, **Connect Messages…**, **Grant Access**.
-3. Pass: it says "Connected" and shows your real group chats with plausible counts.
-4. Quit, restart the Mac, open it again. Pass: still connected.
+**Get the app (once).**
+1. On the Mac, signed in to GitHub, open **Actions → Mac app → the latest green run**,
+   scroll to **Artifacts** and download **Threadback-for-Mac**.
+2. Double-click the download, and the zip inside it, until you see **Threadback**. Drag it
+   to **Applications**.
+3. Double-click Threadback. macOS says it could not verify the app (it is not signed through
+   Apple's paid program); click **Done**.
+4. Open **System Settings → Privacy & Security**, scroll to the line about Threadback, click
+   **Open Anyway** and confirm with your password or Touch ID.
+5. A window opens and a speech-bubble icon appears in the menu bar (there is no Dock icon).
+   If an orange box says it is running from the download, quit and drag it to Applications.
 
-**B. Does a reply arrive?** This sends real messages into the chat you choose.
-1. Pick a small chat whose members will not mind. Click **Turn on**, then **Allow**.
-2. From your phone, type `/wrapped` in that chat.
-3. Pass: an image, a short text and a link arrive, and the menu-bar item does not say
-   "not confirmed".
+**A. Can it read your messages after one folder pick?** Sends nothing.
+1. In System Settings → Privacy & Security → Full Disk Access, check Threadback is not
+   switched on.
+2. In Threadback click **Continue**, **Connect Messages…**, then **Grant Access** in the file
+   window (the Messages folder is already selected).
+3. Pass: green "Connected: N group chats, M messages." with your real numbers. If it shows
+   a red error instead, that is the answer too; **Use Full Disk Access instead** is the
+   fallback.
+4. Quit Threadback from its menu-bar icon, restart the Mac, open it again. Pass: the menu
+   says "Messages: Connected".
+
+**B. Does a reply arrive?** This sends real messages from your Apple ID into the chat you
+choose. This build sends the image and the text, and no link, because the story site is not
+live yet.
+1. Pick a small group chat whose members will not mind. Click **Continue**, **Turn on** next
+   to that chat, then **Allow** when macOS asks whether Threadback may control Messages.
+2. From your phone, type `/wrapped` as the whole message in that chat.
+3. Pass: within about ten seconds the image and the text arrive, and the menu-bar menu
+   shows "Image: delivered" and "Text: delivered".
+
+**Then send back the result.** Menu-bar icon → **Copy test report**, and paste it to whoever
+is building this. The report has no names, chat names, numbers or message text: only your
+macOS version, whether each step worked, and error numbers.
 
 If A passes, the few-click setup is real. If B passes on your macOS version, so is the
 whole feature. If B fails, the app still works with one tap from you per reply.
