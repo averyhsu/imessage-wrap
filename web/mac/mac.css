@@ -702,8 +702,10 @@ html.mg-all .mg-step .mg-step__body { animation: none; }
   font: 600 13.5px/1.2 var(--font-text);
 }
 
-.mg-dialog__btn.mg-target { margin-top: 26px; background: var(--blue); color: #fff; }
-.mg-dialog__btn .mg-callout { top: -32px; }
+/* As on a real Mac: the highlighted button is the one NOT to press; Done sits below it. */
+.mg-dialog__btn--default { background: var(--blue); color: #fff; }
+.mg-dialog__btn.mg-target { margin-top: 8px; margin-bottom: 30px; }
+.mg-dialog__btn .mg-callout { top: auto; bottom: -32px; }
 
 /* Privacy & Security in System Settings: a window, drawn. */
 .mg-win {

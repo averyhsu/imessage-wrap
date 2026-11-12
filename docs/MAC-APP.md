@@ -73,15 +73,17 @@ Clicks only, no Terminal. You need macOS 14 or later, signed in to Messages.
 
 **Get the app (once).**
 1. On the Mac, signed in to GitHub, open **Actions → Mac app → the latest green run**,
-   scroll to **Artifacts** and download **Threadback-for-Mac**.
-2. Double-click the download, and the zip inside it, until you see **Threadback**. Drag it
-   to **Applications**.
-3. Double-click Threadback. macOS says it could not verify the app (it is not signed through
-   Apple's paid program); click **Done**.
-4. Open **System Settings → Privacy & Security**, scroll to the line about Threadback, click
-   **Open Anyway** and confirm with your password or Touch ID.
-5. A window opens and a speech-bubble icon appears in the menu bar (there is no Dock icon).
-   If an orange box says it is running from the download, quit and drag it to Applications.
+   scroll to **Artifacts** and click **Threadback-for-Mac.dmg**.
+2. Double-click it in Downloads. A window opens showing Threadback, an Applications
+   shortcut and three steps. Drag **Threadback** onto **Applications**.
+3. Open Threadback from Applications. macOS shows "“Threadback” Not Opened". Click
+   **Done**, the lower button. Do not click the blue **Move to Trash**, and do not press
+   Return.
+4. Open **System Settings → Privacy & Security**, scroll down to Security, click
+   **Open Anyway** and confirm with your password or Touch ID. (This last step is the one
+   part nobody has photographed yet; tell us if it reads differently on your Mac.)
+5. Threadback opens with a normal Dock icon while its window is open. Every screen has a
+   **Quit** button, and closing the window before a chat is on quits the app.
 
 **A. Can it read your messages after one folder pick?** Sends nothing.
 1. In System Settings → Privacy & Security → Full Disk Access, check Threadback is not
@@ -91,8 +93,8 @@ Clicks only, no Terminal. You need macOS 14 or later, signed in to Messages.
 3. Pass: green "Connected: N group chats, M messages." with your real numbers. If it shows
    a red error instead, that is the answer too; **Use Full Disk Access instead** is the
    fallback.
-4. Quit Threadback from its menu-bar icon, restart the Mac, open it again. Pass: the menu
-   says "Messages: Connected".
+4. Quit Threadback, restart the Mac, open it again from Applications. Pass: it still says
+   it is connected.
 
 **B. Does a reply arrive?** This sends real messages from your Apple ID into the chat you
 choose. This build sends the image and the text, and no link, because the story site is not
@@ -100,11 +102,12 @@ live yet.
 1. Pick a small group chat whose members will not mind. Click **Continue**, **Turn on** next
    to that chat, then **Allow** when macOS asks whether Threadback may control Messages.
 2. From your phone, type `/wrapped` as the whole message in that chat.
-3. Pass: within about ten seconds the image and the text arrive, and the menu-bar menu
-   shows "Image: delivered" and "Text: delivered".
+3. Pass: within about ten seconds the image and the text arrive. Open Threadback again
+   from Applications: its window shows the last `/wrapped` with "Image: delivered" and
+   "Text: delivered". The same window has **Turn off** and **Quit Threadback**.
 
-**Then send back the result.** Menu-bar icon → **Copy test report**, and paste it to whoever
-is building this. The report has no names, chat names, numbers or message text: only your
+**Then send back the result.** In that window (or on the last setup screen) click
+**Copy test report**, and paste it to whoever is building this. The report has no names, chat names, numbers or message text: only your
 macOS version, whether each step worked, and error numbers.
 
 If A passes, the few-click setup is real. If B passes on your macOS version, so is the
