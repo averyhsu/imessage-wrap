@@ -26,8 +26,8 @@ enum MacPalette {
 /// (UIKit) to AppKit, same layout and the same `RecapSummary` input. Copied rather than
 /// shared because the iOS file is built on UIGraphicsImageRenderer/UIBezierPath/UIFont;
 /// making it compile for both would touch most of its lines. One text differs: the footer
-/// says "Full story in the link" instead of "Tap to play", because in the thread the image
-/// is a plain picture and the link follows as its own message.
+/// says "Full story in the link" (or "Made on this Mac" while no link is sent) instead of
+/// "Tap to play", because in the thread the image is a plain picture.
 enum MacCardRenderer {
     static let pointSize = CGSize(width: 360, height: 270)
 
@@ -83,7 +83,9 @@ enum MacCardRenderer {
         let footerFont = NSFont.systemFont(ofSize: 13, weight: .bold)
         let footerAttributes: [NSAttributedString.Key: Any] = [.font: footerFont, .foregroundColor: white.withAlphaComponent(0.86)]
         let brand = NSAttributedString(string: WrappedConfig.productName, attributes: footerAttributes)
-        let story = NSAttributedString(string: "Full story in the link \u{2193}", attributes: footerAttributes)
+        // The card points at the link only when a link is sent (MacConfig.storySiteIsLive).
+        let footer = MacConfig.storySiteIsLive ? "Full story in the link \u{2193}" : "Made on this Mac"
+        let story = NSAttributedString(string: footer, attributes: footerAttributes)
         let footerY = content.maxY - lineHeight(footerFont)
         brand.draw(at: CGPoint(x: content.minX, y: footerY))
         story.draw(at: CGPoint(x: content.maxX - story.size().width, y: footerY))
