@@ -94,7 +94,7 @@ final class OnboardingUITests: ThreadbackUITestCase {
     func testOnboardingWalkthroughWithFixture() throws {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
         let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
-                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Avery", "-TBNoAutomation", "YES",
+                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
                           "-TBTimeZone", "America/Los_Angeles"])
         let next = element(app, "onboarding.continue")
         XCTAssertTrue(next.waitForExistence(timeout: 30), "the first-run window opens on launch")
@@ -140,7 +140,7 @@ final class OnboardingUITests: ThreadbackUITestCase {
 /// Proof 6: the Open panel instead of Full Disk Access, on the runner's real home folder.
 final class AccessUITests: ThreadbackUITestCase {
     func test1_FolderGrantThroughOpenPanel() throws {
-        let app = launch(["-TBResetOnboarding", "YES", "-TBMe", "Avery"])
+        let app = launch(["-TBResetOnboarding", "YES", "-TBMe", "Amara"])
         let next = element(app, "onboarding.continue")
         XCTAssertTrue(next.waitForExistence(timeout: 30))
         next.click()

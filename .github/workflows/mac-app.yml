@@ -43,7 +43,7 @@ jobs:
     timeout-minutes: 75
     env:
       TZ: America/Los_Angeles
-      WRAPPED_ME: Avery
+      WRAPPED_ME: Amara
       PYTHONDONTWRITEBYTECODE: "1"
     steps:
       - name: Check out
@@ -106,11 +106,11 @@ jobs:
           DB="$FX/mac/chat.db"
           # id | chat | me | tz | period | contacts | short names
           cat > "$WORK/cases.txt" <<'EOF'
-          taco-2026|1|Avery|America/Los_Angeles|2026|1|1
-          bookclub-all-berlin-nocontacts|3|Avery|Europe/Berlin|all|0|1
-          longname-2026-tokyo-fullnames|5|Avery|Asia/Tokyo|2026|1|0
-          bookclub-by-name-all|Book Club|Avery|America/Los_Angeles|all|1|1
-          unnamed-2025-newyork-empty|4|Avery|America/New_York|2025|1|1
+          taco-2026|1|Amara|America/Los_Angeles|2026|1|1
+          bookclub-all-berlin-nocontacts|3|Amara|Europe/Berlin|all|0|1
+          longname-2026-tokyo-fullnames|5|Amara|Asia/Tokyo|2026|1|0
+          bookclub-by-name-all|Book Club|Amara|America/Los_Angeles|all|1|1
+          unnamed-2025-newyork-empty|4|Amara|America/New_York|2025|1|1
           EOF
           "$PY" - "$WORK/cases.txt" "$EXPECTED/cases.json" <<'EOF'
           import json, sys
@@ -134,7 +134,7 @@ jobs:
             echo "python: $id -> $(wc -c < "$EXPECTED/$id.json" | tr -d ' ') bytes"
           done < "$WORK/cases.txt"
           # The Python helper's own dry-run preview of the same chat (text, link, card).
-          "$PY" -m wrapped.mac preview --db "$DB" --contacts "$AB" --me Avery --chat taco --year 2026 --out "$WORK/py-preview" | tee "$WORK/py-preview.txt"
+          "$PY" -m wrapped.mac preview --db "$DB" --contacts "$AB" --me Amara --chat taco --year 2026 --out "$WORK/py-preview" | tee "$WORK/py-preview.txt"
           PYDIR="$(dirname "$(find "$WORK/py-preview" -name recap.txt | head -1)")"
           cp "$PYDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"
           cp "$PYDIR/link.txt" "$EXPECTED/link-taco-2026.txt"
@@ -191,7 +191,7 @@ jobs:
               fi
             done < "$WORK/cases.txt"
             echo "RESULT: $PASS/$TOTAL byte-identical"
-            echo "chat list from the app:"; "$BIN" --tb-chats --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Avery
+            echo "chat list from the app:"; "$BIN" --tb-chats --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara
           } 2>&1 | tee "$RES/03-parity.txt"
 
       - name: "Proof 3: a reply without Terminal (dry run) vs the Python helper"
@@ -199,7 +199,7 @@ jobs:
         run: |
           {
             echo "== Proof 3: dry-run reply (card, text, link) vs the Python helper for the same chat"
-            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Avery --tz America/Los_Angeles \
+            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
               --chat taco --year 2026 --out "$WORK/swift-preview"
             SWDIR="$(dirname "$(find "$WORK/swift-preview" -name recap.txt | head -1)")"
             echo "files: $(ls "$SWDIR" | tr '\n' ' ')"
@@ -217,15 +217,15 @@ jobs:
 
             echo "-- agent pass, as mac.yml does for the Python helper: start, a /wrapped 2026 arrives, answer once"
             for who in app py; do mkdir -p "$WORK/agent-$who"; cp "$FX"/mac/chat.db* "$WORK/agent-$who/"; done
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Avery --tz America/Los_Angeles \
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
               --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
             "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$WORK/agent-app/chat.db" "/wrapped 2026"
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Avery --tz America/Los_Angeles \
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
               --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out" | tee "$WORK/agent-app/second.txt"
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Avery --tz America/Los_Angeles \
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
               --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
             run_py() {
-              "$WORK/venv/bin/python" -m wrapped.mac agent --db "$WORK/agent-py/chat.db" --contacts "$FX/mac/AddressBook" --me Avery \
+              "$WORK/venv/bin/python" -m wrapped.mac agent --db "$WORK/agent-py/chat.db" --contacts "$FX/mac/AddressBook" --me Amara \
                 --chat taco --dry-run --once --yes --out "$WORK/agent-py/out" --state "$WORK/agent-py/state.json" --no-log
             }
             run_py > /dev/null

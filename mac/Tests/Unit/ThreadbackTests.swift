@@ -40,7 +40,7 @@ final class EngineTests: XCTestCase {
         let engine = try ThreadbackEngine()
         let token = engine.open(try SQLiteDB(path: root.appendingPathComponent("mac/chat.db").path))
         let contacts = engine.contacts(fromAddressBook: root.appendingPathComponent("mac/AddressBook").path)
-        let chats = try engine.listChats(token: token, me: "Avery", contacts: contacts)
+        let chats = try engine.listChats(token: token, me: "Amara", contacts: contacts)
         Fixture.note("listChats: " + chats.map { "\($0.name) (\($0.messages))" }.joined(separator: " | "))
         XCTAssertEqual(chats.count, 4)
         XCTAssertEqual(chats.first?.chatIdentifier, Fixture.tacoIdentifier)
@@ -83,9 +83,9 @@ final class EngineTests: XCTestCase {
         let engine = try ThreadbackEngine()
         let token = engine.open(try SQLiteDB(path: root.appendingPathComponent("mac/chat.db").path))
         let contacts = engine.contacts(fromAddressBook: root.appendingPathComponent("mac/AddressBook").path)
-        let full = try engine.statsJSON(token: token, chat: "1", me: "Avery", tz: "America/Los_Angeles", period: "2026",
+        let full = try engine.statsJSON(token: token, chat: "1", me: "Amara", tz: "America/Los_Angeles", period: "2026",
                                         contacts: contacts, shortNames: false)
-        let short = try engine.shortNames(statsJSON: full, me: "Avery")
+        let short = try engine.shortNames(statsJSON: full, me: "Amara")
         let text = try engine.recapText(statsJSON: short, withLink: true).message
         XCTAssertEqual(text, python)
         Fixture.note("recap text identical to the Python helper: \(text == python)")
@@ -95,7 +95,7 @@ final class EngineTests: XCTestCase {
         let root = try Fixture.require()
         let engine = try ThreadbackEngine()
         let token = engine.open(try SQLiteDB(path: root.appendingPathComponent("mac/chat.db").path))
-        let stats = try engine.statsJSON(token: token, chat: "1", me: "Avery", tz: "America/Los_Angeles", period: "2026",
+        let stats = try engine.statsJSON(token: token, chat: "1", me: "Amara", tz: "America/Los_Angeles", period: "2026",
                                          contacts: [], shortNames: true)
         let link = try engine.buildLink(statsJSON: stats, quotes: false)
         XCTAssertLessThanOrEqual(link.count, 4800)
@@ -162,10 +162,10 @@ final class AgentTests: XCTestCase {
     private func makeAgent(_ sender: RecordingSender) throws -> (Agent, [String]) {
         let engine = try ThreadbackEngine()
         let token = engine.open(try SQLiteDB(path: dbPath))
-        let chats = try engine.listChats(token: token, me: "Avery", contacts: [])
+        let chats = try engine.listChats(token: token, me: "Amara", contacts: [])
         engine.close(token)
         var config = AgentConfig()
-        config.me = "Avery"
+        config.me = "Amara"
         config.tz = "America/Los_Angeles"
         config.joinAttempts = 2
         config.joinDelay = 0.05
