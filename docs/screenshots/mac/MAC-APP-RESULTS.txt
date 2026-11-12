@@ -1,6 +1,6 @@
 Threadback for Mac: feasibility spike results
-Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43149756662
-Commit: 4f4630c57cf2a558e63e1e68cea1f6dd0e556df1
+Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43150243648
+Commit: 5bfc75bde12c3b9992f09d3fd119e85c410b1366
 All data is invented (tests/fixtures/build_fixture.py). Nothing was sent anywhere.
 
 == Runner
@@ -9,11 +9,11 @@ arch arm64; user runner (501); HOME=/Users/runner
 Xcode 26.6 Build version 17F113 
 csrutil status: System Integrity Protection status: disabled. 
 csrutil authenticated-root: Authenticated Root status: enabled 
-this shell: pid 1828, parents: /Users/runner/actions-runner/cached/bin/Runner.Worker <- /Users/runner/actions-runner/cached/bin/Runner.Listener
+this shell: pid 6516, parents: /Users/runner/actions-runner/cached/bin/Runner.Worker <- /Users/runner/actions-runner/cached/bin/Runner.Listener
 ~/Library/Messages before anything ran:
 total 1432
 drwxrwxrwx   8 runner  staff     256 Nov  1 20:03 .
-drwx------@ 82 runner  staff    2624 Nov 11 19:38 ..
+drwx------@ 83 runner  staff    2656 Nov 11 19:41 ..
 	com.apple.FinderInfo	    32 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
 -rw-r--r--   1 runner  staff   32768 Nov 11 19:38 chat.db-shm
@@ -91,10 +91,10 @@ kTCCServiceLiverpool|com.apple.amsengagementd|2|UNUSED
 kTCCServiceLiverpool|com.apple.assistant.assistantd|2|UNUSED
 kTCCServiceLiverpool|com.apple.avatarsd|2|UNUSED
 kTCCServiceLiverpool|com.apple.biomesyncd|2|UNUSED
+kTCCServiceLiverpool|com.apple.businessservicesd|2|UNUSED
 kTCCServiceLiverpool|com.apple.callhistory.sync-helper|2|UNUSED
 kTCCServiceLiverpool|com.apple.cloudpaird|2|UNUSED
 kTCCServiceLiverpool|com.apple.cloudphotod|2|UNUSED
-kTCCServiceLiverpool|com.apple.contacts.postersyncd|2|UNUSED
 tccutil: tccutil: Usage: tccutil reset SERVICE [BUNDLE_ID] 
 
 == Proof 1: the app bundle (Debug)
@@ -117,9 +117,9 @@ NSContactsUsageDescription="Optional: so the recap shows first names like "Sam" 
 Gatekeeper assessment (spctl): /Users/runner/work/_temp/tb/DerivedData/Build/Products/Debug/Threadback.app: rejected 
 
 == Proof 2: stats from the app (JavaScriptCore + system SQLite) vs python3 -m wrapped stats --compact
-IDENTICAL taco-2026: 3072 bytes, sha256 bb6859860bfda67d, 0.21 s
+IDENTICAL taco-2026: 3072 bytes, sha256 bb6859860bfda67d, 0.26 s
 IDENTICAL bookclub-all-berlin-nocontacts: 2531 bytes, sha256 f450e33b4716c46c, 0.05 s
-IDENTICAL longname-2026-tokyo-fullnames: 8867 bytes, sha256 6bdeda7f1e8d74c7, 0.15 s
+IDENTICAL longname-2026-tokyo-fullnames: 8867 bytes, sha256 6bdeda7f1e8d74c7, 0.17 s
 IDENTICAL bookclub-by-name-all: 2602 bytes, sha256 dfe9a79072fbacdc, 0.05 s
 IDENTICAL unnamed-2025-newyork-empty: 816 bytes, sha256 f865ef42d5a5df32, 0.07 s
 RESULT: 5/5 byte-identical
@@ -131,7 +131,7 @@ chat list from the app:
 
 == Proof 3: dry-run reply (card, text, link) vs the Python helper for the same chat
 Preview for "Taco Tuesday Crew 🌮" (nothing was sent): /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run
-Saved in /Users/runner/work/_temp/tb/swift-preview/20261111-194105-taco-tuesday-crew
+Saved in /Users/runner/work/_temp/tb/swift-preview/20261111-194539-taco-tuesday-crew
 files: link.txt recap.txt threadback-taco-tuesday-crew-2026.png 
 TEXT IDENTICAL to the Python helper's recap.txt
 --- recap.txt (app) ---
@@ -154,16 +154,16 @@ Done: 0 command(s) answered.
 8014
 approved (frozen by id): Taco Tuesday Crew 🌮 [chat100000000000000001]
 log: /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run
-would send file to chat100000000000000001: /Users/runner/work/_temp/tb/agent-app/out/20261111-194105-taco-tuesday-crew/threadback-taco-tuesday-crew-2026.png
+would send file to chat100000000000000001: /Users/runner/work/_temp/tb/agent-app/out/20261111-194540-taco-tuesday-crew/threadback-taco-tuesday-crew-2026.png
 would send text to chat100000000000000001: 356 characters
 would send text to chat100000000000000001: 1657 characters
 Done: 1 command(s) answered.
-Saved in /Users/runner/work/_temp/tb/agent-app/out/20261111-194105-taco-tuesday-crew
+Saved in /Users/runner/work/_temp/tb/agent-app/out/20261111-194540-taco-tuesday-crew
 approved (frozen by id): Taco Tuesday Crew 🌮 [chat100000000000000001]
 Done: 0 command(s) answered.
 8014
 Done: 1 command(s) answered.
-Wrote /Users/runner/work/_temp/tb/agent-py/out/20261111-194106-taco-tuesday-crew
+Wrote /Users/runner/work/_temp/tb/agent-py/out/20261111-194541-taco-tuesday-crew
 AGENT TEXT IDENTICAL (app vs Python helper, both answering the same typed /wrapped 2026)
 
 == Proof 4: osacompile of the exact script the app embeds
@@ -185,35 +185,35 @@ end send_reply
 xcodebuild exited with status 0 after 5s (63 log lines in /Users/runner/work/_temp/tb/out/logs/unit.log)
 ---- highlights ----
 WRAPPED_NOTE agent log: first run: starting after message row 8013; older commands are ignored || /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run || ignored /wrapped in "Taco Tuesday Crew 🌮": cooling down (120 s left) || ignored /wrapped in a group chat that is not in the approved list (id ending 0002); set it up again to add it || ignored a /wrapped that is 20 min old (row 8017) || ignored a /wrapped dated 3599 s in the future (row 8018)
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.262 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.310 seconds).
 WRAPPED_NOTE dry run wrote: link.txt, recap.txt, threadback-taco-tuesday-crew-2026.png
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.194 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.202 seconds).
-Test Suite 'AgentTests' passed at 2026-11-12 03:41:11.028.
-	 Executed 3 tests, with 0 failures (0 unexpected) in 0.658 (0.659) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.026 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.235 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.280 seconds).
+Test Suite 'AgentTests' passed at 2026-11-12 03:45:46.572.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 0.824 (0.826) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.031 seconds).
 WRAPPED_NOTE JavaScriptCore: TextDecoder is function (TextDecoder); Intl in Asia/Tokyo at epoch: 09; engine wrapped/1
-Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.008 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.012 seconds).
 WRAPPED_NOTE link: 1691 characters; RecapLink decodes Taco Tuesday Crew 🌮 · 2026 in review, 2,869 messages
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.146 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.186 seconds).
 WRAPPED_NOTE listChats: Taco Tuesday Crew 🌮 (3712) | The Extremely Long-Named Group Chat Of Unreasonable Proportions ✨🪩🎉 (est. 2019) … (645) | Bram, Sam, …0007 & 1 more (447) | Book Club 📚 (29)
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.016 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.021 seconds).
 WRAPPED_NOTE recap text identical to the Python helper: true
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.148 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.176 seconds).
 WRAPPED_NOTE parity taco-2026: IDENTICAL (3071 bytes vs 3071)
 WRAPPED_NOTE parity bookclub-all-berlin-nocontacts: IDENTICAL (2530 bytes vs 2530)
 WRAPPED_NOTE parity longname-2026-tokyo-fullnames: IDENTICAL (8866 bytes vs 8866)
 WRAPPED_NOTE parity bookclub-by-name-all: IDENTICAL (2601 bytes vs 2601)
 WRAPPED_NOTE parity unnamed-2025-newyork-empty: IDENTICAL (815 bytes vs 815)
 WRAPPED_NOTE parity: 5/5 cases byte-identical to Python
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.293 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.007 seconds).
-Test Suite 'EngineTests' passed at 2026-11-12 03:41:11.675.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.644 (0.646) seconds
-Test Suite 'ThreadbackTests.xctest' passed at 2026-11-12 03:41:11.675.
-	 Executed 10 tests, with 0 failures (0 unexpected) in 1.302 (1.306) seconds
-Test Suite 'All tests' passed at 2026-11-12 03:41:11.675.
-	 Executed 10 tests, with 0 failures (0 unexpected) in 1.302 (1.307) seconds
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.315 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.008 seconds).
+Test Suite 'EngineTests' passed at 2026-11-12 03:45:47.324.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.748 (0.751) seconds
+Test Suite 'ThreadbackTests.xctest' passed at 2026-11-12 03:45:47.324.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 1.572 (1.577) seconds
+Test Suite 'All tests' passed at 2026-11-12 03:45:47.324.
+	 Executed 10 tests, with 0 failures (0 unexpected) in 1.572 (1.578) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 == Proof 6a: direct read, before any grant
@@ -240,22 +240,22 @@ sqlite.inplace: ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 3281 uid 501",
+  "process" : "Threadback pid 8450 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-12T03:41:12Z"
+  "time" : "2026-11-12T03:45:48Z"
 }-- open Messages once (not signed in) to see whether it creates ~/Library/Messages
 total 1464
-drwxrwxrwx  10 runner  staff     320 Nov 11 19:41 .
-drwx------@ 84 runner  staff    2688 Nov 11 19:41 ..
+drwxrwxrwx  10 runner  staff     320 Nov 11 19:45 .
+drwx------@ 84 runner  staff    2688 Nov 11 19:45 ..
 	com.apple.FinderInfo	    32 
-drwxr-xr-x@  3 runner  staff      96 Nov 11 19:41 Attachments
+drwxr-xr-x@  3 runner  staff      96 Nov 11 19:45 Attachments
 	com.apple.quarantine	    23 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
 -rw-r--r--   1 runner  staff   32768 Nov 11 19:38 chat.db-shm
--rw-r--r--   1 runner  staff  663352 Nov 11 19:41 chat.db-wal
+-rw-r--r--   1 runner  staff  663352 Nov 11 19:45 chat.db-wal
 drwxrwxrwx   4 runner  staff     128 Nov  1 20:03 CollaborationNoticeCache
-drwxr-xr-x@  2 runner  staff      64 Nov 11 19:41 Drafts
+drwxr-xr-x@  2 runner  staff      64 Nov 11 19:45 Drafts
 	com.apple.quarantine	    23 
 drwxrwxrwx  23 runner  staff     736 Nov  1 20:03 NickNameCache
 drwxr-xr-x   5 runner  staff     160 Nov  1 20:03 Sync
@@ -284,10 +284,10 @@ sqlite.inplace: ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 4022 uid 501",
+  "process" : "Threadback pid 9417 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-12T03:41:39Z"
+  "time" : "2026-11-12T03:46:15Z"
 }
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/OnboardingUITests -resultBundlePath /Users/runner/work/_temp/tb/out/Onboarding.xcresult
 xcodebuild exited with status 0 after 19s (133 log lines in /Users/runner/work/_temp/tb/out/logs/onboarding.log)
@@ -295,32 +295,32 @@ xcodebuild exited with status 0 after 19s (133 log lines in /Users/runner/work/_
 WRAPPED_NOTE onboarding: Connected: 4,833 messages in 4 group chats.
 WRAPPED_NOTE status items seen by XCUITest: ["||Comment Lines"]
 WRAPPED_NOTE menu bar item not found by XCUITest
-Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (16.651 seconds).
-Test Suite 'OnboardingUITests' passed at 2026-11-12 03:42:04.871.
-	 Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.653) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:42:04.872.
-	 Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.654) seconds
-Test Suite 'Selected tests' passed at 2026-11-12 03:42:04.874.
-	 Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.656) seconds
+Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (16.424 seconds).
+Test Suite 'OnboardingUITests' passed at 2026-11-12 03:46:39.936.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.426) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:46:39.938.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.427) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:46:39.939.
+	 Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.429) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 == Proof 6b
 messages database origin: messages-created
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/AccessUITests/test1_FolderGrantThroughOpenPanel -resultBundlePath /Users/runner/work/_temp/tb/out/Access1.xcresult
-xcodebuild exited with status 0 after 38s (161 log lines in /Users/runner/work/_temp/tb/out/logs/access1.log)
+xcodebuild exited with status 0 after 37s (161 log lines in /Users/runner/work/_temp/tb/out/logs/access1.log)
 ---- highlights ----
 WRAPPED_NOTE open panel appeared: true (sheets 1, dialogs 0)
 WRAPPED_NOTE panel buttons: ["", "", "back", "forward", "search", "", "", "", "", "", ""]
 WRAPPED_NOTE clicked Grant Access
 WRAPPED_NOTE after the Open panel: CONNECTED: Connected: 0 messages in 0 group chats.
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone "] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone number. Names stay on this Mac."] buttons=["Help", "Don’t Allow", "Allow"] ;; CLICKED "Allow" in com.apple.UserNotificationCenter dialog 0
-Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (25.576 seconds).
-Test Suite 'AccessUITests' passed at 2026-11-12 03:42:33.169.
-	 Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.577) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:42:33.170.
-	 Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.578) seconds
-Test Suite 'Selected tests' passed at 2026-11-12 03:42:33.170.
-	 Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.579) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (25.121 seconds).
+Test Suite 'AccessUITests' passed at 2026-11-12 03:47:07.023.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.122) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:47:07.024.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.123) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:47:07.024.
+	 Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.124) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report written by the app right after the panel:
 {
@@ -336,16 +336,16 @@ Test Suite 'Selected tests' passed at 2026-11-12 03:42:33.170.
   "folder.list" : "ok: 8 entries: Attachments, CollaborationNoticeCache, Drafts, NickNameCache, Sync, chat.db, chat.db-shm, chat.db-wal",
   "folder.xattrs" : "none",
   "label" : "after the Open panel (folder chosen by the user)",
-  "process" : "Threadback pid 5240 uid 501",
+  "process" : "Threadback pid 10544 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-12T03:42:24Z"
+  "time" : "2026-11-12T03:46:58Z"
 }-- xattrs on the folder now (com.apple.macl = the Open-panel consent):
 total 1368
-drwxrwxrwx  10 runner  staff     320 Nov 11 19:41 .
-drwx------@ 84 runner  staff    2688 Nov 11 19:41 ..
+drwxrwxrwx  10 runner  staff     320 Nov 11 19:45 .
+drwx------@ 84 runner  staff    2688 Nov 11 19:45 ..
 	com.apple.FinderInfo	    32 
-drwxr-xr-x@  3 runner  staff      96 Nov 11 19:41 Attachments
+drwxr-xr-x@  3 runner  staff      96 Nov 11 19:45 Attachments
 	com.apple.quarantine	    23 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
 -rw-r--r--   1 runner  staff   32768 Nov 11 19:38 chat.db-shm
@@ -353,13 +353,13 @@ drwxr-xr-x@  3 runner  staff      96 Nov 11 19:41 Attachments
 xcodebuild exited with status 0 after 7s (52 log lines in /Users/runner/work/_temp/tb/out/logs/access2.log)
 ---- highlights ----
 WRAPPED_NOTE bookmark probe: bookmark: resolved to /Users/runner/Library/Messages; stale=false; startAccessingSecurityScopedResource=true | bundle: /Users/runner/work/_temp/tb/DerivedData/Build/Products/Debug/Threadback.app | chat.db-shm.posix: ok: read 16 bytes of 32768 ("..-.............") | chat.db-wal.posix: ok: read 16 bytes of 663352 ("7....-..........") | chat.db.posix: ok: read 16 bytes of 4096 ("SQLite format 3.") | chat.db.xattrs: none | control.addressbook: readable: 5 entries | control.mail: readable: 1 entries | control.safari: readable: 7 entries | copy: ok: chat.db, chat.db-wal, chat.db-shm | folder: /Users/runner/Library/Messages | folder.exists: true (folder) | folder.list: 
-Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (4.664 seconds).
-Test Suite 'AccessUITests' passed at 2026-11-12 03:42:49.925.
-	 Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.665) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:42:49.926.
-	 Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.666) seconds
-Test Suite 'Selected tests' passed at 2026-11-12 03:42:49.927.
-	 Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.667) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (4.581 seconds).
+Test Suite 'AccessUITests' passed at 2026-11-12 03:47:24.263.
+	 Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.583) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:47:24.265.
+	 Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.585) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:47:24.267.
+	 Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.587) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report after relaunch, through the stored bookmark:
 {
@@ -379,10 +379,10 @@ Test Suite 'Selected tests' passed at 2026-11-12 03:42:49.927.
   "folder.xattrs" : "none",
   "label" : "after relaunch, through the stored bookmark",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 6229 uid 501",
+  "process" : "Threadback pid 11683 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-12T03:42:45Z"
+  "time" : "2026-11-12T03:47:20Z"
 }-- and a plain direct read by a fresh launch (no bookmark used):
 {
   "bundle" : "\/Users\/runner\/work\/_temp\/tb\/DerivedData\/Build\/Products\/Debug\/Threadback.app",
@@ -400,24 +400,24 @@ Test Suite 'Selected tests' passed at 2026-11-12 03:42:49.927.
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 6258 uid 501",
+  "process" : "Threadback pid 11939 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-12T03:42:50Z"
+  "time" : "2026-11-12T03:47:24Z"
 }
 == Proof 7
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/SystemPromptUITests/testAutomationPrompt -resultBundlePath /Users/runner/work/_temp/tb/out/Automation.xcresult
-xcodebuild exited with status 0 after 11s (88 log lines in /Users/runner/work/_temp/tb/out/logs/automation.log)
+xcodebuild exited with status 0 after 11s (89 log lines in /Users/runner/work/_temp/tb/out/logs/automation.log)
 ---- highlights ----
 WRAPPED_NOTE automation round 1: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to d", "Threadback replies in the group chat you chose by asking Messages to send the recap image,"] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to documents and data in “Messages”, and to perform actions within that ap", "Threadback replies in the group chat you chose by asking Messages to send the recap image, text and link. It never sends anywhere else."] buttons=["Help", "Don’t Allow",
 WRAPPED_NOTE automation finished after ~6 s: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.3 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
 WRAPPED_NOTE automation final: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.3 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
-Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (9.238 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:43:05.533.
-	 Executed 1 test, with 0 failures (0 unexpected) in 9.238 (9.239) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:43:05.534.
-Test Suite 'Selected tests' passed at 2026-11-12 03:43:05.534.
-	 Executed 1 test, with 0 failures (0 unexpected) in 9.238 (9.240) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (9.293 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:47:39.927.
+	 Executed 1 test, with 0 failures (0 unexpected) in 9.293 (9.294) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:47:39.927.
+	 Executed 1 test, with 0 failures (0 unexpected) in 9.293 (9.295) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:47:39.928.
 ** TEST EXECUTE SUCCEEDED **
 -- report:
 {
@@ -443,13 +443,13 @@ xcodebuild exited with status 0 after 8s (85 log lines in /Users/runner/work/_te
 ---- highlights ----
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; com.apple.coreservices.uiagent [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; app under test [state 4, 0 dialogs/alerts/sheets] buttons=[] texts=["Threadback experiment", "CONTACTS DONE\nerror: \ngranted: true\nstatus.after: authorized\nstatus.before: authorized"]
 WRAPPED_NOTE contacts final: CONTACTS DONE | error:  | granted: true | status.after: authorized | status.before: authorized
-Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (6.130 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:43:13.854.
-	 Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.131) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:43:13.854.
-	 Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.132) seconds
-Test Suite 'Selected tests' passed at 2026-11-12 03:43:13.855.
-	 Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.133) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (6.108 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:47:47.933.
+	 Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.109) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:47:47.933.
+	 Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.110) seconds
+Test Suite 'Selected tests' passed at 2026-11-12 03:47:47.934.
+	 Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.111) seconds
 ** TEST EXECUTE SUCCEEDED **
 {
   "error" : "",
@@ -459,16 +459,16 @@ Test Suite 'Selected tests' passed at 2026-11-12 03:43:13.855.
 }
 == Proof 8
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/SystemPromptUITests/testLoginItem -resultBundlePath /Users/runner/work/_temp/tb/out/Login.xcresult
-xcodebuild exited with status 0 after 16s (65 log lines in /Users/runner/work/_temp/tb/out/logs/login.log)
+xcodebuild exited with status 0 after 15s (65 log lines in /Users/runner/work/_temp/tb/out/logs/login.log)
 ---- highlights ----
 WRAPPED_NOTE login item after register: LOGIN ITEM REGISTERED | register: ok; status notFound -> enabled
 WRAPPED_NOTE login item final: LOGIN ITEM DONE | register: register: ok; status notFound -> enabled | status.after.10s: enabled | status.at.launch: notFound | unregister: unregister: ok; status enabled -> notRegistered
-Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (13.809 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:43:29.654.
-	 Executed 1 test, with 0 failures (0 unexpected) in 13.809 (13.810) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:43:29.654.
-	 Executed 1 test, with 0 failures (0 unexpected) in 13.809 (13.811) seconds
-Test Suite 'Selected tests' passed at 2026-11-12 03:43:29.655.
+Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (13.802 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-12 03:48:03.447.
+	 Executed 1 test, with 0 failures (0 unexpected) in 13.802 (13.803) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-12 03:48:03.447.
+Test Suite 'Selected tests' passed at 2026-11-12 03:48:03.448.
+	 Executed 1 test, with 0 failures (0 unexpected) in 13.802 (13.804) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report:
 {
@@ -479,7 +479,7 @@ Test Suite 'Selected tests' passed at 2026-11-12 03:43:29.655.
 }-- background task management database (sfltool dumpbtm), entries for Threadback:
 
  #5:
-                 UUID: 0F122A86-33C2-483C-9ACE-9ED3B6D26B47
+                 UUID: EA3C6A33-9A53-4104-8D35-F94C7CC4DD54
                  Name: Threadback
        Developer Name: (null)
                  Type: app (0x2)
@@ -509,7 +509,7 @@ Release entitlements:
 	<key>com.apple.security.automation.apple-events</key>
 	<key>com.apple.security.get-task-allow</key>
 Gatekeeper on the Release app: /Users/runner/work/_temp/tb/release-dd/Build/Products/Release/Threadback.app: rejected 
-zipped for download: 1.3M
+zipped for download (artifact mac-app, folder download/): release 1.3M, debug 1.3M
 
 == Notes printed by tests
 WRAPPED_NOTE open panel appeared: true (sheets 1, dialogs 0)
@@ -542,39 +542,39 @@ WRAPPED_NOTE parity unnamed-2025-newyork-empty: IDENTICAL (815 bytes vs 815)
 WRAPPED_NOTE parity: 5/5 cases byte-identical to Python
 
 == Test verdicts
-Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (25.576 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.577) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.578) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 25.576 (25.579) seconds
-Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (4.664 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.665) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.666) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 4.664 (4.667) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (9.238 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 9.238 (9.239) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 9.238 (9.240) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (6.130 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.131) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.132) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 6.130 (6.133) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (13.809 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 13.809 (13.810) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 13.809 (13.811) seconds
-Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (16.651 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.653) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.654) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 16.651 (16.656) seconds
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.262 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.194 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.202 seconds).
-Executed 3 tests, with 0 failures (0 unexpected) in 0.658 (0.659) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.026 seconds).
-Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.008 seconds).
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.146 seconds).
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.016 seconds).
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.148 seconds).
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.293 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.007 seconds).
-Executed 7 tests, with 0 failures (0 unexpected) in 0.644 (0.646) seconds
-Executed 10 tests, with 0 failures (0 unexpected) in 1.302 (1.306) seconds
-Executed 10 tests, with 0 failures (0 unexpected) in 1.302 (1.307) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (25.121 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.122) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.123) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 25.121 (25.124) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (4.581 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.583) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.585) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 4.581 (4.587) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (9.293 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 9.293 (9.294) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 9.293 (9.295) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (6.108 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.109) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.110) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 6.108 (6.111) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (13.802 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 13.802 (13.803) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 13.802 (13.804) seconds
+Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (16.424 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.426) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.427) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 16.424 (16.429) seconds
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.310 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.235 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.280 seconds).
+Executed 3 tests, with 0 failures (0 unexpected) in 0.824 (0.826) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.031 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.012 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.186 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.021 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.176 seconds).
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.315 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.008 seconds).
+Executed 7 tests, with 0 failures (0 unexpected) in 0.748 (0.751) seconds
+Executed 10 tests, with 0 failures (0 unexpected) in 1.572 (1.577) seconds
+Executed 10 tests, with 0 failures (0 unexpected) in 1.572 (1.578) seconds
