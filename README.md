@@ -31,7 +31,7 @@ A tap-through story, in the style of Instagram or Spotify stories, built from on
 |---|------|-------|
 | **Watch the demo** | The full story with an invented chat. | A browser. |
 | **Make your own in the browser** | Drop in your Messages database (from a Mac, or from an iPhone backup on a Mac or PC), pick a chat, get a link to send. | A computer that has your messages. Nothing is installed or uploaded. |
-| **Mac helper** | Anyone in the chat types `/wrapped`; the recap card, a short summary and the link appear in the thread. | A Mac signed in to Messages. [Guide](docs/MAC.md) |
+| **Mac helper** | Anyone in the chat types `/wrapped`; the recap card, a short summary and the link appear in the thread. | A Mac signed in to Messages. Today it is a Terminal tool ([guide](docs/MAC.md)); a double-clickable app with a few-click setup exists as a prototype ([what it would take](docs/MAC-APP.md)). |
 | **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight later. [Guide](ios/README.md) |
 
 **Today the public site is not switched on and the code is on a working branch, not yet on
@@ -115,6 +115,7 @@ web/            the story player and landing page (plain HTML/CSS/JS, no build s
 web/make/       the in-browser maker: SQLite in WebAssembly + the JavaScript stats engine
 wrapped/        the Python stats engine and command-line tool
 wrapped/mac/    the Mac helper (/wrapped): card image, text recap, AppleScript sending
+mac/            prototype of the same helper as a native menu-bar app (Swift)
 ios/            the iPhone app and its Messages extension (Swift; project made by XcodeGen)
 tests/          unit, conformance and end-to-end tests; invented fixtures built at test time
 docs/           the shared contract (SCHEMA.md), decisions, research, guides, screenshots

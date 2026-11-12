@@ -38,10 +38,11 @@ the real API).
 | **Stats engines** (Python + JavaScript) | Byte-identical results on every invented chat, period and time zone in the conformance suite; match a chat whose numbers were worked out by hand and an independent recount by a reviewer. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
 | **Command-line tool** | `wrapped chats`, `stats`, `link` on the invented database; one plain sentence instead of an error trace on damaged files. | `wrapped/cli.py` |
 | **Mac helper** (`/wrapped`) | Everything up to the moment of sending, against a fake Messages: finds the command, replies only in chats approved by id, builds card, text and link, verifies sends. The send script compiles against the real Messages scripting dictionary on macOS 26; the installer runs for real on a clean macOS runner. | `wrapped/mac/`, [guide](docs/MAC.md) |
+| **Mac app (prototype)** | A double-clickable menu-bar app that would replace the Terminal helper: builds on a macOS 26 runner; its numbers and text reply are byte-identical to the command-line tool on five invented chats; three setup screens photographed, including macOS's own prompts; cannot send in CI. Whether it is finished and shipped is your decision ([MAC-APP.md](docs/MAC-APP.md)). | `mac/`, [screenshots](docs/screenshots/mac/) |
 | **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
 | **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also from the receiving side of the simulated chat. | `ios/MessagesExtension/` |
 
-CI on this branch: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`. Results:
+CI on this branch: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac app`. Results:
 [Actions](https://github.com/averyhsu/imessage-wrap/actions).
 
 State of CI when this was written: every workflow is green on the last commit that touched
@@ -106,6 +107,11 @@ Each is independent and takes about two minutes unless it says otherwise.
    `threadback send-test --chat "<a chat you choose>" --with-image` and type `send`. Did it
    say DELIVERED, and did the message arrive on your phone?
 
+**F. The Mac app prototype (two tests, about two minutes each)**
+[docs/MAC-APP.md](docs/MAC-APP.md), "Two tests on your Mac": does one folder pick let it
+read your messages, and does a reply to `/wrapped` arrive. These decide whether the
+few-click setup is real on your Mac.
+
 **D. The iPhone app on your own phone (about 10 minutes, free)**
 "Run it on your own iPhone" in [ios/README.md](ios/README.md), then the checklist there.
 
@@ -122,7 +128,8 @@ Nothing below has been done. Each needs your yes.
 | **Turn on the public site** (GitHub Pages) | The demo, the maker and recap links work at `https://averyhsu.github.io/imessage-wrap/`. In the repo: Settings → Pages → Source: "GitHub Actions", then run the "Publish site" workflow. **Settle the address first**: a recap link contains the site's address, so links already shared would stop working if the repo were renamed or the site moved. | Free. The site is public. |
 | **Merge this branch into `main`** | CI runs on `main`; the one-line installer and the README's plain `git clone` work. | Free |
 | **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
-| **Apple Developer Program** | TestFlight, so other people can install the iPhone app; later the App Store. | $99 a year |
+| **Apple Developer Program** | TestFlight, so other people can install the iPhone app; and a signed, notarized Mac app that opens with one click. Your legal name appears as the developer. | $99 a year |
+| **Finish the Mac app** | The prototype becomes the main way to use `/wrapped`: about ten clicks to set up, no Terminal ([MAC-APP.md](docs/MAC-APP.md)). Worth deciding after check F. | Roughly two weeks of work |
 | **Real AI awards** | `--ai` calls the Anthropic API with counts and first names only (no message text unless you add `--ai-quotes`). | A small API charge per recap; needs an API key |
 | **A licence** | People may reuse the code on stated terms. Until then it is public but not open-source. | Free |
 

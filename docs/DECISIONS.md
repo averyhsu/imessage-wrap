@@ -324,3 +324,29 @@ Shortcut's output straight to the iPhone app (an App Intent) so that a recap cou
 and sent from the Messages drawer with no browser: worth building only once the device test
 in [`SHORTCUT.md`](SHORTCUT.md) shows that the Shortcut reports senders in group chats.
 
+### D15 — The Mac helper should become a native app; a prototype says it can be a few clicks
+The owner asked whether `/wrapped` could be set up by someone with no technical knowledge in
+one click or a few. Two research passes and a prototype answered it
+([note 07](research/07-mac-app-permission-floor.md),
+[note 08](research/08-mac-one-click-distribution.md), [`mac/`](../mac/), summary in
+[`MAC-APP.md`](MAC-APP.md)):
+
+- **Yes, about ten clicks and no typing**, with a native menu-bar app. The step that made
+  the command-line helper painful, Full Disk Access, is not needed: picking the Messages
+  folder once in the standard Open window is consent for that folder. Four of the ten clicks
+  are macOS's own prompts and cannot be designed away.
+- **Native Swift, not the Python helper in a wrapper.** The app is under 3 MB, shows its own
+  name in every prompt, and runs the existing JavaScript engine unchanged, so the
+  conformance suite still covers it (five chats byte-identical to the Python tool on a
+  macOS 26 runner).
+- **For strangers it needs the Apple Developer Program** ($99 a year, the same membership
+  as TestFlight). Without notarization macOS blocks a downloaded app behind a ten-step
+  detour and forgets its permissions on every update. The Mac App Store is not a route:
+  the sandbox it requires rarely gets the exception needed to control Messages.
+- **Not decided by this work:** whether to spend the $99 and finish the app. Both are the
+  owner's call.
+- **Not proven:** the folder pick on a real Mac (GitHub's runners have file protection
+  switched off, so the experiment there shows nothing), and group sends on macOS 26 and 27,
+  which is the one risk no setup flow can remove. The fallback is a ready-to-send message
+  the owner sends by hand.
+
