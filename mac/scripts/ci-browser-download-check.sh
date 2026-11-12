@@ -112,6 +112,30 @@ else
   say "  DOWNLOAD FAILED"; FAIL=1
 fi
 
+say "-- artifact Threadback-for-Mac.dmg (uploaded with archive: false): the disk image with the install steps"
+D="$(fetch "Threadback-for-Mac.dmg" "$ROOT/dmg/Downloads" | tail -1)"
+if [ -f "$D" ]; then
+  say "  downloaded sha256 $(sha "$D"); same bytes as built: $([ "$(sha "$D")" = "$(sha "$OUT/download/Threadback-for-Mac.dmg")" ] && echo yes || echo NO)"
+  hdiutil detach "/Volumes/Threadback" > /dev/null 2>&1 || true
+  # What a double-click does: DiskImageMounter mounts it and Finder opens its window.
+  open "$D"
+  for _ in $(seq 1 60); do [ -d "/Volumes/Threadback/Threadback.app" ] && break; sleep 1; done
+  sleep 5
+  screencapture -x "$SHOTS/download-dmg-window.png" 2>/dev/null || true
+  WINDOWS="$(perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to get name of every window' 2>&1)"
+  say "  Finder windows after the double-click: $WINDOWS"
+  if echo "$WINDOWS" | grep -q "Threadback"; then say "  the disk image window OPENED BY ITSELF"; else say "  the disk image window did NOT open by itself"; FAIL=1; fi
+  say "  window layout saved in the image: $(perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to tell disk "Threadback" to get {bounds of container window, current view of container window, icon size of icon view options of container window, position of item "Threadback.app", position of item "Applications"}' 2>&1)"
+  say "  contents: $(ls -A /Volumes/Threadback | tr '\n' ' ')"
+  if [ "$(readlink /Volumes/Threadback/Applications)" = "/Applications" ]; then say "  Applications shortcut: -> /Applications"; else say "  Applications shortcut MISSING"; FAIL=1; fi
+  check_app "/Volumes/Threadback/Threadback.app" "disk image" || FAIL=1
+  say "  background: $(ls /Volumes/Threadback/.background 2>/dev/null | tr '\n' ' ')"
+  perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to close every window' > /dev/null 2>&1 || true
+  hdiutil detach "/Volumes/Threadback" > /dev/null 2>&1 || hdiutil detach -force "/Volumes/Threadback" > /dev/null 2>&1 || true
+else
+  say "  DOWNLOAD FAILED"; FAIL=1
+fi
+
 say "-- diagnosis: the old artifact (the app zip inside the artifact's own zip)"
 N="$(fetch "diagnosis-nested-zip" "$ROOT/nested/Downloads" | tail -1)"
 if [ -f "$N" ]; then
@@ -147,7 +171,7 @@ else
 fi
 
 if [ "$FAIL" -eq 0 ]; then
-  say "DOWNLOAD CHECK PASSED: the Threadback-for-Mac.zip artifact expands with one Archive Utility pass into the exact app that was built"
+  say "DOWNLOAD CHECK PASSED: Threadback-for-Mac.dmg opens its window by itself with the exact app and an Applications shortcut; Threadback-for-Mac.zip expands with one Archive Utility pass into the exact app"
 else
   say "DOWNLOAD CHECK FAILED"
 fi

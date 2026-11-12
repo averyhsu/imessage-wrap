@@ -25,6 +25,15 @@ describe() {
     automation-*) echo "Proof 7: the screen while the app asks macOS for permission to control Messages." ;;
     contacts-1-screen) echo "The screen while the app asks for Contacts access." ;;
     login-item-1-screen) echo "Proof 8: the screen right after SMAppService.mainApp.register()." ;;
+    download-dmg-window) echo "The downloaded disk image, double-clicked: the window Finder opens by itself, with the three install steps." ;;
+    gatekeeper-1-first-open) echo "Opening the downloaded (quarantined) app for the first time: what macOS shows." ;;
+    gatekeeper-2-privacy-security) echo "System Settings > Privacy & Security, opened with the deep link, where Open Anyway is." ;;
+    gatekeeper-3-after-open-anyway) echo "Right after clicking Open Anyway (no password is ever typed in CI)." ;;
+    gatekeeper-4-confirm) echo "A moment later: the confirmation or password prompt, if any." ;;
+    lifecycle-0-dock-and-menu) echo "While the setup window is open Threadback is a normal app (Dock icon, app menu with Quit)." ;;
+    lifecycle-1-window-closed) echo "With a chat on, after closing the window: still running, no window (menu bar only)." ;;
+    lifecycle-2-opened-again) echo "Opening Threadback again while it runs: its status window with Turn off and Quit Threadback." ;;
+    onboarding-4-keeps-answering) echo "Closing the window the first time with a chat on: it says Threadback keeps answering from the menu bar." ;;
     download-archive-utility-stuck) echo "Archive Utility was still open 60 s after it was asked to expand a download (whole screen)." ;;
     system-1-messages-first-launch) echo "The runner's Messages app on first launch (not signed in), captured with screencapture." ;;
     *) echo "" ;;
@@ -63,20 +72,21 @@ main() {
     echo "## Download the app"
     echo ""
     echo "1. Open the run above while signed in to GitHub, scroll to **Artifacts** and click"
-    echo "   **Threadback-for-Mac.zip**. The download is that one zip (GitHub does not wrap it in"
-    echo "   another one)."
-    echo "2. Double-click **Threadback-for-Mac.zip** in Downloads once (Safari may already have done it"
-    echo "   for you). **Threadback.app** appears next to it."
-    echo "3. Drag **Threadback.app** onto **Applications** in the Finder sidebar and open it from there."
-    echo "   The first time, macOS blocks it because it is not notarized: click **Done**, then"
-    echo "   System Settings > Privacy & Security > **Open Anyway**."
+    echo "   **Threadback-for-Mac.dmg** (it downloads as that one file)."
+    echo "2. Double-click **Threadback-for-Mac.dmg** in Downloads. Its window opens by itself and shows"
+    echo "   the three steps: drag **Threadback** onto **Applications**; open it from Applications"
+    echo "   (macOS says it cannot verify it: click **Done**); then System Settings > Privacy &"
+    echo "   Security, scroll down, **Open Anyway**. See \`download-dmg-window.jpg\` and the"
+    echo "   \`gatekeeper-*.jpg\` photos below for what each step looks like."
     echo ""
-    echo "Every run downloads this artifact the way a browser does, expands it with the real Archive"
-    echo "Utility and checks that the result is the app that was built (signature valid, every file"
-    echo "identical); see section 13 of [MAC-APP-RESULTS.txt](MAC-APP-RESULTS.txt). It is the universal"
-    echo "Release build, ad-hoc signed (no Apple developer account), with no link in its replies until"
-    echo "the story site is live. \`Threadback-debug-with-probes\` is the Debug build CI drives; you do"
-    echo "not need it."
+    echo "\`Threadback-for-Mac.zip\` is the same app as a plain zip (one double-click gives"
+    echo "Threadback.app). Every run downloads both the way a browser does and checks them: the disk"
+    echo "image opens its window by itself and holds the exact app that was built (signature valid,"
+    echo "every file identical) next to an Applications shortcut; the zip expands with one pass of the"
+    echo "real Archive Utility. See sections 13 and 14 of [MAC-APP-RESULTS.txt](MAC-APP-RESULTS.txt)."
+    echo "The app is the universal Release build, ad-hoc signed (no Apple developer account), with no"
+    echo "link in its replies until the story site is live. \`Threadback-debug-with-probes\` is the"
+    echo "Debug build CI drives; you do not need it."
     echo ""
     echo "| File | What it shows |"
     echo "|------|---------------|"
@@ -85,7 +95,7 @@ main() {
       echo "| [\`$name\`]($name.jpg) | $(describe "$name") |"
     done
     echo ""
-    for file in "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
+    for file in "$stage"/download-*.jpg "$stage"/gatekeeper-*.jpg "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/lifecycle-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
       name="$(basename "$file" .jpg)"
       echo "### $name"
       echo ""

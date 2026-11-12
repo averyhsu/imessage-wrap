@@ -25,6 +25,11 @@ enum DebugCLI {
             case "--tb-decode-link": return try decodeLink(args)
             case "--tb-print-applescript": return try printAppleScript(args)
             case "--tb-probe": return probe(args)
+            case "--tb-dmg-background":
+                let dir = URL(fileURLWithPath: args.value("--tb-dmg-background") ?? ".", isDirectory: true)
+                try DMGBackground.write(to: dir)
+                out("wrote background.png and background@2x.png to \(dir.path)")
+                return 0
             default:
                 err("unknown command \(command)")
                 return 2

@@ -134,20 +134,89 @@ final class OnboardingUITests: ThreadbackUITestCase {
             XCTAssertFalse(report.contains(word), "the copied report contains \(word)")
         }
         element(app, "onboarding.done").click()
-        sleep(1)
-
-        // The menu-bar item (best effort: status items are outside the app's windows).
-        let item = app.statusItems.matching(NSPredicate(format: "label CONTAINS[c] 'Threadback' OR title CONTAINS[c] 'Threadback' OR identifier CONTAINS[c] 'Threadback'")).firstMatch
-        note("status items seen by XCUITest: \(app.statusItems.allElementsBoundByIndex.prefix(8).map { "\($0.identifier)|\($0.label)|\($0.title)" })")
-        if item.waitForExistence(timeout: 5) {
-            item.click()
-            sleep(1)
-            shootScreen("onboarding-4-menu-bar")
-            note("menu bar item found; menu items: \(app.menuItems.allElementsBoundByIndex.prefix(10).map { $0.title })")
-            app.typeKey(.escape, modifierFlags: [])
-        } else {
-            note("menu bar item not found by XCUITest")
+        // The first close with a chat on says where Threadback goes.
+        let sheet = app.sheets.firstMatch
+        if sheet.waitForExistence(timeout: 5) {
+            shootWindow(app, "onboarding-4-keeps-answering")
+            note("closing the window says: \(sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) })")
+            sheet.buttons["OK"].click()
         }
+        sleep(1)
+        app.terminate()
+    }
+}
+
+/// The lifecycle: never running invisibly by surprise.
+final class LifecycleUITests: ThreadbackUITestCase {
+    private func setUpFixture() throws -> XCUIApplication {
+        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
+        return launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
+                       "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
+                       "-TBTimeZone", "America/Los_Angeles"])
+    }
+
+    func test1_ClosingTheWindowBeforeSetupQuits() throws {
+        let app = launch(["-TBResetOnboarding", "YES"])
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        app.typeKey("w", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "closing the window before a chat is on quits Threadback")
+        note("lifecycle: window closed before setup -> state \(app.state.rawValue) (1 = not running)")
+    }
+
+    func test2_QuitButtonQuits() throws {
+        let app = launch(["-TBResetOnboarding", "YES"])
+        let quit = element(app, "onboarding.quit")
+        XCTAssertTrue(quit.waitForExistence(timeout: 30))
+        quit.click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "the Quit button quits")
+    }
+
+    func test3_CommandQQuits() throws {
+        let app = launch(["-TBResetOnboarding", "YES"])
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        shootScreen("lifecycle-0-dock-and-menu")
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Command-Q quits")
+    }
+
+    func test4_WithAChatOnItKeepsRunningAndOpeningAgainShowsTheWindow() throws {
+        let app = try setUpFixture()
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        XCTAssertTrue(element(app, "chat.turnOn.0").waitForExistence(timeout: 10))
+        element(app, "chat.turnOn.0").click()
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the first close explains the menu bar")
+        sheet.buttons["OK"].click()
+        sleep(3)
+        XCTAssertNotEqual(app.state, .notRunning, "with a chat on, closing the window keeps Threadback running")
+        XCTAssertFalse(element(app, "onboarding.ready").exists, "the window is gone")
+        shootScreen("lifecycle-1-window-closed")
+        note("lifecycle: with a chat on, after closing the window: state \(app.state.rawValue), windows \(app.windows.count)")
+
+        // Open it again the way Finder, Spotlight or Launchpad do: a reopen of the running app.
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
+        if let url = running?.bundleURL {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            let done = expectation(description: "opened")
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                if let error { print("WRAPPED_NOTE reopen error: \(error)") }
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 20)
+        }
+        let title = element(app, "status.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 15), "opening Threadback again shows its window")
+        shootWindow(app, "lifecycle-2-opened-again")
+        note("lifecycle: opened again -> \(text(of: title)); uninstall line present: \(element(app, "status.uninstall").exists)")
+        element(app, "status.quit").click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Quit Threadback in the window quits")
     }
 }
 

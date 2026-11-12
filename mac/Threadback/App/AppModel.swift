@@ -59,6 +59,7 @@ final class AppModel: ObservableObject {
     @Published var copiedNote = ""
     @Published var experimentNote = ""
     @Published var moveNote = ""
+    @Published var turnOffNote = ""
 
     weak var window: NSWindow?
     private(set) var engine: ThreadbackEngine?
@@ -83,13 +84,18 @@ final class AppModel: ObservableObject {
         static let walReadable = "report.walReadable"
         static let automation = "report.automation"
         static let replies = "report.replies"
-        static let all = [onboarded, bookmark, bookmarkScoped, approved, method, directBefore, afterGrant, walReadable, automation, replies]
+        static let all = [onboarded, bookmark, bookmarkScoped, approved, method, directBefore, afterGrant, walReadable, automation, replies, "toldAboutMenuBar"]
     }
 
     var isFixture: Bool { DebugOptions.fixtureDatabase != nil }
     /// The Messages folder was connected on an earlier launch (bookmark or Full Disk Access).
     var hasConnection: Bool { defaults.data(forKey: Key.bookmark) != nil || defaults.string(forKey: Key.method) == "Full Disk Access" }
     var onboarded: Bool { defaults.bool(forKey: Key.onboarded) }
+    /// A chat is turned on: only then does Threadback stay running without a window.
+    var chatIsOn: Bool { onboarded && !approved.isEmpty }
+    /// Launched from a download that macOS checked (quarantine attribute present): the person
+    /// just went through the Gatekeeper detour.
+    let cameThroughGatekeeper: Bool = getxattr(Bundle.main.bundlePath, "com.apple.quarantine", nil, 0, 0, 0) > 0
     let location = AppLocation.current
 
     init() {
@@ -326,6 +332,11 @@ final class AppModel: ObservableObject {
     }
 
     func setLoginItem(_ on: Bool) {
+        if on && !chatIsOn {
+            loginItemNote = "Turn on a chat first."
+            loginItemOn = false
+            return
+        }
         if on && location == .translocated {
             loginItemNote = "Move Threadback to Applications first, then switch this on."
             loginItemOn = false
@@ -335,8 +346,52 @@ final class AppModel: ObservableObject {
         loginItemOn = Permissions.loginItemStatus() == "enabled"
     }
 
+    /// Done: the same as closing the window (which says, the first time, that Threadback keeps
+    /// answering from the menu bar).
     func finishOnboarding() {
-        window?.close()
+        window?.performClose(nil)
+    }
+
+    /// Turn off: forget the chat, stop answering, and do not open at login any more.
+    func turnOff() {
+        timer?.invalidate()
+        timer = nil
+        agent = nil
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
+        approved = []
+        defaults.removeObject(forKey: Key.approved)
+        defaults.set(false, forKey: Key.onboarded)
+        cardImage = nil
+        recapPreview = ""
+        automationNote = ""
+        status = "Off"
+        if Permissions.loginItemStatus() == "enabled" {
+            loginItemNote = Permissions.setLoginItem(false)
+            turnOffNote = "Turned off. Threadback will not open at login any more."
+        } else {
+            turnOffNote = "Turned off. Threadback answers nothing now."
+        }
+        loginItemOn = Permissions.loginItemStatus() == "enabled"
+    }
+
+    /// Quit from the window: also stop opening at login, if the person wants.
+    func quitFromWindow() {
+        if Permissions.loginItemStatus() == "enabled" {
+            let alert = NSAlert()
+            alert.messageText = "Quit Threadback?"
+            alert.informativeText = "It opens again at login and keeps answering /wrapped. Remove it from login items too?"
+            alert.addButton(withTitle: "Quit and remove from login")
+            alert.addButton(withTitle: "Just quit")
+            if alert.runModal() == .alertFirstButtonReturn { _ = Permissions.setLoginItem(false) }
+        }
+        NSApp.terminate(nil)
+    }
+
+    func setUpAgain() {
+        step = .welcome
+        connectState = .idle
+        NotificationCenter.default.post(name: .showOnboarding, object: nil)
     }
 
     // MARK: Moving to Applications
@@ -527,4 +582,5 @@ final class AppModel: ObservableObject {
 
 extension Notification.Name {
     static let showOnboarding = Notification.Name("ThreadbackShowOnboarding")
+    static let showStatus = Notification.Name("ThreadbackShowStatus")
 }

@@ -53,40 +53,60 @@ struct MenuContent: View {
         if let outcome = model.lastUnconfirmed {
             Button("Reply in \(outcome.chat.name) not confirmed: send by hand…") { model.sendByHand() }
         }
-        Toggle("Open at login", isOn: Binding(get: { model.loginItemOn }, set: { model.setLoginItem($0) }))
+        if model.chatIsOn {
+            Toggle("Open at login", isOn: Binding(get: { model.loginItemOn }, set: { model.setLoginItem($0) }))
+        }
         Button("Copy test report") { model.copyTestReport() }
+        Button("Open Threadback window") { NotificationCenter.default.post(name: .showStatus, object: nil) }
         Button("Set up…") { NotificationCenter.default.post(name: .showOnboarding, object: nil) }
         Divider()
         Button("Quit Threadback") { NSApp.terminate(nil) }
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+/// The app's lifecycle. Rules (so Threadback is never running invisibly by surprise):
+/// - while a Threadback window is open it is a normal app: Dock icon, app menu, Command-Q;
+/// - until a chat is turned on, closing the window quits the app;
+/// - with a chat on, closing the window keeps it answering from the menu bar (the window says
+///   so the first time) and the Dock icon goes away;
+/// - opening Threadback again while it runs (Applications, Spotlight, Launchpad) always shows
+///   a window with its status and Turn off / Quit Threadback.
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let model = AppModel()
     private var window: NSWindow?
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        observer = NotificationCenter.default.addObserver(forName: .showOnboarding, object: nil, queue: .main) { [weak self] _ in
+        observers.append(NotificationCenter.default.addObserver(forName: .showOnboarding, object: nil, queue: .main) { [weak self] _ in
             self?.showOnboarding()
-        }
+        })
+        observers.append(NotificationCenter.default.addObserver(forName: .showStatus, object: nil, queue: .main) { [weak self] _ in
+            self?.showStatus()
+        })
         #if DEBUG
         if Experiments.runIfAsked(model: model, show: { [weak self] model in _ = self?.show(ExperimentView(model: model), title: "Threadback experiment") }) {
             return
         }
         #endif
-        // A later launch: reconnect through the stored bookmark and say in the menu whether
-        // it worked ("Messages: Connected" or "Messages: Lost access · Reconnect").
+        // A later launch: reconnect through the stored bookmark and say whether it worked
+        // ("Messages: Connected" or "Messages: Lost access \u{00B7} Reconnect").
         if !model.isFixture && model.hasConnection {
             model.restoreFolder()
             model.checkAccess()
         }
-        if model.onboarded && !model.approved.isEmpty {
+        if model.chatIsOn {
             if model.isFixture { model.checkAccess() }
             model.startAgent()
+            showStatus()
         } else {
             showOnboarding()
         }
+    }
+
+    /// Opened again while running (Finder, Spotlight, Launchpad, Dock): always a window.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if model.chatIsOn { showStatus() } else { showOnboarding() }
+        return true
     }
 
     func showOnboarding() {
@@ -94,8 +114,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.window = window
     }
 
+    func showStatus() {
+        let window = show(StatusView(model: model), title: "Threadback")
+        model.window = window
+    }
+
     @discardableResult
     func show<V: View>(_ view: V, title: String) -> NSWindow {
+        NSApp.setActivationPolicy(.regular)
+        installMainMenu()
         if let window {
             window.contentView = NSHostingView(rootView: view)
             window.makeKeyAndOrderFront(nil)
@@ -103,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return window
         }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 640),
-                              styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+                              styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.title = title
@@ -113,10 +140,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = NSHostingView(rootView: view)
         window.center()
         window.identifier = NSUserInterfaceItemIdentifier("threadback.main")
+        window.delegate = self
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         self.window = window
         return window
+    }
+
+    /// The menu of a normal app: About, Hide, Quit (Command-Q), Close (Command-W).
+    private func installMainMenu() {
+        let quit = #selector(NSApplication.terminate(_:))
+        if let first = NSApp.mainMenu?.items.first?.submenu, first.items.contains(where: { $0.action == quit }) { return }
+        let main = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu(title: "Threadback")
+        appMenu.addItem(withTitle: "About Threadback", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Hide Threadback", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "Quit Threadback", action: quit, keyEquivalent: "q")
+        appItem.submenu = appMenu
+        main.addItem(appItem)
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowItem.submenu = windowMenu
+        main.addItem(windowItem)
+        NSApp.mainMenu = main
+    }
+
+    // MARK: Closing the window
+
+    private let toldKey = "toldAboutMenuBar"
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard model.chatIsOn, !UserDefaults.standard.bool(forKey: toldKey) else { return true }
+        // The first time with a chat on: say where Threadback goes before the window closes.
+        let alert = NSAlert()
+        alert.messageText = "Threadback keeps answering from the menu bar."
+        alert.informativeText = "To stop it, open Threadback again (from Applications) and click Turn off or Quit Threadback."
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "Quit Threadback")
+        alert.beginSheetModal(for: sender) { response in
+            UserDefaults.standard.set(true, forKey: self.toldKey)
+            if response == .alertSecondButtonReturn {
+                NSApp.terminate(nil)
+            } else {
+                sender.close()
+            }
+        }
+        return false
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if model.chatIsOn {
+            NSApp.setActivationPolicy(.accessory)  // the menu-bar item stays, the Dock icon goes
+        } else {
+            NSApp.terminate(nil)                   // nothing to do in the background: quit
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

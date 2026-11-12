@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The brand on the Mac: near-black page, one mark, heavy wide display type, Messages
@@ -86,6 +87,11 @@ struct OnboardingView: View {
             Text("STEP \(model.step.rawValue) OF 3")
                 .font(.system(size: 11, weight: .heavy)).kerning(1.4).foregroundStyle(Theme.muted)
                 .accessibilityIdentifier("onboarding.step")
+            Button("Quit") { NSApp.terminate(nil) }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.muted)
+                .padding(.leading, 12)
+                .accessibilityIdentifier("onboarding.quit")
         }
     }
 
@@ -93,6 +99,11 @@ struct OnboardingView: View {
 
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if model.cameThroughGatekeeper && !model.location.needsMove {
+                Label("That was the only detour. Three clicks left.", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
+                    .accessibilityIdentifier("onboarding.detourDone")
+            }
             Text("YOUR GROUP CHAT'S YEAR IN REVIEW").font(.system(size: 12, weight: .heavy)).kerning(1.6).foregroundStyle(Theme.muted)
             (Text("Type /wrapped.\n").foregroundColor(.white) + Text("Get the recap.").foregroundColor(Theme.blue))
                 .font(Theme.display(46))

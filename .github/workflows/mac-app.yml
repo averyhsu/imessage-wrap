@@ -95,7 +95,7 @@ jobs:
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
           HOMEBREW_NO_ENV_HINTS: "1"
         run: |
-          brew install xcodegen
+          brew install xcodegen create-dmg
           xcodegen --version
           /usr/bin/python3 -m venv "$WORK/venv"
           "$WORK/venv/bin/python" -m pip install --quiet "pillow>=10"
@@ -333,6 +333,18 @@ jobs:
             -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
             -only-testing:ThreadbackUITests/OnboardingUITests -resultBundlePath "$OUT/Onboarding.xcresult" | tee "$RES/08-onboarding.txt"
 
+      - name: "Lifecycle: never running invisibly (window, Dock, Quit, reopen)"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/lifecycle.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+            -only-testing:ThreadbackUITests/LifecycleUITests -resultBundlePath "$OUT/Lifecycle.xcresult" | tee "$RES/08b-lifecycle.txt"
+
       - name: "Proof 6b: the Open panel grant, then a relaunch through the bookmark"
         if: ${{ !cancelled() }}
         continue-on-error: true
@@ -429,6 +441,8 @@ jobs:
             ditto -c -k --keepParent "$REL" "$OUT/download/Threadback-for-Mac.zip"
             ditto -c -k --keepParent "$APP" "$OUT/download-debug/Threadback-debug-with-probes.zip"
             echo "commit in the Release app: $(/usr/libexec/PlistBuddy -c 'Print :ThreadbackCommit' "$REL/Contents/Info.plist")"
+            mac/scripts/make-dmg.sh "$REL" "$BIN" "$OUT/download/Threadback-for-Mac.dmg"
+            echo "disk image: Threadback-for-Mac.dmg ($(du -h "$OUT/download/Threadback-for-Mac.dmg" | cut -f1))"
             echo "zipped for download: artifact Threadback-for-Mac -> Threadback-for-Mac.zip ($(du -h "$OUT/download/Threadback-for-Mac.zip" | cut -f1)); artifact Threadback-debug-with-probes ($(du -h "$OUT/download-debug/Threadback-debug-with-probes.zip" | cut -f1))"
           } 2>&1 | tee "$RES/12-release.txt"
 
@@ -440,6 +454,15 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           path: ${{ env.OUT }}/download/Threadback-for-Mac.zip
+          archive: false
+          if-no-files-found: error
+
+      # The main download: a disk image whose window shows the three install steps.
+      - name: "Upload the app for the owner: Threadback-for-Mac.dmg"
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ env.OUT }}/download/Threadback-for-Mac.dmg
           archive: false
           if-no-files-found: error
 
@@ -468,6 +491,14 @@ jobs:
           set -o pipefail
           mac/scripts/ci-browser-download-check.sh 2>&1 | tee "$RES/13-download.txt"
 
+      - name: "What macOS shows on the first open (Gatekeeper), photographed"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -o pipefail
+          mac/scripts/ci-gatekeeper-photos.sh "$WORK/release-dd/Build/Products/Release/Threadback.app" "$SHOTS" 2>&1 | tee "$RES/14-gatekeeper.txt"
+
       - name: Collect results
         if: ${{ !cancelled() }}
         env:
@@ -483,7 +514,7 @@ jobs:
           "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
           import json, os, shutil, sys
           root, dst = sys.argv[1], sys.argv[2]
-          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-")
+          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-")
           for sub in sorted(os.listdir(root)):
               folder = os.path.join(root, sub)
               try:
