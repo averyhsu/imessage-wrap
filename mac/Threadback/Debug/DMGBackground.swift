@@ -15,7 +15,7 @@ enum DMGBackground {
     /// The steps, in the words macOS uses (checked against the runner in the Gatekeeper step).
     static let steps: [(String, NSColor)] = [
         ("Drag Threadback onto Applications.", MacPalette.blue),
-        ("Open it from Applications. If macOS says it cannot verify it, click Done.", MacPalette.green),
+        ("Open it from Applications. At \u{201C}Threadback\u{201D} Not Opened, click Done.", MacPalette.green),
         ("Then System Settings \u{203A} Privacy & Security, scroll down, click Open Anyway.", MacPalette.rgb(0xBF5AF2)),
     ]
 

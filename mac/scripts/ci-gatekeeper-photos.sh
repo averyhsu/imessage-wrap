@@ -68,7 +68,20 @@ on run argv
         try
           repeat with e in (entire contents of w)
             try
-              if role of e is "AXButton" and (name of e as text) is buttonName then
+              set labels to {}
+              try
+                set end of labels to (name of e) as text
+              end try
+              try
+                set end of labels to (value of e) as text
+              end try
+              try
+                set end of labels to (description of e) as text
+              end try
+              try
+                set end of labels to (title of e) as text
+              end try
+              if role of e is "AXButton" and labels contains buttonName then
                 try
                   perform action "AXScrollToVisible" of e
                 end try
@@ -110,8 +123,16 @@ else
 fi
 echo "what is on screen (UI scripting):"
 read_ui "CoreServicesUIAgent" "UserNotificationCenter" "Threadback" | sed 's/^/  /' | head -40
-echo "click Done: $(click_button "CoreServicesUIAgent" "Done")"
-sleep 2
+RESULT_DONE="$(click_button "CoreServicesUIAgent" "Done")"
+echo "click Done: $RESULT_DONE"
+if ! echo "$RESULT_DONE" | grep -q clicked; then
+  # Escape answers the dialog with its cancel button (Done); Return would mean Move to Trash.
+  limit 20 osascript -e 'tell application "System Events" to tell process "CoreServicesUIAgent" to set frontmost to true' \
+    -e 'tell application "System Events" to key code 53' > /dev/null 2>&1 || true
+  echo "pressed Escape instead"
+fi
+sleep 3
+echo "dialog still there: $(read_ui "CoreServicesUIAgent" | grep -c "Not Opened" || true)"
 pkill -f "$GK/Threadback.app/Contents/MacOS/Threadback" 2>/dev/null || true
 sleep 2
 kill "$OPEN_PID" 2>/dev/null || true

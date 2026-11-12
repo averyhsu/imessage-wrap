@@ -75,7 +75,7 @@ main() {
     echo "   **Threadback-for-Mac.dmg** (it downloads as that one file)."
     echo "2. Double-click **Threadback-for-Mac.dmg** in Downloads. Its window opens by itself and shows"
     echo "   the three steps: drag **Threadback** onto **Applications**; open it from Applications"
-    echo "   (macOS says it cannot verify it: click **Done**); then System Settings > Privacy &"
+    echo "   (macOS says “Threadback” Not Opened: click **Done**); then System Settings > Privacy &"
     echo "   Security, scroll down, **Open Anyway**. See \`download-dmg-window.jpg\` and the"
     echo "   \`gatekeeper-*.jpg\` photos below for what each step looks like."
     echo ""
