@@ -66,14 +66,24 @@ class ThreadbackUITestCase: XCTestCase {
             let labels = host.buttons.allElementsBoundByIndex.prefix(12).map { $0.label }.filter { !$0.isEmpty }
             let texts = host.staticTexts.allElementsBoundByIndex.prefix(6).map { text(of: $0) }.filter { !$0.isEmpty }
             seen.append("\(name) [state \(host.state.rawValue), \(dialogs) dialogs/alerts/sheets] buttons=\(labels) texts=\(texts.map { String($0.prefix(90)) })")
-            for label in allow {
-                let button = host.buttons[label]
-                if button.exists && name != "app under test" || (name == "app under test" && button.exists && dialogs > 0) {
-                    button.click()
-                    seen.append("CLICKED \"\(label)\" in \(name)")
-                    return seen.joined(separator: " ;; ")
+            // Each prompt is its own dialog: read it, then answer it inside that dialog.
+            let windows = host.dialogs.allElementsBoundByIndex + host.alerts.allElementsBoundByIndex
+            var clicked = false
+            for (index, dialog) in windows.enumerated() {
+                let words = dialog.staticTexts.allElementsBoundByIndex.prefix(6).map { text(of: $0) }.filter { !$0.isEmpty }
+                let choices = dialog.buttons.allElementsBoundByIndex.prefix(6).map { $0.title.isEmpty ? $0.label : $0.title }
+                seen.append("\(name) dialog \(index): texts=\(words.map { String($0.prefix(160)) }) buttons=\(choices)")
+                for label in allow {
+                    let button = dialog.buttons[label].firstMatch
+                    if button.exists {
+                        button.click()
+                        seen.append("CLICKED \"\(label)\" in \(name) dialog \(index)")
+                        clicked = true
+                        break
+                    }
                 }
             }
+            if clicked { return seen.joined(separator: " ;; ") }
         }
         return seen.isEmpty ? "no system prompt host is running" : seen.joined(separator: " ;; ")
     }
@@ -215,7 +225,7 @@ final class SystemPromptUITests: ThreadbackUITestCase {
                 note("automation finished after ~\(round * 3) s: \(now)")
                 break
             }
-            if answered.isEmpty || round % 5 == 0 {
+            if !answered.contains("CLICKED") || round % 2 == 0 {
                 let seen = answerSystemPrompt(["OK", "Allow"], app: app)
                 note("automation round \(round): \(seen)")
                 if seen.contains("CLICKED") { answered = seen }

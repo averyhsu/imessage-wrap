@@ -419,23 +419,34 @@ jobs:
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if ! ls "$SHOTS"/onboarding-*.png > /dev/null 2>&1 && [ -d "$OUT/Onboarding.xcresult" ]; then
-            mkdir -p "$WORK/att"
-            for b in "$OUT"/*.xcresult; do xcrun xcresulttool export attachments --path "$b" --output-path "$WORK/att" > /dev/null 2>&1 || true; done
-            "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
+          # The UI-test runner cannot write outside its container, so the screenshots come out
+          # of the result bundles: each bundle into its own folder, named images only.
+          for b in "$OUT"/*.xcresult; do
+            d="$WORK/att/$(basename "$b" .xcresult)"
+            mkdir -p "$d"
+            xcrun xcresulttool export attachments --path "$b" --output-path "$d" > /dev/null 2>&1 || true
+          done
+          "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
           import json, os, shutil, sys
-          src, dst = sys.argv[1], sys.argv[2]
-          try:
-              manifest = json.load(open(os.path.join(src, "manifest.json")))
-          except Exception:
-              sys.exit(0)
-          for test in manifest:
-              for a in test.get("attachments", []):
-                  name = a.get("suggestedHumanReadableName", "")
-                  base = name.split("_0_")[0] if "_0_" in name else os.path.splitext(name)[0]
-                  shutil.copy(os.path.join(src, a["exportedFileName"]), os.path.join(dst, base + ".png"))
+          root, dst = sys.argv[1], sys.argv[2]
+          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-")
+          for sub in sorted(os.listdir(root)):
+              folder = os.path.join(root, sub)
+              try:
+                  manifest = json.load(open(os.path.join(folder, "manifest.json")))
+              except Exception:
+                  continue
+              for test in manifest:
+                  for a in test.get("attachments", []):
+                      name = a.get("suggestedHumanReadableName", "")
+                      base = name.split("_0_")[0] if "_0_" in name else os.path.splitext(name)[0]
+                      exported = a.get("exportedFileName", "")
+                      if base.startswith(prefixes) and exported.lower().endswith((".png", ".jpeg", ".jpg")):
+                          target = os.path.join(dst, base + ".png")
+                          if not os.path.exists(target):
+                              shutil.copy(os.path.join(folder, exported), target)
+                              print("exported", base, "from", sub)
           EOF
-          fi
           {
             echo "Threadback for Mac: feasibility spike results"
             echo "Run:    $RUN_URL"
