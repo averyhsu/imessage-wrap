@@ -75,9 +75,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         #endif
-        if model.onboarded && !model.approved.isEmpty {
-            if !model.isFixture { model.restoreFolder() }
+        // A later launch: reconnect through the stored bookmark and say in the menu whether
+        // it worked ("Messages: Connected" or "Messages: Lost access · Reconnect").
+        if !model.isFixture && model.hasConnection {
+            model.restoreFolder()
             model.checkAccess()
+        }
+        if model.onboarded && !model.approved.isEmpty {
+            if model.isFixture { model.checkAccess() }
             model.startAgent()
         } else {
             showOnboarding()

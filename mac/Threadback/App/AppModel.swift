@@ -87,6 +87,8 @@ final class AppModel: ObservableObject {
     }
 
     var isFixture: Bool { DebugOptions.fixtureDatabase != nil }
+    /// The Messages folder was connected on an earlier launch (bookmark or Full Disk Access).
+    var hasConnection: Bool { defaults.data(forKey: Key.bookmark) != nil || defaults.string(forKey: Key.method) == "Full Disk Access" }
     var onboarded: Bool { defaults.bool(forKey: Key.onboarded) }
     let location = AppLocation.current
 
