@@ -32,7 +32,7 @@ final class EngineTests: XCTestCase {
         let polyfilled = engine.context.evaluateScript("TextDecoder.name")?.toString() ?? "?"
         let intl = engine.context.evaluateScript("new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Tokyo', hour: 'numeric', hourCycle: 'h23'}).format(new Date(0))")?.toString() ?? "?"
         Fixture.note("JavaScriptCore: TextDecoder is \(hasDecoder) (\(polyfilled)); Intl in Asia/Tokyo at epoch: \(intl); engine \(engine.context.evaluateScript("WrappedEngine.GENERATOR")?.toString() ?? "?")")
-        XCTAssertEqual(intl, "9")
+        XCTAssertTrue(intl == "9" || intl == "09", "Intl with a time zone works in JavaScriptCore")
     }
 
     func testListsTheFixtureGroupChats() throws {

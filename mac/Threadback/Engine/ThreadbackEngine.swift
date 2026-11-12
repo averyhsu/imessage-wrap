@@ -43,7 +43,7 @@ final class ThreadbackEngine {
     static let scripts = ["fflate.min", "engine", "db", "bridge", "recap-text"]
 
     init(bundle: Bundle = ThreadbackEngine.resourceBundle) throws {
-        guard let context = JSContext() else { throw EngineError(code: "jsc", message: "JavaScriptCore is not available") }
+        let context: JSContext = JSContext()
         self.context = context
         context.name = "Threadback engine"
         context.exceptionHandler = { [weak self] _, exception in
@@ -103,7 +103,7 @@ final class ThreadbackEngine {
         guard let result = target?.invokeMethod(method, withArguments: args) else {
             throw EngineError(code: "js", message: "\(object).\(method) returned nothing")
         }
-        if let problem = lastException {
+        if result.isUndefined, let problem = lastException {
             throw EngineError(code: "js", message: "\(object).\(method): \(problem)")
         }
         return result.toString() ?? ""

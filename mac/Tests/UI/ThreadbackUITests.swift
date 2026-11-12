@@ -56,8 +56,8 @@ class ThreadbackUITestCase: XCTestCase {
     @discardableResult
     func answerSystemPrompt(_ allow: [String], app: XCUIApplication) -> String {
         var seen: [String] = []
-        let hosts = ["com.apple.UserNotificationCenter", "com.apple.coreservices.uiagent", "com.apple.SecurityAgent",
-                     "com.apple.CoreServicesUIAgent", "com.apple.accessibility.universalAccessAuthWarn"]
+        // Only bundle ids that exist: XCUIApplication asserts on an unknown one.
+        let hosts = ["com.apple.UserNotificationCenter", "com.apple.coreservices.uiagent", "com.apple.SecurityAgent"]
         var targets: [(String, XCUIApplication)] = hosts.map { ($0, XCUIApplication(bundleIdentifier: $0)) }
         targets.append(("app under test", app))
         for (name, host) in targets {
@@ -112,7 +112,8 @@ final class OnboardingUITests: ThreadbackUITestCase {
         sleep(1)
 
         // The menu-bar item (best effort: status items are outside the app's windows).
-        let item = app.statusItems.firstMatch
+        let item = app.statusItems.matching(NSPredicate(format: "label CONTAINS[c] 'Threadback' OR title CONTAINS[c] 'Threadback' OR identifier CONTAINS[c] 'Threadback'")).firstMatch
+        note("status items seen by XCUITest: \(app.statusItems.allElementsBoundByIndex.prefix(8).map { "\($0.identifier)|\($0.label)|\($0.title)" })")
         if item.waitForExistence(timeout: 5) {
             item.click()
             sleep(1)

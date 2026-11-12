@@ -24,6 +24,18 @@ enum Experiments {
                 report = AccessProbe.run(folder: Permissions.defaultMessagesFolder, label: "direct, nothing granted to the app")
             }
             report["launched.by"] = "pid \(getppid()) is the parent"
+            // Controls: other folders macOS protects the same way. If these are readable with
+            // nothing granted too, this machine does not enforce the protection at all.
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            for (key, path) in [("control.safari", "Library/Safari"), ("control.mail", "Library/Mail"),
+                                ("control.addressbook", "Library/Application Support/AddressBook")] {
+                do {
+                    let names = try FileManager.default.contentsOfDirectory(atPath: home.appendingPathComponent(path).path)
+                    report[key] = "readable: \(names.count) entries"
+                } catch {
+                    report[key] = "error: \(AccessProbe.describe(error))"
+                }
+            }
             AccessProbe.write(report, to: folder, name: "probe-\(probe)-\(tag).json")
             model.experimentNote = report.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value)" }.joined(separator: "\n")
             show(model)

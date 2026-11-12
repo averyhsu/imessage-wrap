@@ -278,6 +278,7 @@ jobs:
             open -g -a Messages || true
             sleep 20
             screencapture -x "$SHOTS/system-1-messages-first-launch.png" 2>&1 || echo "screencapture failed"
+            [ -s "$SHOTS/system-1-messages-first-launch.png" ] || { echo "screencapture wrote nothing"; rm -f "$SHOTS/system-1-messages-first-launch.png"; }
             ls -la@ "$HOME/Library/Messages" 2>&1 | head -20
             killall Messages 2>/dev/null || true
             sleep 3
@@ -402,9 +403,13 @@ jobs:
               -derivedDataPath "$WORK/release-dd" ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO > /dev/null
             REL="$WORK/release-dd/Build/Products/Release/Threadback.app"
             echo "Release bundle: $(du -sh "$REL" | cut -f1); archs: $(lipo -archs "$REL/Contents/MacOS/Threadback")"
+            count_in() { { find "$1" -type f \( -perm -u+x -o -name "*.dylib" \) -exec strings -a {} + | grep -c -F -- "$2"; } || true; }
             for MARKER in "--tb-stats" "TBProbe"; do
-              echo "debug-only marker '$MARKER': Debug $(strings -a "$BIN" | grep -c -F -- "$MARKER" || true), Release $(strings -a "$REL/Contents/MacOS/Threadback" | grep -c -F -- "$MARKER" || true)"
+              echo "debug-only marker '$MARKER': Debug bundle $(count_in "$APP" "$MARKER"), Release bundle $(count_in "$REL" "$MARKER")"
             done
+            echo "Release signature: $(codesign -dvv "$REL" 2>&1 | grep -E 'Signature|flags' | tr '\n' ' ')"
+            echo "Release entitlements:"; codesign -d --entitlements - --xml "$REL" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | grep -E "<key>" || true
+            echo "Gatekeeper on the Release app: $(spctl -a -vv -t exec "$REL" 2>&1 | tr '\n' ' ')"
             ditto -c -k --keepParent "$REL" "$WORK/Threadback.zip"
             echo "zipped for download: $(du -h "$WORK/Threadback.zip" | cut -f1)"
           } 2>&1 | tee "$RES/12-release.txt"

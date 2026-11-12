@@ -40,8 +40,12 @@ main() {
   local count=0 file name
   for file in "$src"/*.png; do
     name="$(basename "$file" .png)"
-    sips -s format jpeg -s formatOptions 70 --resampleWidth 900 "$file" --out "$stage/$name.jpg" > /dev/null
-    count=$((count + 1))
+    if [ -s "$file" ] && sips -s format jpeg -s formatOptions 70 --resampleWidth 900 "$file" --out "$stage/$name.jpg" > /dev/null 2>&1; then
+      count=$((count + 1))
+    else
+      echo "publish: skipped $name (not a readable image)"
+      rm -f "$stage/$name.jpg"
+    fi
   done
   if [ -f "$src/MAC-APP-RESULTS.txt" ]; then
     cp "$src/MAC-APP-RESULTS.txt" "$stage/"

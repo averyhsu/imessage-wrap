@@ -249,9 +249,13 @@ final class AppModel: ObservableObject {
 
     func startAgent() {
         guard let engine, !approved.isEmpty else { return }
-        let sender: MessageSender = isFixture ? RecordingSender()
-            : AppleScriptSender(openDatabase: { [unowned self] in try self.openDatabase() },
-                                decode: { engine.decodeText(text: $0, attributedBody: $1) })
+        let sender: MessageSender
+        if isFixture {
+            sender = RecordingSender()
+        } else {
+            sender = AppleScriptSender(openDatabase: { [unowned self] in try self.openDatabase() },
+                                       decode: { engine.decodeText(text: $0, attributedBody: $1) })
+        }
         let agent = Agent(engine: engine, sender: sender, config: agentConfig(),
                           openDatabase: { [unowned self] in try self.openDatabase() }, statePath: isFixture ? nil : statePath)
         agent.approve(approved)
