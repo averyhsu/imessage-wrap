@@ -9,8 +9,10 @@
     "assets": "node tests/e2e/make-assets.mjs",
     "record": "node tests/e2e/record.mjs",
     "test:make": "node tests/e2e/make/run.mjs",
+    "test:mac-guide": "node tests/e2e/mac-guide.mjs",
     "shots": "node tests/e2e/run.mjs --only=share,landing,shots --update-screenshots",
-    "shots:make": "node tests/e2e/make/run.mjs --only=shots --update-screenshots"
+    "shots:make": "node tests/e2e/make/run.mjs --only=shots --update-screenshots",
+    "shots:mac-guide": "node tests/e2e/mac-guide.mjs --only=shots --update-screenshots"
   },
   "devDependencies": {
     "playwright": "1.63.0",

@@ -1,5 +1,6 @@
 # Web story: unit tests (codec, normalize, formatting) and the Playwright end-to-end run
-# (every slide, the robustness matrix, embed bridge, file:// + CSP, zero foreign requests).
+# (every slide, the robustness matrix, embed bridge, file:// + CSP, zero foreign requests),
+# and the Mac app's download page (the walkthrough, devices, download states, layout).
 name: Web story
 
 on:
@@ -66,12 +67,15 @@ jobs:
       - name: End-to-end tests
         run: npm run test:e2e
 
+      - name: Mac app download page (web/mac/)
+        run: npm run test:mac-guide
+
       - name: The test run left tracked files alone
         run: |
           # Screenshots go to test-results/ (git-ignored). Only `npm run shots` may rewrite
           # docs/screenshots/web/.
           if [ -n "$(git status --porcelain)" ]; then
-            echo "::error::npm test / npm run test:e2e modified or created files in the repository:"
+            echo "::error::npm test / the end-to-end runs modified or created files in the repository:"
             git status --porcelain
             exit 1
           fi
@@ -81,5 +85,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-screenshots
-          path: test-results/web-screenshots/
+          path: |
+            test-results/web-screenshots/
+            test-results/mac-guide-screenshots/
           if-no-files-found: warn
