@@ -128,8 +128,8 @@ Nothing below has been done. Each needs your yes.
 | **Turn on the public site** (GitHub Pages) | The demo, the maker and recap links work at `https://averyhsu.github.io/imessage-wrap/`. In the repo: Settings → Pages → Source: "GitHub Actions", then run the "Publish site" workflow. **Settle the address first**: a recap link contains the site's address, so links already shared would stop working if the repo were renamed or the site moved. | Free. The site is public. |
 | **Merge this branch into `main`** | CI runs on `main`; the one-line installer and the README's plain `git clone` work. | Free |
 | **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
-| **Apple Developer Program** | TestFlight, so other people can install the iPhone app; and a signed, notarized Mac app that opens with one click. Your legal name appears as the developer. | $99 a year |
-| **Finish the Mac app** | The prototype becomes the main way to use `/wrapped`: about ten clicks to set up, no Terminal ([MAC-APP.md](docs/MAC-APP.md)). Worth deciding after check F. | Roughly two weeks of work |
+| **Apple Developer Program** | **Declined for now (owner, 2026-11-12).** It would give TestFlight for the iPhone app and a Mac app that opens with one click. Without it the Mac app ships by the free route (see [MAC-APP.md](docs/MAC-APP.md)). | $99 a year |
+| **Finish the Mac app** | **Yes (owner, 2026-11-12):** the Mac app is the direction for `/wrapped`. Next: your two tests (check F), which decide how it is finished. | – |
 | **Real AI awards** | `--ai` calls the Anthropic API with counts and first names only (no message text unless you add `--ai-quotes`). | A small API charge per recap; needs an API key |
 | **A licence** | People may reuse the code on stated terms. Until then it is public but not open-source. | Free |
 

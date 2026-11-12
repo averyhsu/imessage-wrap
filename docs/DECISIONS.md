@@ -350,3 +350,7 @@ one click or a few. Two research passes and a prototype answered it
   which is the one risk no setup flow can remove. The fallback is a ready-to-send message
   the owner sends by hand.
 
+**Owner's decision, 2026-11-12:** the Mac app is the direction; no Apple Developer Program
+for now. So the app ships ad-hoc signed by the free route, and the two real-Mac tests in
+[`MAC-APP.md`](MAC-APP.md) come before finishing it.
+

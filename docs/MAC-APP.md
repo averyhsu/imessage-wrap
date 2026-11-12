@@ -103,8 +103,13 @@ Terminal once, and macOS forgets the app's permissions on every update.
 Not possible: the Mac App Store (Apple rarely approves apps that control Messages), and
 any route with nothing to install.
 
-## Decisions for you
+## Decisions
 
-1. Run tests A and B, or say you would rather not.
-2. Whether to join the Apple Developer Program ($99 a year).
-3. Whether to build the prototype into the finished app and make it the main way in.
+Decided by the owner on 2026-11-12:
+
+- **No Apple Developer Program for now.** The app stays unsigned by Apple and ships by the
+  free route. Strangers will meet macOS's "could not verify" block once, or use the single
+  Terminal command that installs the same app.
+- **The Mac app is the direction** for `/wrapped`.
+
+Still open: tests A and B above, which decide how the app is finished.
