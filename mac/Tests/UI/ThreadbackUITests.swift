@@ -94,7 +94,8 @@ final class OnboardingUITests: ThreadbackUITestCase {
     func testOnboardingWalkthroughWithFixture() throws {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
         let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
-                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Avery", "-TBNoAutomation", "YES"])
+                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Avery", "-TBNoAutomation", "YES",
+                          "-TBTimeZone", "America/Los_Angeles"])
         let next = element(app, "onboarding.continue")
         XCTAssertTrue(next.waitForExistence(timeout: 30), "the first-run window opens on launch")
         shootWindow(app, "onboarding-1-welcome")

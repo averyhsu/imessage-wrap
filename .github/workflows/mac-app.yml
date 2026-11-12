@@ -410,8 +410,10 @@ jobs:
             echo "Release signature: $(codesign -dvv "$REL" 2>&1 | grep -E 'Signature|flags' | tr '\n' ' ')"
             echo "Release entitlements:"; codesign -d --entitlements - --xml "$REL" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | grep -E "<key>" || true
             echo "Gatekeeper on the Release app: $(spctl -a -vv -t exec "$REL" 2>&1 | tr '\n' ' ')"
-            ditto -c -k --keepParent "$REL" "$WORK/Threadback.zip"
-            echo "zipped for download: $(du -h "$WORK/Threadback.zip" | cut -f1)"
+            mkdir -p "$OUT/download"
+            ditto -c -k --keepParent "$REL" "$OUT/download/Threadback-release-universal.zip"
+            ditto -c -k --keepParent "$APP" "$OUT/download/Threadback-debug-with-probes.zip"
+            echo "zipped for download (artifact mac-app, folder download/): release $(du -h "$OUT/download/Threadback-release-universal.zip" | cut -f1), debug $(du -h "$OUT/download/Threadback-debug-with-probes.zip" | cut -f1)"
           } 2>&1 | tee "$RES/12-release.txt"
 
       - name: Collect results
@@ -477,6 +479,7 @@ jobs:
           name: mac-app
           path: |
             ${{ env.OUT }}/logs
+            ${{ env.OUT }}/download
             ${{ env.REPORTS }}
             ${{ env.SHOTS }}
           if-no-files-found: warn
