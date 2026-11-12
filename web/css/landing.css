@@ -83,6 +83,12 @@ html.is-ready .landing { opacity: 1; animation: none; }
 
 .l-top__nav { display: flex; align-items: center; gap: 8px; }
 .l-top__link--quiet { background: none; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16); }
+.l-top__link--quiet:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* Two links do not fit next to the name on a narrow screen; the Mac app is for a Mac anyway. */
+@media (max-width: 560px) {
+  .l-top__link--quiet { display: none; }
+}
 
 /* ── hero ── */
 
