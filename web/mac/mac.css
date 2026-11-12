@@ -1,0 +1,1109 @@
+/* The Mac app's download page: a walkthrough in the same language as the landing page and
+   the maker (dark, Archivo display type, the Messages palette, bubble shapes). Plain px and
+   clamp(). Without the page's script every step is shown, in order. */
+
+.mg {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-x: clip;
+  padding: calc(env(safe-area-inset-top, 0px) + 18px) max(22px, env(safe-area-inset-right, 0px)) calc(env(safe-area-inset-bottom, 0px) + 36px) max(22px, env(safe-area-inset-left, 0px));
+}
+
+.mg > * {
+  position: relative;
+  max-width: 1080px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.mg b { font-weight: 700; }
+
+.mg-ico {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  vertical-align: -0.14em;
+  overflow: visible;
+}
+
+/* Soft colour fields behind everything. */
+.mg-sky {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  max-width: none;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.mg-sky > i { position: absolute; border-radius: 50%; }
+.mg-sky > i:nth-child(1) { width: 900px; height: 900px; top: -460px; left: -300px; background: radial-gradient(closest-side, rgba(10, 132, 255, 0.46), rgba(10, 132, 255, 0)); }
+.mg-sky > i:nth-child(2) { width: 760px; height: 760px; top: 160px; right: -420px; background: radial-gradient(closest-side, rgba(191, 90, 242, 0.28), rgba(191, 90, 242, 0)); }
+.mg-sky > i:nth-child(3) { width: 820px; height: 820px; top: 1400px; left: -360px; background: radial-gradient(closest-side, rgba(48, 209, 88, 0.16), rgba(48, 209, 88, 0)); }
+
+/* ── top bar ── */
+
+.mg-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 44px;
+}
+
+.mg-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  text-decoration: none;
+  font: 800 19px/1 var(--font-display);
+  font-stretch: 108%;
+  letter-spacing: -0.01em;
+}
+
+.mg-brand__mark { display: block; width: 34px; height: 34px; border-radius: 9px; }
+
+.mg-top__link {
+  padding: 10px 16px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  font: 700 14px/1 var(--font-display);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.mg-top__link:hover { background: rgba(255, 255, 255, 0.18); }
+
+/* ── hero: what this is, what you need, the download ── */
+
+.mg-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 0.72fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 72px);
+  padding: clamp(28px, 5vw, 60px) 0 clamp(26px, 3.6vw, 44px);
+}
+
+.mg-hero__copy { min-width: 0; }
+
+.mg-eyebrow {
+  font: 800 13px/1.2 var(--font-display);
+  font-stretch: 112%;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.mg-h1 {
+  margin-top: 16px;
+  max-width: 12em;
+  /* Archivo's ink is about 0.95em: at 1.02 wrapped lines keep clear of each other. */
+  font: 900 clamp(38px, 5.6vw, 64px) / 1.02 var(--font-display);
+  font-stretch: 108%;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+.mg-pop { display: inline-block; color: #5eb1ff; }
+
+.mg-lede {
+  margin-top: 22px;
+  max-width: 36em;
+  font: 500 clamp(16.5px, 1.9vw, 20px) / 1.45 var(--font-text);
+  color: rgba(255, 255, 255, 0.78);
+  text-wrap: pretty;
+}
+
+.mg-cmd {
+  padding: 1px 7px 2px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  font: 700 0.92em/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.mg-code {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: 600 0.9em/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+.mg-need__title {
+  margin-top: 26px;
+  font: 800 12.5px/1.2 var(--font-display);
+  font-stretch: 110%;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.mg-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+.mg-chips > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 9px 11px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+  font: 700 13.5px/1.2 var(--font-display);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.mg-chips .mg-ico { font-size: 16px; color: var(--green); }
+
+.mg-get { margin-top: 26px; }
+
+.mg-get__note {
+  margin-top: 12px;
+  font: 500 14px/1.45 var(--font-text);
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.mg-get__none {
+  max-width: 34em;
+  padding: 14px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  font: 500 15.5px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.mg-get__none a,
+.mg-alert a,
+.mg-honest a,
+.mg-faq a { color: #9dceff; }
+
+.mg-alert {
+  max-width: 36em;
+  margin-top: 22px;
+  padding: 16px 18px 18px;
+  border-radius: 22px;
+  background: rgba(255, 159, 10, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 159, 10, 0.4);
+}
+
+.mg-alert__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 800 18px/1.25 var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.mg-alert__title .mg-ico { font-size: 1.15em; color: var(--orange); }
+.mg-alert > p { margin-top: 8px; font: 500 15px/1.5 var(--font-text); color: rgba(255, 255, 255, 0.86); }
+
+/* A tiny conversation: someone asks, the Mac answers. */
+.mg-art {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: min(100%, 320px);
+  justify-self: center;
+  transform: rotate(2.5deg);
+}
+
+.mg-art__who {
+  margin: 0 0 -4px 14px;
+  font: 500 12px/1 var(--font-text);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.mg-art__in,
+.mg-art__text {
+  position: relative;
+  max-width: 82%;
+  padding: 9px 15px 10px;
+  border-radius: 20px;
+  font: 500 15.5px/1.3 var(--font-text);
+}
+
+.mg-art__in { background: var(--grey); color: #0b0b0f; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+
+.mg-art__in::after,
+.mg-art__text::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: 23.33px;
+  height: 24.44px;
+  -webkit-mask: var(--tail) no-repeat 0 0 / 100% 100%;
+  mask: var(--tail) no-repeat 0 0 / 100% 100%;
+}
+
+.mg-art__in::after { left: -10px; background: var(--grey); transform: scaleX(-1); }
+
+.mg-art__out {
+  align-self: flex-end;
+  width: 84%;
+  margin-top: 6px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 30px 70px rgba(0, 40, 160, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  animation: mg-bob 6s ease-in-out infinite alternate;
+}
+
+.mg-art__out > img { display: block; width: 100%; height: auto; }
+
+.mg-art__text {
+  align-self: flex-end;
+  max-width: 84%;
+  background: var(--blue);
+  color: #fff;
+  font-size: 14px;
+}
+
+.mg-art__text::after { right: -10px; background: var(--blue); }
+
+.mg-art__meta {
+  align-self: flex-end;
+  margin-right: 6px;
+  font: 600 11.5px/1 var(--font-text);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+@keyframes mg-bob {
+  from { translate: 0 -4px; }
+  to { translate: 0 6px; }
+}
+
+/* ── progress: the story's segmented bar, five segments; it follows you down the page ── */
+
+.mg-progress {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  margin-top: 4px;
+  padding: 10px 0 12px;
+  transition: background-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* Once it sticks to the top, it gets a full-width backing (painted by the shadow, which
+   takes no room and cannot make the page scroll sideways). */
+.mg-progress.is-stuck {
+  background: rgba(10, 10, 16, 0.92);
+  box-shadow: 0 0 0 100vmax rgba(10, 10, 16, 0.92);
+  clip-path: inset(0 -100vmax);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.mg-progress__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.mg-progress__label {
+  font: 800 13px/1.2 var(--font-display);
+  font-stretch: 108%;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.mg-rail {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.mg-rail > li { min-width: 0; }
+
+.mg-rail button {
+  display: block;
+  width: 100%;
+  padding: 4px 0;
+  text-align: left;
+  border-radius: 6px;
+}
+
+.mg-rail i {
+  position: relative;
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  overflow: hidden;
+}
+
+.mg-rail i::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  border-radius: 3px;
+  background: #fff;
+  transition: width 0.6s var(--ease-out);
+}
+
+.mg-rail > li.is-current i::after { width: 50%; }
+.mg-rail > li.is-done i::after { width: 100%; }
+html.mg-all .mg-rail i::after { width: 100%; background: rgba(255, 255, 255, 0.5); }
+
+.mg-rail span {
+  display: block;
+  margin-top: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 800 12px/1 var(--font-display);
+  font-stretch: 108%;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.42);
+  transition: color 0.3s ease;
+}
+
+.mg-rail span b { font-weight: 900; margin-right: 3px; }
+.mg-rail > li.is-current span,
+.mg-rail > li.is-done span,
+html.mg-all .mg-rail span { color: #fff; }
+
+.mg-linkbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px;
+  font: 700 14px/1.2 var(--font-display);
+  color: #6db7ff;
+  text-decoration: underline;
+  text-decoration-color: rgba(109, 183, 255, 0.4);
+  text-underline-offset: 3px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.mg-linkbtn:hover { color: #9dceff; }
+
+/* ── steps ── */
+
+.mg-step {
+  --tone: var(--blue);
+  --tone-ink: #fff;
+  margin-top: 16px;
+  padding: clamp(18px, 3vw, 32px);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* Room for the sticky progress bar when a step is scrolled to. */
+  scroll-margin-top: 92px;
+  transition: background-color 0.4s ease;
+}
+
+#status + .mg-step { margin-top: 10px; }
+
+.mg-step--2 { --tone: var(--orange); --tone-ink: #1f1300; }
+.mg-step--3 { --tone: var(--green); --tone-ink: #03200c; }
+.mg-step--4 { --tone: var(--yellow); --tone-ink: #1c1600; }
+.mg-step--5 { --tone: var(--pink); --tone-ink: #fff; }
+
+.mg-step__head { display: flex; align-items: center; gap: 14px; }
+
+.mg-step__n {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: var(--tone-ink);
+  font: 900 24px/1 var(--font-display);
+  font-stretch: 86%;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.mg-step__n > * { grid-area: 1 / 1; transition: opacity 0.25s ease, transform 0.45s var(--ease-back); }
+.mg-step__n > .mg-ico { font-size: 24px; opacity: 0; transform: scale(0.4) rotate(-30deg); }
+
+.mg-step__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: 900 clamp(24px, 3.4vw, 34px) / 1.06 var(--font-display);
+  font-stretch: 106%;
+  letter-spacing: -0.026em;
+  text-wrap: balance;
+}
+
+/* Headings take focus when a step opens (so a screen reader announces it); they are not
+   controls, so they get no focus ring. */
+.mg-step__title:focus { outline: 0; }
+
+.mg-again { flex: none; margin-left: auto; font-size: 13.5px; }
+
+.mg-step__body { margin-top: clamp(16px, 2.4vw, 24px); }
+
+.mg-step.is-locked { background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05); }
+.mg-step.is-locked .mg-step__n { background: rgba(255, 255, 255, 0.1); color: rgba(255, 255, 255, 0.5); }
+.mg-step.is-locked .mg-step__title { color: rgba(255, 255, 255, 0.38); font-size: clamp(20px, 2.6vw, 25px); }
+
+.mg-step.is-done { background: transparent; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07); padding-top: clamp(14px, 2vw, 20px); padding-bottom: clamp(14px, 2vw, 20px); }
+.mg-step.is-done .mg-step__n { background: rgba(255, 255, 255, 0.12); color: #fff; }
+.mg-step.is-done .mg-step__n > b { opacity: 0; transform: scale(0.4); }
+.mg-step.is-done .mg-step__n > .mg-ico { opacity: 1; transform: none; color: var(--tone); }
+.mg-step.is-done .mg-step__title { font-size: clamp(18px, 2.4vw, 22px); color: rgba(255, 255, 255, 0.7); }
+
+html.mg-js .mg-step.is-active:not(.is-done) .mg-step__body { animation: mg-rise 0.5s var(--ease-out) backwards; }
+html.mg-all .mg-step .mg-step__body { animation: none; }
+
+@keyframes mg-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.mg-step__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin-top: 22px;
+}
+
+/* "Next: …" belongs to the I-did-this button, so it shows only while that does. */
+.mg-step__then { font: 500 14.5px/1.3 var(--font-text); color: rgba(255, 255, 255, 0.5); }
+.mg-next[hidden] + .mg-step__then { display: none; }
+
+/* ── text inside a step ── */
+
+.mg-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.92fr);
+  align-items: start;
+  gap: clamp(20px, 4vw, 48px);
+}
+
+.mg-split__text { min-width: 0; }
+
+.mg-intro {
+  max-width: 46em;
+  font: 500 16px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.mg-intro b,
+.mg-list b,
+.mg-faq b,
+.mg-manual b,
+.mg-facts b,
+.mg-deeplink__note b { color: #fff; }
+
+.mg-list { counter-reset: mg; }
+
+.mg-list > li {
+  position: relative;
+  padding: 0 0 14px 40px;
+  font: 500 16.5px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.mg-list > li::before {
+  counter-increment: mg;
+  content: counter(mg);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  font: 800 14px/1 var(--font-display);
+  color: #fff;
+}
+
+.mg-list q,
+.mg-faq q { quotes: none; font-style: italic; color: #fff; }
+
+.mg-why {
+  max-width: 40em;
+  font: 500 14.5px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.56);
+}
+
+.mg-honest,
+.mg-manual {
+  margin-top: 8px;
+  padding: 16px 18px 18px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.mg-honest { box-shadow: inset 3px 0 0 var(--orange), inset 0 0 0 1px rgba(255, 255, 255, 0.1); }
+
+.mg-honest h3,
+.mg-manual h3 { font: 800 17px/1.25 var(--font-display); letter-spacing: -0.01em; }
+
+.mg-honest p,
+.mg-manual p { margin-top: 6px; font: 500 15px/1.55 var(--font-text); color: rgba(255, 255, 255, 0.8); }
+
+.mg-big {
+  max-width: 24em;
+  font: 800 clamp(21px, 2.6vw, 28px) / 1.25 var(--font-display);
+  letter-spacing: -0.015em;
+  text-wrap: pretty;
+}
+
+/* ── buttons ── */
+
+.mg-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 22px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font: 800 16px/1 var(--font-display);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 0.2s var(--ease-out), background-color 0.2s ease;
+}
+
+.mg-btn:hover { background: rgba(255, 255, 255, 0.2); }
+.mg-btn:active { transform: scale(0.96); }
+.mg-btn--primary { background: var(--blue); }
+.mg-btn--primary:hover { background: #3d9bff; }
+.mg-btn--big { min-height: 58px; padding: 0 28px; font-size: 18px; }
+.mg-btn--small { min-height: 40px; padding: 0 16px; font-size: 14px; }
+.mg-btn .mg-ico { font-size: 1.2em; }
+
+/* ── step 1: the drag ── */
+
+.mg-drag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 26px 18px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.mg-drag__app,
+.mg-drag__folder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font: 700 13px/1.2 var(--font-text);
+  color: rgba(255, 255, 255, 0.86);
+  text-align: center;
+}
+
+.mg-drag__app > img { width: 64px; height: 64px; border-radius: 15px; box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45); }
+
+.mg-drag__arrow { width: clamp(70px, 12vw, 120px); height: auto; color: var(--yellow); flex: none; }
+
+/* A plain folder shape, drawn here. */
+.mg-drag__folder > i {
+  position: relative;
+  display: block;
+  width: 76px;
+  height: 58px;
+  margin-top: 6px;
+  border-radius: 8px;
+  background: linear-gradient(#6fb4ff, #3b8cf0);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
+}
+
+.mg-drag__folder > i::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: -7px;
+  width: 30px;
+  height: 12px;
+  border-radius: 6px 6px 0 0;
+  background: #4a98f5;
+}
+
+.mg-drag__folder > i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  margin: -6px 0 0 -11px;
+  border-top: 3px solid rgba(255, 255, 255, 0.55);
+  border-bottom: 3px solid rgba(255, 255, 255, 0.55);
+  height: 9px;
+}
+
+/* ── the two drawings of macOS moments ── */
+
+.mg-sketch {
+  min-width: 0;
+  padding: clamp(18px, 3vw, 28px);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.07) 1px, transparent 1.5px) 0 0 / 14px 14px,
+    rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.mg-sketch > figcaption {
+  margin-top: 16px;
+  font: 500 13px/1.45 var(--font-text);
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.mg-approx { color: rgba(255, 214, 10, 0.8); }
+
+.mg-target {
+  position: relative;
+  box-shadow: 0 0 0 3px #15151b, 0 0 0 6px var(--yellow);
+  animation: mg-ring 1.8s ease-in-out infinite;
+}
+
+@keyframes mg-ring {
+  0%, 100% { box-shadow: 0 0 0 3px #15151b, 0 0 0 6px var(--yellow); }
+  50% { box-shadow: 0 0 0 3px #15151b, 0 0 0 6px var(--yellow), 0 0 0 14px rgba(255, 214, 10, 0.18); }
+}
+
+.mg-callout {
+  position: absolute;
+  right: -12px;
+  top: -30px;
+  padding: 6px 11px 7px;
+  border-radius: 14px;
+  background: var(--yellow);
+  color: #1c1600;
+  font: 800 12.5px/1 var(--font-display);
+  white-space: nowrap;
+  transform: rotate(3deg);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35);
+}
+
+/* The "could not verify" message: a light card, drawn. */
+.mg-dialog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(100%, 290px);
+  margin: 0 auto;
+  padding: 22px 18px 18px;
+  border-radius: 24px;
+  background: #ececf0;
+  color: #1a1a1f;
+  text-align: center;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.mg-dialog__icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: #d4d4da;
+}
+
+/* A generic warning mark: a circle with an exclamation point. */
+.mg-dialog__icon > i {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #8e8e96;
+}
+
+.mg-dialog__icon > i::before,
+.mg-dialog__icon > i::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: #fff;
+}
+
+.mg-dialog__icon > i::before { top: 6px; height: 12px; }
+.mg-dialog__icon > i::after { top: 21px; height: 4px; }
+
+.mg-dialog__title { font: 700 15px/1.3 var(--font-text); }
+.mg-dialog__body { font: 500 13px/1.4 var(--font-text); color: #3c3c44; }
+
+.mg-dialog__btn {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 99px;
+  background: #d6d6dc;
+  font: 600 13.5px/1.2 var(--font-text);
+}
+
+.mg-dialog__btn.mg-target { margin-top: 26px; background: var(--blue); color: #fff; }
+.mg-dialog__btn .mg-callout { top: -32px; }
+
+/* Privacy & Security in System Settings: a window, drawn. */
+.mg-win {
+  display: grid;
+  grid-template-columns: minmax(0, 0.42fr) minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  border-radius: 18px;
+  background: #1c1c22;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.mg-win__bar { grid-column: 1 / -1; display: flex; gap: 6px; padding: 12px 14px 4px; }
+.mg-win__bar > i { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); }
+
+.mg-win__side {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px 10px 18px 14px;
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.mg-win__side > i,
+.mg-win__rows > i {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.mg-win__side > i:nth-child(2n) { width: 70%; }
+.mg-win__side > i:nth-child(3n) { width: 84%; }
+
+.mg-win__picked {
+  margin: 0 -4px;
+  padding: 5px 7px;
+  border-radius: 7px;
+  background: var(--blue);
+  font: 600 11.5px/1.2 var(--font-text);
+}
+
+.mg-win__main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 16px 22px;
+  min-width: 0;
+}
+
+.mg-win__h { font: 800 16px/1.2 var(--font-display); letter-spacing: -0.01em; }
+
+.mg-win__rows { display: flex; flex-direction: column; gap: 8px; padding: 6px 0; opacity: 0.8; }
+.mg-win__rows > i:nth-child(2) { width: 80%; }
+.mg-win__rows > i:nth-child(3) { width: 60%; }
+
+.mg-win__scroll {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 700 11.5px/1 var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.mg-win__scroll::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  margin: -4px 2px 0;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.mg-win__sub {
+  margin-top: 2px;
+  font: 700 12.5px/1.2 var(--font-text);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.mg-win__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.mg-win__text { flex: 1 1 140px; font: 500 12.5px/1.4 var(--font-text); color: rgba(255, 255, 255, 0.86); }
+
+.mg-win__btn {
+  flex: none;
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #e9e9ee;
+  color: #111;
+  font: 600 12.5px/1.2 var(--font-text);
+}
+
+.mg-win__btn .mg-callout { top: auto; bottom: -32px; right: -8px; transform: rotate(-3deg); }
+
+/* ── step 3: the way into System Settings ── */
+
+.mg-deeplink { margin-bottom: 24px; }
+
+.mg-deeplink__note {
+  margin-top: 12px;
+  max-width: 40em;
+  font: 500 14.5px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.64);
+}
+
+/* ── step 4: the app's own screens ── */
+
+.mg-shots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 22px 18px;
+  margin: 20px 0 22px;
+}
+
+.mg-shot > p {
+  margin-top: 12px;
+  font: 500 15px/1.45 var(--font-text);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.mg-shot > p > b:first-child {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--yellow);
+  color: #1c1600;
+  font: 900 13px/1 var(--font-display);
+  vertical-align: 1px;
+}
+
+.mg-shot > p > b { color: #fff; }
+
+.mg-shot__pic {
+  position: relative;
+  display: block;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.mg-shot__pic > img { display: block; width: 100%; height: auto; border-radius: 14px; }
+.mg-shot--narrow .mg-shot__pic { width: min(100%, 210px); }
+
+/* Where to click, on the real screenshot. Positions are fractions of each picture. */
+.mg-ring {
+  position: absolute;
+  border: 3px solid var(--yellow);
+  border-radius: 99px;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 18px rgba(255, 214, 10, 0.45);
+  pointer-events: none;
+}
+
+.mg-ring--continue { left: 3.6%; top: 69.4%; width: 18%; height: 8.6%; }
+.mg-ring--connect { left: 3.6%; top: 68.5%; width: 30%; height: 17%; }
+.mg-ring--grant { left: 83.6%; top: 88.2%; width: 15.4%; height: 9.6%; border-radius: 10px; }
+.mg-ring--connected { left: 3.6%; top: 81.6%; width: 18.3%; height: 11.8%; }
+.mg-ring--turn-on { left: 77.4%; top: 41.8%; width: 16.6%; height: 10.2%; }
+.mg-ring--allow { left: 49.6%; top: 85.6%; width: 45.4%; height: 11.4%; }
+
+/* ── step 5: what happens now ── */
+
+.mg-split--done { align-items: center; }
+
+.mg-reply > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.mg-reply > figcaption { margin-top: 10px; font: 500 13px/1.4 var(--font-text); color: rgba(255, 255, 255, 0.5); }
+
+.mg-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.mg-facts > li {
+  padding: 20px 22px 22px;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.mg-facts > .mg-facts__wide {
+  grid-column: 1 / -1;
+  background: rgba(48, 209, 88, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.3);
+}
+
+.mg-facts h3 { font: 800 18px/1.2 var(--font-display); letter-spacing: -0.01em; }
+.mg-facts p { margin-top: 7px; font: 500 15px/1.5 var(--font-text); color: rgba(255, 255, 255, 0.76); }
+
+/* ── "Something else happened?" ── */
+
+.mg-more {
+  margin-top: 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.mg-more > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  cursor: pointer;
+  list-style: none;
+  font: 700 15px/1.25 var(--font-display);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.mg-more > summary::-webkit-details-marker { display: none; }
+
+.mg-more > summary::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 3px 2px 2px;
+  border-right: 2.4px solid currentColor;
+  border-bottom: 2.4px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 0.25s var(--ease-out);
+}
+
+.mg-more[open] > summary::before { transform: rotate(45deg); }
+.mg-more > summary:focus-visible { outline-offset: -3px; }
+
+.mg-faq { padding: 0 18px 8px 38px; }
+.mg-faq > dt { font: 700 15px/1.4 var(--font-text); color: #fff; }
+.mg-faq > dd { margin: 4px 0 16px; font: 500 14.5px/1.55 var(--font-text); color: rgba(255, 255, 255, 0.74); }
+
+.mg-checks > li { position: relative; padding: 0 0 6px 16px; }
+.mg-checks > li::before { content: ""; position: absolute; left: 2px; top: 0.62em; width: 6px; height: 6px; border-radius: 50%; background: #6db7ff; }
+
+kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.12);
+  font: 700 12px/1 var(--font-text);
+  color: #fff;
+}
+
+/* ── footer ── */
+
+.mg-foot {
+  padding-top: 28px;
+  margin-top: 40px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px 24px;
+  font: 500 13.5px/1.5 var(--font-text);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.mg-foot a { color: rgba(255, 255, 255, 0.78); }
+.mg-foot p:first-child { max-width: 46em; }
+
+/* ── smaller screens ── */
+
+@media (max-width: 900px) {
+  .mg-shots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 860px) {
+  .mg-hero { grid-template-columns: minmax(0, 1fr); }
+  .mg-art { width: min(80%, 300px); margin-top: 6px; }
+  .mg-split { grid-template-columns: minmax(0, 1fr); }
+  .mg-facts { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 560px) {
+  .mg-shots { grid-template-columns: minmax(0, 1fr); }
+  .mg-step { border-radius: 26px; padding: 18px 16px 20px; }
+  .mg-step__head { align-items: flex-start; gap: 12px; }
+  .mg-step__n { width: 40px; height: 40px; font-size: 21px; }
+  .mg-step__title { padding-top: 6px; }
+  .mg-again { font-size: 12.5px; padding-top: 8px; }
+  .mg-art { width: min(74%, 280px); }
+  .mg-win { grid-template-columns: minmax(0, 1fr); }
+  .mg-win__side { display: none; }
+  .mg-faq { padding: 0 16px 8px 18px; }
+  .mg-list > li { padding-left: 36px; font-size: 16px; }
+  .mg-rail span { font-size: 10.5px; letter-spacing: 0.04em; }
+  .mg-top__link { display: none; }
+  .mg-btn--big { width: 100%; white-space: normal; text-align: center; padding: 10px 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mg-art__out,
+  .mg-target,
+  html.mg-js .mg-step.is-active:not(.is-done) .mg-step__body { animation: none; }
+  .mg-rail i::after,
+  .mg-rail span,
+  .mg-step,
+  .mg-step__n,
+  .mg-step__n > *,
+  .mg-btn,
+  .mg-top__link,
+  .mg-more > summary::before { transition: none; }
+  .mg-btn:active { transform: none; }
+}
+/* A step with a note next to its list: the note sits under the list on wide screens and
+   under the drawing on narrow ones, so the drawing comes right after the instructions. */
+.mg-split--aside { grid-template-areas: "text sketch" "aside sketch"; grid-template-rows: auto 1fr; row-gap: 12px; }
+.mg-split--aside > .mg-split__text { grid-area: text; }
+.mg-split--aside > .mg-sketch { grid-area: sketch; }
+.mg-split--aside > .mg-honest,
+.mg-split--aside > .mg-manual { grid-area: aside; align-self: start; margin-top: 0; }
+
+@media (max-width: 860px) {
+  .mg-split--aside { grid-template-areas: "text" "sketch" "aside"; grid-template-rows: none; row-gap: clamp(20px, 4vw, 48px); }
+}

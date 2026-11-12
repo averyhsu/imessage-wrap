@@ -21,7 +21,10 @@
     MAX_URL_LENGTH: 4800,
 
     /** Relative path of the in-browser analyzer. */
-    MAKE_PATH: 'make/'
+    MAKE_PATH: 'make/',
+
+    /** Relative path of the page that walks someone through installing the Mac app. */
+    MAC_PATH: 'mac/'
   };
 
   root.WrappedConfig = Config;

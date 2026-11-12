@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Locked down: same-origin files only, no inline code, no outbound requests of any kind.
+     The Download link and the System Settings button are links the visitor follows, not
+     requests the page makes. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+
+<!-- ════════════════════════════════════════════════════════════════════════════════════
+     BRAND + ADDRESS. The one place in this file that names the product and the public
+     URL (the page copy takes the name from ../js/config.js at run time; without
+     JavaScript it says "the app"). tests/js/mac-site.test.js fails if this block and
+     config.js drift apart. The download address lives in mac-config.js.
+     ════════════════════════════════════════════════════════════════════════════════════ -->
+<!-- brand:start -->
+<title>Threadback for Mac: set it up, step by step</title>
+<meta name="application-name" content="Threadback">
+<meta name="apple-mobile-web-app-title" content="Threadback">
+<meta property="og:site_name" content="Threadback">
+<link rel="canonical" href="https://averyhsu.github.io/imessage-wrap/mac/">
+<meta property="og:url" content="https://averyhsu.github.io/imessage-wrap/mac/">
+<meta property="og:image" content="https://averyhsu.github.io/imessage-wrap/assets/og.png">
+<!-- brand:end -->
+
+<meta name="description" content="A small Mac app that answers in your group chat: anyone types the command, your Mac replies with the chat's recap. A step-by-step guide to installing it, including the one time macOS stops you.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Your group chat asks. Your Mac answers.">
+<meta property="og:description" content="Install the Mac app in five steps, with every click shown.">
+<meta name="twitter:card" content="summary_large_image">
+
+<meta name="theme-color" content="#07070c">
+<meta name="color-scheme" content="dark">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png" sizes="180x180">
+
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="mac.css">
+</head>
+<body>
+<div class="mg" id="page">
+  <div class="mg-sky" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="mg-top">
+    <a class="mg-brand" href="../" aria-label="Home">
+      <img class="mg-brand__mark" src="../assets/favicon.svg" alt="" width="34" height="34">
+      <span class="mg-brand__name" data-brand></span>
+    </a>
+    <a class="mg-top__link" href="../make/">Make a recap in the browser</a>
+  </header>
+
+  <main class="mg-main" id="guide">
+    <!-- ── 0. what this is, what you need, the download ───────────────────────────── -->
+    <section class="mg-hero" aria-labelledby="hero-title">
+      <div class="mg-hero__copy">
+        <p class="mg-eyebrow">The Mac app</p>
+        <h1 class="mg-h1" id="hero-title">Your group chat asks. <span class="mg-pop">Your Mac answers.</span></h1>
+        <p class="mg-lede">A small, free app for your Mac that works with iMessage group chats. Turn it on for one chat, and whenever anyone in it types <code class="mg-cmd">/wrapped</code>, your Mac replies in the thread with a recap of the chat’s year.</p>
+
+        <h2 class="mg-need__title">What you need</h2>
+        <ul class="mg-chips">
+          <li><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M4 6.5A1.5 1.5 0 0 1 5.5 5h13A1.5 1.5 0 0 1 20 6.5V16H4zM2 16h20v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2z"/></svg>A Mac with macOS 14 or later</li>
+          <li><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" d="M12 4c5 0 9 3.1 9 7s-4 7-9 7c-1 0-2-.1-2.900-.4L4.500 20l1.100-3.900C4 14.800 3 13 3 11c0-3.900 4-7 9-7z"/></svg>Signed in to Messages</li>
+          <li><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.500" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M12 7.500V12l3 2"/></svg>About five minutes</li>
+        </ul>
+
+        <div class="mg-alert" id="not-mac" role="note" hidden>
+          <h2 class="mg-alert__title"><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" d="M12 11v5.500M12 7.600v.1"/></svg>This part needs a Mac</h2>
+          <p>You are on <span id="not-mac-device">another device</span>. The app runs on a Mac that is signed in to Messages, and that Mac then answers for everyone in the chat. Open this page on that Mac to download it. You can read the steps below first.</p>
+          <p><a href="../">Back to the main page</a>, where you can play or make a recap on any device.</p>
+        </div>
+
+        <div class="mg-get">
+          <a class="mg-btn mg-btn--primary mg-btn--big" id="download" href="#" rel="noopener" hidden><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.400" stroke-linecap="round" stroke-linejoin="round" d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>Download for Mac</a>
+          <p class="mg-get__note" id="download-note" hidden>Free. Then follow the five steps below; this page stays open next to you.</p>
+          <p class="mg-get__none" id="download-none" hidden>The download is not public yet. <a href="https://github.com/averyhsu/imessage-wrap" data-source rel="noopener">Follow the project on GitHub</a> to hear when it is.</p>
+          <noscript><p class="mg-get__none">Turn on JavaScript to see the Download button, or find the app on the <a href="https://github.com/averyhsu/imessage-wrap" rel="noopener">project’s GitHub page</a>. The steps below work either way.</p></noscript>
+        </div>
+      </div>
+
+      <!-- Decoration: someone asks, the Mac answers (invented chat). -->
+      <div class="mg-art" aria-hidden="true">
+        <p class="mg-art__who">Ines</p>
+        <p class="mg-art__in">/wrapped</p>
+        <div class="mg-art__out">
+          <img src="img/reply-card.webp" alt="" width="600" height="450">
+        </div>
+        <p class="mg-art__text">Taco Tuesday Crew: 2026 in review. 2,869 messages, 271 active days, a 41-day streak.</p>
+        <p class="mg-art__meta">Sent from the Mac</p>
+      </div>
+    </section>
+
+    <!-- Progress: shown once the page's script runs. -->
+    <div class="mg-progress" id="progress" hidden>
+      <div class="mg-progress__row">
+        <p class="mg-progress__label" id="progress-label">Step 1 of 5</p>
+        <button type="button" class="mg-linkbtn" id="show-all" aria-pressed="false">Show all steps</button>
+      </div>
+      <ol class="mg-rail" id="rail" aria-label="Steps">
+        <li><button type="button"><i></i><span><b>1</b> Get</span></button></li>
+        <li><button type="button"><i></i><span><b>2</b> Open</span></button></li>
+        <li><button type="button"><i></i><span><b>3</b> Allow</span></button></li>
+        <li><button type="button"><i></i><span><b>4</b> Set up</span></button></li>
+        <li><button type="button"><i></i><span><b>5</b> Use</span></button></li>
+      </ol>
+    </div>
+
+    <p class="sr-only" id="status" role="status" aria-live="polite"></p>
+
+    <!-- ── 1. drag to Applications ────────────────────────────────────────────────── -->
+    <section class="mg-step mg-step--1" id="step-1" aria-labelledby="h-1">
+      <header class="mg-step__head">
+        <span class="mg-step__n" aria-hidden="true"><b>1</b><svg class="mg-ico" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.500 4.500 4.500L19 7.500"/></svg></span>
+        <h2 class="mg-step__title" id="h-1" tabindex="-1">Open the download and drag the app to Applications</h2>
+        <button type="button" class="mg-again mg-linkbtn" hidden>Show again</button>
+      </header>
+      <div class="mg-step__body">
+        <div class="mg-split">
+          <div class="mg-split__text">
+            <ol class="mg-list">
+              <li>Open your <b>Downloads</b> folder (or click the download in your browser’s list of downloads) and double-click the file you just downloaded.</li>
+              <li>You now see the app: a purple square with a speech bubble, called <b data-brand>the app</b>.</li>
+              <li>Drag it onto <b>Applications</b> in the left-hand column of the Finder window.</li>
+            </ol>
+            <p class="mg-why">Why Applications: opened from there, the app remembers the permissions you give it in step 4.</p>
+          </div>
+          <figure class="mg-drag" aria-label="Drag the app icon onto the Applications folder">
+            <span class="mg-drag__app"><img src="../assets/favicon.svg" alt="" width="64" height="64"><span data-brand>the app</span></span>
+            <svg class="mg-drag__arrow" viewBox="0 0 120 40" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="3.500" stroke-linecap="round" stroke-dasharray="2 9" d="M6 26C34 6 74 6 102 22"/><path fill="none" stroke="currentColor" stroke-width="3.500" stroke-linecap="round" stroke-linejoin="round" d="m90 12 13 10-15 6"/></svg>
+            <span class="mg-drag__folder"><i aria-hidden="true"></i><span>Applications</span></span>
+          </figure>
+        </div>
+        <details class="mg-more">
+          <summary>Something else happened?</summary>
+          <dl class="mg-faq">
+            <dt>The browser asks whether to allow downloads from this site.</dt>
+            <dd>Click <b>Allow</b>, then click <b>Download for Mac</b> again.</dd>
+            <dt>I see a zip file, or a second zip inside the first.</dt>
+            <dd>Double-click each zip until the app’s icon appears. The zip files can go in the Trash afterwards.</dd>
+            <dt>I cannot see Applications.</dt>
+            <dd>In Finder, open the <b>Go</b> menu at the top of the screen and choose <b>Applications</b>. Drag the app into that window.</dd>
+          </dl>
+        </details>
+        <div class="mg-step__foot">
+          <button type="button" class="mg-btn mg-btn--primary mg-next" hidden>I did this</button>
+          <span class="mg-step__then">Next: open it</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 2. first open: macOS stops it ─────────────────────────────────────────── -->
+    <section class="mg-step mg-step--2" id="step-2" aria-labelledby="h-2">
+      <header class="mg-step__head">
+        <span class="mg-step__n" aria-hidden="true"><b>2</b><svg class="mg-ico" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.500 4.500 4.500L19 7.500"/></svg></span>
+        <h2 class="mg-step__title" id="h-2" tabindex="-1">Open it. macOS will stop you once.</h2>
+        <button type="button" class="mg-again mg-linkbtn" hidden>Show again</button>
+      </header>
+      <div class="mg-step__body">
+        <div class="mg-split mg-split--aside">
+          <div class="mg-split__text">
+            <ol class="mg-list">
+              <li>In Applications, double-click <b data-brand>the app</b>.</li>
+              <li>macOS does not open it. Instead it shows a message saying it could not check the app for malware.</li>
+              <li>Click <b data-macos="done">Done</b>. Do not click <b data-macos="moveToTrash">Move to Trash</b>.</li>
+            </ol>
+          </div>
+          <figure class="mg-sketch" aria-labelledby="cap-dialog">
+            <div class="mg-dialog">
+              <span class="mg-dialog__icon" aria-hidden="true"><i></i></span>
+              <p class="mg-dialog__title" data-macos="notOpenedTitle">“the app” Not Opened</p>
+              <p class="mg-dialog__body" data-macos="notOpenedBody">Apple could not verify “the app” is free of malware that may harm your Mac or compromise your privacy.</p>
+              <span class="mg-dialog__btn mg-target"><span data-macos="done">Done</span><span class="mg-callout">Click this one</span></span>
+              <span class="mg-dialog__btn" data-macos="moveToTrash">Move to Trash</span>
+            </div>
+            <figcaption id="cap-dialog"><span>What the message looks like: a simplified drawing, not a screenshot.</span> <span class="mg-approx" data-approx>The exact wording on your Mac may differ a little.</span></figcaption>
+          </figure>
+          <div class="mg-honest">
+            <h3>Why this happens</h3>
+            <p>The app is free and its code is public, but it is not signed through Apple’s paid developer program, so macOS cannot vouch for it. The project does not pay Apple’s yearly fee; instead, anyone can read the code on <a href="https://github.com/averyhsu/imessage-wrap" data-source rel="noopener">GitHub</a>. If you would rather not trust it, stop here and move it to the Trash: it has not run.</p>
+          </div>
+        </div>
+        <details class="mg-more">
+          <summary>Something else happened?</summary>
+          <dl class="mg-faq">
+            <dt>It says <q data-macos="damaged">“the app” is damaged and can’t be opened. You should move it to the Trash.</q></dt>
+            <dd>That message has no way past it: the copy you have was broken on the way. Move it to the Trash, download it again from this page and drag the new copy to Applications. If the new copy says the same, please tell us on <a href="https://github.com/averyhsu/imessage-wrap" data-source rel="noopener">GitHub</a>.</dd>
+            <dt>Nothing appeared at all.</dt>
+            <dd>The app may already be open: it has no icon in the Dock, only a speech bubble in the menu bar at the top right of the screen. If its setup window is showing, skip to step 4.</dd>
+            <dt>I clicked <span data-macos="moveToTrash">Move to Trash</span> by mistake.</dt>
+            <dd>No harm done. Download it again and start from step 1.</dd>
+          </dl>
+        </details>
+        <div class="mg-step__foot">
+          <button type="button" class="mg-btn mg-btn--primary mg-next" hidden>I did this</button>
+          <span class="mg-step__then">Next: tell macOS it is fine</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 3. Privacy & Security: Open Anyway ─────────────────────────────────────── -->
+    <section class="mg-step mg-step--3" id="step-3" aria-labelledby="h-3">
+      <header class="mg-step__head">
+        <span class="mg-step__n" aria-hidden="true"><b>3</b><svg class="mg-ico" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.500 4.500 4.500L19 7.500"/></svg></span>
+        <h2 class="mg-step__title" id="h-3" tabindex="-1">Tell macOS it is fine</h2>
+        <button type="button" class="mg-again mg-linkbtn" hidden>Show again</button>
+      </header>
+      <div class="mg-step__body">
+        <div class="mg-deeplink">
+          <a class="mg-btn mg-btn--primary mg-btn--big" id="open-settings" href="x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Security"><svg class="mg-ico" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.200" stroke-linejoin="round" d="M12 3 5 6v5.500c0 4.300 3 7.900 7 9.500 4-1.600 7-5.200 7-9.500V6z"/></svg><span>Open <span data-macos="privacySecurity">Privacy &amp; Security</span></span></a>
+          <p class="mg-deeplink__note">Your browser asks whether this page may open <span data-macos="systemSettings">System Settings</span>. Click <b>Allow</b> (or <b>Open</b>).</p>
+        </div>
+        <div class="mg-split mg-split--aside">
+          <div class="mg-split__text">
+            <ol class="mg-list">
+              <li>In the window that opens, scroll down to <b data-macos="securityHeading">Security</b>. There is a line saying <q data-macos="blockedLine">“the app” was blocked to protect your Mac.</q></li>
+              <li>Click <b data-macos="openAnyway">Open Anyway</b> next to it.</li>
+              <li>Type the password you use to log in to this Mac, or use Touch ID.</li>
+              <li>macOS asks one last time: click <b data-macos="confirmOpen">Open Anyway</b>. The app opens. This was the only time.</li>
+            </ol>
+          </div>
+          <figure class="mg-sketch" aria-labelledby="cap-settings">
+            <div class="mg-win">
+              <div class="mg-win__bar" aria-hidden="true"><i></i><i></i><i></i></div>
+              <div class="mg-win__side" aria-hidden="true">
+                <i></i><i></i><i></i><i></i>
+                <span class="mg-win__picked" data-macos="privacySecurity">Privacy &amp; Security</span>
+                <i></i><i></i>
+              </div>
+              <div class="mg-win__main">
+                <p class="mg-win__h" data-macos="privacySecurity">Privacy &amp; Security</p>
+                <span class="mg-win__rows" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="mg-win__scroll" aria-hidden="true">scroll down</span>
+                <p class="mg-win__sub" data-macos="securityHeading">Security</p>
+                <div class="mg-win__row">
+                  <span class="mg-win__text" data-macos="blockedLine">“the app” was blocked to protect your Mac.</span>
+                  <span class="mg-win__btn mg-target"><span data-macos="openAnyway">Open Anyway</span><span class="mg-callout">Click here</span></span>
+                </div>
+              </div>
+            </div>
+            <figcaption id="cap-settings"><span>Where the button is: a simplified drawing, not a screenshot.</span> <span class="mg-approx" data-approx>The exact wording on your Mac may differ a little.</span></figcaption>
+          </figure>
+          <div class="mg-manual">
+            <h3>The button did nothing?</h3>
+            <p>Open the same place by hand: click the <b data-macos="appleMenu">Apple menu</b> in the top-left corner of the screen, choose <b data-macos="systemSettings">System Settings</b>, then click <b data-macos="privacySecurity">Privacy &amp; Security</b> in the list on the left, and scroll down.</p>
+          </div>
+        </div>
+        <details class="mg-more">
+          <summary>Something else happened?</summary>
+          <dl class="mg-faq">
+            <dt>There is no line about the app, and no <span data-macos="openAnyway">Open Anyway</span>.</dt>
+            <dd>macOS only shows it for about an hour after it stopped the app. Open the app again from Applications first (click <b data-macos="done">Done</b> again), then come back to this step.</dd>
+            <dt>It asks for a password I do not know.</dt>
+            <dd>macOS wants the password of someone who manages this Mac. Ask them to type it, or set the app up from their account.</dd>
+            <dt>The browser said nothing and no window opened.</dt>
+            <dd>Use the way by hand above: <b data-macos="appleMenu">Apple menu</b>, <b data-macos="systemSettings">System Settings</b>, <b data-macos="privacySecurity">Privacy &amp; Security</b>.</dd>
+          </dl>
+        </details>
+        <div class="mg-step__foot">
+          <button type="button" class="mg-btn mg-btn--primary mg-next" hidden>I did this</button>
+          <span class="mg-step__then">Next: set it up</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 4. the app's own setup ─────────────────────────────────────────────────── -->
+    <section class="mg-step mg-step--4" id="step-4" aria-labelledby="h-4">
+      <header class="mg-step__head">
+        <span class="mg-step__n" aria-hidden="true"><b>4</b><svg class="mg-ico" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.500 4.500 4.500L19 7.500"/></svg></span>
+        <h2 class="mg-step__title" id="h-4" tabindex="-1">Set it up: a few clicks</h2>
+        <button type="button" class="mg-again mg-linkbtn" hidden>Show again</button>
+      </header>
+      <div class="mg-step__body">
+        <p class="mg-intro">The app opens with its own short setup. Every part of it is one click; the yellow ring shows where.</p>
+        <ol class="mg-shots">
+          <li class="mg-shot">
+            <span class="mg-shot__pic"><img src="img/setup-1-continue.webp" alt="The welcome screen of the app, with a Continue button." width="640" height="597" loading="lazy"><i class="mg-ring mg-ring--continue"></i></span>
+            <p><b>1</b> Click <b>Continue</b>.</p>
+          </li>
+          <li class="mg-shot">
+            <span class="mg-shot__pic"><img src="img/setup-2-connect.webp" alt="The screen Connect your messages, with a Connect Messages button." width="640" height="299" loading="lazy"><i class="mg-ring mg-ring--connect"></i></span>
+            <p><b>2</b> Click <b>Connect Messages…</b></p>
+          </li>
+          <li class="mg-shot">
+            <span class="mg-shot__pic"><img src="img/setup-3-grant-access.webp" alt="A Finder window with the Messages folder already selected and a Grant Access button." width="720" height="366" loading="lazy"><i class="mg-ring mg-ring--grant"></i></span>
+            <p><b>3</b> A window opens with the Messages folder already selected. Click <b>Grant Access</b>.</p>
+          </li>
+          <li class="mg-shot">
+            <span class="mg-shot__pic"><img src="img/setup-4-connected.webp" alt="The app says Connected, with an optional Show first names button and a Continue button." width="640" height="441" loading="lazy"><i class="mg-ring mg-ring--connected"></i></span>
+            <p><b>4</b> It says <b>Connected</b>. Click <b>Continue</b>. (Optional first: <b>Show first names</b>, then <b>Allow</b>, so the recap says “Sam” instead of a phone number.)</p>
+          </li>
+          <li class="mg-shot">
+            <span class="mg-shot__pic"><img src="img/setup-5-turn-on.webp" alt="A list of group chats, each with a green Turn on button." width="640" height="498" loading="lazy"><i class="mg-ring mg-ring--turn-on"></i></span>
+            <p><b>5</b> Click <b>Turn on</b> next to one group chat.</p>
+          </li>
+          <li class="mg-shot mg-shot--narrow">
+            <span class="mg-shot__pic"><img src="img/setup-6-allow.webp" alt="macOS asks whether the app may control Messages, with Don't Allow and Allow buttons." width="229" height="304" loading="lazy"><i class="mg-ring mg-ring--allow"></i></span>
+            <p><b>6</b> macOS asks whether the app may control Messages. Click <b>Allow</b>: this is how it sends the reply.</p>
+          </li>
+        </ol>
+        <p class="mg-intro">Then click <b>Done</b> in the app. Its window closes, and the app keeps running in the menu bar at the top of the screen. All chats in these pictures are invented.</p>
+        <details class="mg-more">
+          <summary>Something else happened?</summary>
+          <dl class="mg-faq">
+            <dt>The Messages folder window looks empty, or its files are grey.</dt>
+            <dd>That is normal: you are choosing the folder, not a file. Click <b>Grant Access</b>. If the window shows some other folder, press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>G</kbd>, type <code class="mg-code">~/Library/Messages</code>, press Return, then click <b>Grant Access</b>.</dd>
+            <dt>A red message appears after Grant Access.</dt>
+            <dd>Click <b>Use Full Disk Access instead</b> in the app and follow what it says.</dd>
+            <dt>An orange box says the app is running from the download.</dt>
+            <dd>Click <b>Move to Applications</b> in that box, or quit the app from its menu-bar icon, drag it to Applications and open it from there.</dd>
+            <dt>The list of group chats is empty.</dt>
+            <dd>Open Messages on this Mac and check that you are signed in and that your group chats show up there. Then open the app again from its menu-bar icon (<b>Set up…</b>).</dd>
+            <dt>I clicked Don’t Allow.</dt>
+            <dd>Open <b data-macos="systemSettings">System Settings</b>, then <b data-macos="privacySecurity">Privacy &amp; Security</b>, then <b>Automation</b>. Find the app and switch on <b>Messages</b> under it.</dd>
+          </dl>
+        </details>
+        <div class="mg-step__foot">
+          <button type="button" class="mg-btn mg-btn--primary mg-next" hidden>I did this</button>
+          <span class="mg-step__then">Next: what happens now</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 5. done ────────────────────────────────────────────────────────────────── -->
+    <section class="mg-step mg-step--5" id="step-5" aria-labelledby="h-5">
+      <header class="mg-step__head">
+        <span class="mg-step__n" aria-hidden="true"><b>5</b><svg class="mg-ico" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="m5 12.500 4.500 4.500L19 7.500"/></svg></span>
+        <h2 class="mg-step__title" id="h-5" tabindex="-1">That is it. Try it in the chat.</h2>
+        <button type="button" class="mg-again mg-linkbtn" hidden>Show again</button>
+      </header>
+      <div class="mg-step__body">
+        <div class="mg-split mg-split--done">
+          <div class="mg-split__text">
+            <p class="mg-big">Anyone in that chat, you included, types <code class="mg-cmd">/wrapped</code> as the whole message. Within a few seconds your Mac replies in the thread.</p>
+          </div>
+          <figure class="mg-reply">
+            <img src="img/done-reply.webp" alt="The app's last screen: the recap picture and the short text everyone in the chat gets." width="720" height="456" loading="lazy">
+            <figcaption>The app shows the exact reply before you finish (invented chat).</figcaption>
+          </figure>
+        </div>
+        <ul class="mg-facts">
+          <li>
+            <h3>What the reply is</h3>
+            <p>A picture of the chat’s year and a short text: how many messages, who talked most, the busiest day, the tapbacks.</p>
+          </li>
+          <li>
+            <h3>It comes from you</h3>
+            <p>The reply is sent from your Apple ID, like a message you typed. It answers only in the chat you turned on, and at most once every two minutes.</p>
+          </li>
+          <li>
+            <h3>Your Mac has to be awake</h3>
+            <p>It answers while this Mac is on, awake and logged in. Switch on <b>Open <span data-brand>the app</span> when I log in</b> on its last screen so it starts by itself.</p>
+          </li>
+          <li>
+            <h3>How to turn it off</h3>
+            <p>Click the speech-bubble icon in the menu bar at the top of the screen and choose <b>Quit <span data-brand>the app</span></b>. To remove it for good, also move it from Applications to the Trash.</p>
+          </li>
+          <li class="mg-facts__wide">
+            <h3>What never leaves this Mac</h3>
+            <p>Your messages. The app reads and counts them on this Mac and uploads nothing, anywhere. The only thing it ever sends is the reply, into the chat you chose.</p>
+          </li>
+        </ul>
+        <details class="mg-more">
+          <summary>Something else happened?</summary>
+          <dl class="mg-faq">
+            <dt>Nothing happens after <code class="mg-cmd">/wrapped</code>.</dt>
+            <dd>
+              <ul class="mg-checks">
+                <li>Is the Mac awake, and is the speech-bubble icon in its menu bar? If not, open the app from Applications.</li>
+                <li>Was <code class="mg-code">/wrapped</code> the whole message, in the chat you turned on?</li>
+                <li>Did it already answer in the last two minutes? Wait a moment and try again.</li>
+                <li>Click the menu-bar icon: it shows what happened last. If it says the reply was not confirmed, choose <b>send by hand</b>; macOS sometimes does not deliver a message an app sends to a group chat, and then the app hands it to you to send.</li>
+              </ul>
+            </dd>
+          </dl>
+        </details>
+        <div class="mg-step__foot">
+          <button type="button" class="mg-btn mg-btn--small" id="restart" hidden>Start again from step 1</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mg-foot">
+    <p><span data-brand></span> is an independent project; the source is public on GitHub. It is not affiliated with or endorsed by Apple, and the Mac app is not reviewed or signed by Apple. iMessage is a trademark of Apple Inc.</p>
+    <p><a href="../">Main page</a> · <a href="https://github.com/averyhsu/imessage-wrap" rel="noopener">Source on GitHub</a></p>
+  </footer>
+</div>
+
+<!-- Classic scripts, in dependency order. -->
+<script src="../js/config.js"></script>
+<script src="mac-config.js"></script>
+<script src="mac.js"></script>
+</body>
+</html>
