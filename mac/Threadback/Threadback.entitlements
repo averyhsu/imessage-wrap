@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Hardened runtime: allow sending Apple Events (to Messages only, in practice; macOS
+	     asks the user once with NSAppleEventsUsageDescription). Not sandboxed: the App
+	     Sandbox would add its own file and Apple Event limits on top of the privacy prompts
+	     (scripting Messages would need a temporary-exception entitlement). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>
