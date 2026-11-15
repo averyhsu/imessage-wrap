@@ -447,6 +447,16 @@ jobs:
             -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
             -only-testing:ThreadbackUITests/NoticeDiagnosticsUITests -resultBundlePath "$OUT/NoticeDiagnostics.xcresult" | tee "$RES/08e-notice-diagnostics.txt"
 
+      # A second copy must change nothing before it knows it is the second one: launched with
+      # the flag that wipes every setting while a first copy runs, the settings stay; alone,
+      # the same launch resets them (the control).
+      - name: "Lifecycle: a second copy changes no setting"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 3
+        run: |
+          set -o pipefail
+          mac/scripts/ci-second-copy-check.sh "$BIN" 2>&1 | tee "$RES/08f-second-copy.txt"
+
       # What the app itself recorded during the lifecycle tests (Debug builds only): every
       # launch, close request, sheet and reopen, with the process id.
       - name: "Lifecycle: the app's own trace"

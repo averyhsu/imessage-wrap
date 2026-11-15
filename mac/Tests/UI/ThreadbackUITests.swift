@@ -505,6 +505,55 @@ final class NoticeDiagnosticsUITests: ThreadbackUITestCase {
 
     func testLegacyNoticeOneCloseRequest() throws { try run(["-TBNoticeLegacy", "YES"], "legacy notice, one close request") }
     func testLegacyNoticeTwoCloseRequests() throws { try run(["-TBNoticeLegacy", "YES", "-TBDoubleClose", "YES"], "legacy notice, two close requests") }
+
+    /// The first notice is left unanswered, as if the OK click had not reached it, and the
+    /// rest of the old test5 sequence runs as it did: does each step still work, and what is
+    /// on the status window at the end?
+    func testLegacyNoticeFirstOKNotReceived() throws {
+        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
+        let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
+                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
+                          "-TBTimeZone", "America/Los_Angeles", "-TBNoticeLegacy", "YES"])
+        var steps: [String] = []
+        func step(_ what: String, _ ok: Bool) { steps.append("\(what): \(ok ? "yes" : "NO")") }
+        step("welcome", element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        step("connected", element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        step("first chat on", element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        step("notice shown at the first close", app.sheets.firstMatch.waitForExistence(timeout: 10))
+        // No OK click here.
+        sleep(2)
+        reopen()
+        step("status after reopen", element(app, "status.addChat").waitForExistence(timeout: 15))
+        steps.append("sheets after reopen: \(app.sheets.count)")
+        element(app, "status.addChat").click()
+        step("Add a chat opened the chooser", element(app, "chat.isOn.0").waitForExistence(timeout: 15))
+        if element(app, "chat.turnOn.1").exists {
+            element(app, "chat.turnOn.1").click()
+            sleep(2)
+            let sheet = app.sheets.firstMatch
+            let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
+            steps.append("sheet after Turn on: \(String(words.prefix(80)))")
+            if sheet.buttons["Turn on"].exists { sheet.buttons["Turn on"].click(); steps.append("clicked Turn on in the consent sheet") }
+        }
+        step("second chat ready", element(app, "onboarding.ready").waitForExistence(timeout: 10))
+        element(app, "onboarding.done").click()
+        sleep(2)
+        reopen()
+        step("two chats listed", element(app, "status.last.1").waitForExistence(timeout: 10))
+        steps.append("sheets over the status window: \(app.sheets.count)")
+        if app.sheets.count > 0 { shootWindow(app, "status-9-notice-over-status") }
+        if element(app, "status.turnOff.1").exists {
+            element(app, "status.turnOff.1").click()
+            step("Turn off worked", element(app, "status.turnOffNote").waitForExistence(timeout: 5))
+        }
+        note("diagnostic first OK not received: " + steps.joined(separator: "; "))
+        app.terminate()
+    }
 }
 
 /// Proof 6: the Open panel instead of Full Disk Access, on the runner's real home folder.
