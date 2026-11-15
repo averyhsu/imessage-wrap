@@ -361,3 +361,18 @@ worked after it, so the pick does replace Full Disk Access on a real, protected 
 delivered. The two risks D15 left open are therefore settled for this Mac. Still open:
 whether access survives a restart and an update, and how other macOS versions behave.
 
+### D16 — Publishing without build artifacts (2026-11-15)
+After four days of heavy CI the account's artifact storage filled up and GitHub refused new
+artifacts, which broke three things at once: runs failed at their upload step, the Mac app
+could no longer be handed to the owner as an artifact, and the site could not be published,
+because the standard Pages workflow uploads the site as an artifact. With the owner's
+approval:
+
+- **The site is published from a `gh-pages` branch.** A workflow copies `web/` there on
+  every change that reaches `main`; Pages serves the branch. No artifact is involved.
+- **Mac app builds go to the Releases page**, which has no such quota and needs no sign-in:
+  a rolling preview build from the working branch for the owner to test, and the public
+  download from `main`.
+- **Old artifacts are deleted daily** and new ones are kept three days. Uploads are
+  best-effort everywhere, so a full store can no longer turn a good run red.
+

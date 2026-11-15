@@ -119,7 +119,7 @@ Nothing below has been done. Each needs your yes.
 
 | Decision | What happens if yes | Cost |
 |----------|--------------------|------|
-| **Turn on the public site** (GitHub Pages) | **Approved by the owner on 2026-11-15; two clicks left, both yours.** (1) Repo → Settings → Pages → Source: "GitHub Actions". (2) Repo → Actions → "Publish site" → Run workflow. Then the demo, the maker, the Mac guide and recap links work at `https://averyhsu.github.io/imessage-wrap/`, and `/wrapped` replies can carry the link to the story. Keep this address: links already shared would stop working if the repo were renamed. | Free. The site is public. |
+| **Turn on the public site** (GitHub Pages) | **Approved by the owner on 2026-11-15; one setting left, yours.** After the merge a workflow copies the site to a branch called `gh-pages`. Then: repo → Settings → Pages → Source: "Deploy from a branch" → Branch `gh-pages`, folder `/ (root)` → Save. The demo, the maker, the Mac guide and recap links then work at `https://averyhsu.github.io/imessage-wrap/`, and `/wrapped` replies can carry the link to the story. Keep this address: links already shared would stop working if the repo were renamed. | Free. The site is public. |
 | **Merge into `main`** | **Done on 2026-11-15** at the owner's request. CI runs on `main`; the one-line installer and a plain `git clone` work. | Free |
 | **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
 | **Apple Developer Program** | **Declined for now (owner, 2026-11-12).** It would give TestFlight for the iPhone app and a Mac app that opens with one click. Without it the Mac app ships by the free route (see [MAC-APP.md](docs/MAC-APP.md)). | $99 a year |
@@ -129,7 +129,7 @@ Nothing below has been done. Each needs your yes.
 
 ## What's next
 
-1. The two clicks that publish the site; then checks A, B and C, and the story link is switched on in the Mac app's replies.
+1. The one Pages setting that publishes the site; then checks A, B and C, and the story link is switched on in the Mac app's replies.
 2. Check E. If the Shortcut reports senders in group chats, build the last link for an
    iPhone-only path: the app takes the Shortcut's output and makes the recap itself, so it
    can be sent from the Messages drawer without a browser.

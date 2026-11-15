@@ -1,43 +1,65 @@
-# Publishes web/ (the story player, demo and in-browser analyzer) to GitHub Pages.
+# Publishes web/ (the story, the demo, the maker and the Mac guide) as the public site.
 #
-# This workflow is MANUAL ONLY on purpose: turning the public site on is the repo
-# owner's call. To go live:
-#   1. Settings → Pages → Build and deployment → Source: "GitHub Actions"
-#   2. Actions → "Publish site" → Run workflow (on main)
-# The site is fully static. Recap data lives in the URL #fragment, which browsers
-# never send to the server.
+# How: the contents of web/ are copied to a branch called gh-pages, and GitHub Pages serves
+# that branch. Nothing is uploaded as a build artifact, so this keeps working when the
+# account's artifact storage is full.
+#
+# To switch the site on (once): Settings → Pages → Build and deployment →
+#   Source: "Deploy from a branch" → Branch: gh-pages, folder / (root) → Save.
+# After that, every change to web/ that reaches main is published by itself.
+#
+# The site is fully static. A recap lives in the part of a link after the #, which browsers
+# never send to a server.
 name: Publish site
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  publish:
+    name: Copy web/ to the gh-pages branch
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+
       - name: Refuse to publish private data
         run: |
           set -euo pipefail
-          if find web -type f \( -name '*.db' -o -name '*.sqlite*' -o -name '*stats*.json' \) | grep -q .; then
+          if find web -type f \( -name '*.db' -o -name '*.db-*' -o -name '*.sqlite*' -o -name '*stats*.json' -o -name '*.abcddb' \) | grep -q .; then
             echo "::error::web/ contains a database or stats file; refusing to publish."
             exit 1
           fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: web
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          test -f web/index.html
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          site="$RUNNER_TEMP/site"
+          rm -rf "$site" && mkdir -p "$site"
+          cp -R web/. "$site/"
+          # No Jekyll processing: serve the files exactly as they are.
+          touch "$site/.nojekyll"
+          cd "$site"
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish site from ${GITHUB_SHA}"
+          # One commit, replaced each time: the branch holds the current site and no history.
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+          echo "Published $(git ls-files | wc -l) files from ${GITHUB_SHA} to the gh-pages branch." | tee -a "$GITHUB_STEP_SUMMARY"
