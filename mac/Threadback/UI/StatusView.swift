@@ -30,6 +30,9 @@ struct StatusView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(model.access).font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(model.accessLost ? Color(nsColor: MacPalette.rgb(0xFF453A)) : Theme.green)
+                    if model.accessLost {
+                        QuietButton(title: "Reconnect", identifier: "status.reconnect") { model.reconnect() }
+                    }
                     if let title = model.lastReplyTitle, let last = model.replies.last {
                         Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                         Text(last.summary).font(.system(size: 13)).foregroundStyle(Theme.muted)
@@ -43,6 +46,13 @@ struct StatusView: View {
                 if !model.turnOffNote.isEmpty {
                     Text(model.turnOffNote).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
                         .accessibilityIdentifier("status.turnOffNote")
+                }
+                if let chat = model.approved.first, model.chatIsOn {
+                    HStack(spacing: 10) {
+                        QuietButton(title: "\u{25B6} Play the story", identifier: "status.playStory") { model.playStory(chat) }
+                        Text(model.storyNote.isEmpty ? "The tap-through recap of \(chat.name), on this Mac only." : model.storyNote)
+                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                    }
                 }
                 HStack(spacing: 10) {
                     if model.chatIsOn {

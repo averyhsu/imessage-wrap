@@ -193,6 +193,11 @@ struct OnboardingView: View {
                 PillButton(title: "Try again", identifier: "onboarding.retry") { model.connect() }
                 QuietButton(title: "Use Full Disk Access instead", identifier: "onboarding.useFDA") { model.showFullDiskAccess() }
             }
+        case .working:
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small)
+                Text("Reading your group chats\u{2026}").font(.system(size: 14)).foregroundStyle(Theme.muted)
+            }
         default:
             PillButton(title: "Connect Messages\u{2026}", identifier: "onboarding.connect") { model.connect() }
         }
@@ -223,54 +228,87 @@ struct OnboardingView: View {
 
     private var chooseChat: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let on = model.approved.first, model.cardImage != nil || !model.automationNote.isEmpty {
+            if let on = model.approved.first, model.cardImage != nil || model.previewing || !model.automationNote.isEmpty {
                 ready(on)
             } else {
                 Text("Choose the chat.").font(Theme.display(38)).foregroundStyle(.white)
-                Text("Replies come from your Apple ID, in that chat only, at most once every 2 minutes. Next, macOS asks to let Threadback control Messages: click Allow.")
+                HStack(spacing: 12) {
+                    Text("Your name in the recap").font(.system(size: 14, weight: .bold)).foregroundStyle(.white)
+                    TextField("Your first name", text: $model.ownerName)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 220)
+                        .accessibilityIdentifier("onboarding.name")
+                    Text(model.nameIsReady ? "Everyone in the chat sees it." : "Type the name your friends know you by.")
+                        .font(.system(size: 12)).foregroundStyle(model.nameIsReady ? Theme.muted : OnboardingView.red)
+                }
+                Text("Replies come from your Apple ID, in that chat only, at most once every 2 minutes. Next, macOS asks whether Threadback may use Messages: click Allow.")
                     .font(.system(size: 14)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                 ScrollView {
                     VStack(spacing: 8) {
-                        ForEach(Array(model.chats.prefix(8).enumerated()), id: \.element.id) { index, chat in
+                        ForEach(Array(model.chats.prefix(12).enumerated()), id: \.element.id) { index, chat in
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(chat.name).font(.system(size: 15, weight: .bold)).foregroundStyle(.white).lineLimit(1)
-                                    Text("\(chat.members) people · \(RecapSummary.formatCount(chat.messages)) messages")
+                                    Text("\(chat.members) people \u{00B7} \(RecapSummary.formatCount(chat.messages)) messages")
                                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
                                 }
                                 Spacer()
                                 PillButton(title: "Turn on", color: Theme.green, identifier: "chat.turnOn.\(index)") { model.turnOn(chat) }
+                                    .disabled(!model.nameIsReady)
+                                    .opacity(model.nameIsReady ? 1 : 0.4)
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
                             .background(RoundedRectangle(cornerRadius: 16).fill(Theme.card))
                         }
                     }
                 }
-                .frame(maxHeight: 330)
+                .frame(maxHeight: 300)
             }
         }
     }
 
     private func ready(_ chat: ChatRef) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("You're on.").font(Theme.display(38)).foregroundStyle(.white).accessibilityIdentifier("onboarding.ready")
-            Text("Anyone in \(chat.name) can type /wrapped. This is what they get:")
-                .font(.system(size: 14)).foregroundStyle(Theme.muted)
             HStack(alignment: .top, spacing: 16) {
-                if let image = model.cardImage {
-                    Image(nsImage: image).resizable().aspectRatio(4 / 3, contentMode: .fit).frame(width: 300)
-                        .clipShape(RoundedRectangle(cornerRadius: 18))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16).fill(Theme.card)
+                    if let image = model.cardImage {
+                        Image(nsImage: image).resizable().aspectRatio(1080 / 1350, contentMode: .fit)
+                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                            .accessibilityIdentifier("onboarding.card")
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
                 }
-                Text(model.recapPreview).font(.system(size: 11.5)).foregroundStyle(.white)
-                    .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 16).fill(Color(nsColor: MacPalette.rgb(0x2C2C2E))))
-            }
-            if !MacConfig.storySiteIsLive {
-                Text("Each reply is this image and this text. The link to the full story is added once the story site is live.")
-                    .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                .frame(width: 232, height: 290)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("When anyone in \(chat.name) types /wrapped, everyone in the chat gets:")
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                    Text(model.recapPreview.isEmpty ? "\u{2026}" : model.recapPreview).font(.system(size: 10.5)).foregroundStyle(.white)
+                        .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: MacPalette.rgb(0x2C2C2E))))
+                        .accessibilityIdentifier("onboarding.text")
+                    if !MacConfig.storySiteIsLive {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Today: this picture and this text.").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white)
+                            Text("Later: once the story website is online, also a link that opens the full tap-through story for everyone in the chat.")
+                                .font(.system(size: 12.5)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityIdentifier("onboarding.today")
+                    }
+                    HStack(spacing: 10) {
+                        PillButton(title: "\u{25B6} Play the story", color: Theme.blue, identifier: "onboarding.playStory") { model.playStory(chat) }
+                        Text("Only you see it, on this Mac.").font(.system(size: 11.5)).foregroundStyle(Theme.muted)
+                    }
+                    if !model.storyNote.isEmpty {
+                        Text(model.storyNote).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
+                    }
+                }
             }
             if !model.automationNote.isEmpty {
                 Text(model.automationNote).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
+                    .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("onboarding.automation")
             }
             HStack(spacing: 14) {

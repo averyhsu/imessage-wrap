@@ -28,13 +28,18 @@ enum DebugOptions {
     }
 }
 
-/// The app's state: onboarding, the approved chat, the agent. Used on the main thread only.
+/// The app's state: onboarding, the chats that are on, the agent.
+///
+/// Published properties change on the main thread only. Everything that reads the Messages
+/// database or runs the engine happens on `work`, one serial queue, so the window and the
+/// menu never wait for it.
 final class AppModel: ObservableObject {
     enum Step: Int { case welcome = 1, connect = 2, chats = 3 }
 
     /// What the "Connect your messages" screen shows.
     enum ConnectState: Equatable {
         case idle
+        case working
         case connected(String)
         case failed(String)
         case fullDiskAccess(String)
@@ -48,6 +53,7 @@ final class AppModel: ObservableObject {
     @Published var automationNote = ""
     @Published var cardImage: NSImage?
     @Published var recapPreview = ""
+    @Published var previewing = false
     @Published var loginItemOn = false
     @Published var loginItemNote = ""
     @Published var status = "Not set up"
@@ -60,17 +66,27 @@ final class AppModel: ObservableObject {
     @Published var experimentNote = ""
     @Published var moveNote = ""
     @Published var turnOffNote = ""
+    @Published var storyNote = ""
+    /// The owner's name in the recap (prefilled from the Mac account, editable, stored).
+    @Published var ownerName: String = "" {
+        didSet { defaults.set(ownerName, forKey: Key.ownerName) }
+    }
 
     weak var window: NSWindow?
     private(set) var engine: ThreadbackEngine?
     private var agent: Agent?
-    private var timer: Timer?
+    private var watcher: FolderWatcher?
     private var activity: NSObjectProtocol?
+    private var wakeObserver: NSObjectProtocol?
     private var folderURL: URL?
     private var bookmarkThisLaunch = "not used"
     private var readNow = "not tried"
     private var groupChats: Int?
     private var totalMessages: Int?
+    private var tickQueued = false
+
+    /// Every database read and engine call runs here, one at a time.
+    let work = DispatchQueue(label: "io.github.averyhsu.threadback.work", qos: .userInitiated)
 
     private let defaults = UserDefaults.standard
     private enum Key {
@@ -79,12 +95,14 @@ final class AppModel: ObservableObject {
         static let bookmarkScoped = "folderBookmarkScoped"
         static let approved = "approvedChats"
         static let method = "accessMethod"
+        static let ownerName = "ownerName"
         static let directBefore = "report.directReadBeforeGrant"
         static let afterGrant = "report.readAfterGrant"
         static let walReadable = "report.walReadable"
         static let automation = "report.automation"
         static let replies = "report.replies"
-        static let all = [onboarded, bookmark, bookmarkScoped, approved, method, directBefore, afterGrant, walReadable, automation, replies, "toldAboutMenuBar"]
+        static let all = [onboarded, bookmark, bookmarkScoped, approved, method, ownerName, directBefore, afterGrant,
+                          walReadable, automation, replies, "toldAboutMenuBar"]
     }
 
     var isFixture: Bool { DebugOptions.fixtureDatabase != nil }
@@ -97,11 +115,13 @@ final class AppModel: ObservableObject {
     /// just went through the Gatekeeper detour.
     let cameThroughGatekeeper: Bool = getxattr(Bundle.main.bundlePath, "com.apple.quarantine", nil, 0, 0, 0) > 0
     let location = AppLocation.current
+    var watcherOn: Bool { watcher?.isWatching ?? false }
 
     init() {
         if DebugOptions.flag("TBResetOnboarding") {
             for key in Key.all { defaults.removeObject(forKey: key) }
         }
+        ownerName = defaults.string(forKey: Key.ownerName) ?? ""
         if let data = defaults.data(forKey: Key.approved), let chats = try? JSONDecoder().decode([ChatRef].self, from: data) {
             approved = chats
         }
@@ -112,8 +132,19 @@ final class AppModel: ObservableObject {
         do {
             engine = try ThreadbackEngine()
         } catch {
-            status = "Engine failed to load: \(error)"
+            status = "Threadback could not start its counting engine: \(error)"
         }
+        if ownerName.isEmpty { ownerName = DebugOptions.string("TBMe") ?? defaultOwnerName() }
+    }
+
+    /// The first name of this Mac's account, as the Python helper picks it (fmt.account_first_name):
+    /// cleaned, first word, never a number or an address; else "Me".
+    func defaultOwnerName() -> String {
+        guard let engine else { return "Me" }
+        let value = engine.context.objectForKeyedSubscript("ThreadbackText")?
+            .invokeMethod("firstName", withArguments: [NSFullUserName()])?.toString() ?? ""
+        if value.isEmpty || value == "?" || value.hasPrefix("\u{2026}") { return "Me" }
+        return value
     }
 
     // MARK: Database
@@ -121,6 +152,11 @@ final class AppModel: ObservableObject {
     var databasePath: String {
         if let fixture = DebugOptions.fixtureDatabase { return fixture }
         return (folderURL ?? Permissions.defaultMessagesFolder).appendingPathComponent("chat.db").path
+    }
+
+    var messagesFolder: URL {
+        if let fixture = DebugOptions.fixtureDatabase { return URL(fileURLWithPath: fixture).deletingLastPathComponent() }
+        return folderURL ?? Permissions.defaultMessagesFolder
     }
 
     func openDatabase() throws -> SQLiteDB {
@@ -134,12 +170,13 @@ final class AppModel: ObservableObject {
     }
 
     var me: String {
-        if let name = DebugOptions.string("TBMe") { return name }
-        let first = NSFullUserName().split(separator: " ").first.map(String.init) ?? ""
-        return first.isEmpty ? "Me" : first
+        if let name = DebugOptions.string("TBMe"), ownerName.isEmpty { return name }
+        let trimmed = ownerName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Me" : trimmed
     }
 
-    /// Restores the folder from its bookmark (a later launch). Returns a note.
+    /// Restores the folder from its bookmark (a later launch). A stale bookmark that still
+    /// resolves is renewed. Returns a note.
     @discardableResult
     func restoreFolder() -> String {
         if defaults.string(forKey: Key.method) == "Full Disk Access" {
@@ -153,34 +190,52 @@ final class AppModel: ObservableObject {
         }
         let (url, note) = Permissions.resolve(data, securityScoped: defaults.bool(forKey: Key.bookmarkScoped))
         folderURL = url
-        if url == nil {
-            bookmarkThisLaunch = "could not be resolved"
+        if let url {
+            let stale = note.contains("stale=true")
+            bookmarkThisLaunch = "resolved, stale \(stale ? "yes" : "no")"
+            if stale, let fresh = Permissions.bookmark(for: url) {
+                defaults.set(fresh.data, forKey: Key.bookmark)
+                defaults.set(fresh.securityScoped, forKey: Key.bookmarkScoped)
+                bookmarkThisLaunch += ", renewed"
+            }
         } else {
-            bookmarkThisLaunch = "resolved, stale \(note.contains("stale=true") ? "yes" : "no")"
+            bookmarkThisLaunch = "could not be resolved"
         }
         return note
     }
 
-    /// Reads the database once and updates the counts, the menu line and the report.
-    @discardableResult
-    func checkAccess() -> Bool {
-        guard let engine else { return false }
-        do {
-            let db = try openDatabase()
-            let token = engine.open(db)
-            defer { engine.close(token) }
-            let all = try engine.listChats(token: token, me: me, contacts: [])
-            groupChats = all.count
-            totalMessages = all.reduce(0) { $0 + $1.messages }
-            readNow = "ok"
-            access = "Messages: Connected · \(all.count) group chat\(all.count == 1 ? "" : "s")"
-            accessLost = false
-            return true
-        } catch {
-            readNow = TestReport.shortError(error)
-            access = "Messages: Lost access · Reconnect"
-            accessLost = true
-            return false
+    /// Reads the database once (off the main thread) and updates the counts, the status
+    /// line and the report. `done` runs on the main thread with the result.
+    func checkAccess(_ done: ((Bool) -> Void)? = nil) {
+        guard let engine else { done?(false); return }
+        let me = self.me
+        work.async { [weak self] in
+            guard let self else { return }
+            var result: Result<[ChatInfo], Error>
+            do {
+                let db = try self.openDatabase()
+                let token = engine.open(db)
+                defer { engine.close(token) }
+                result = .success(try engine.listChats(token: token, me: me, contacts: []))
+            } catch {
+                result = .failure(error)
+            }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let all):
+                    self.groupChats = all.count
+                    self.totalMessages = all.reduce(0) { $0 + $1.messages }
+                    self.readNow = "ok"
+                    self.access = "Messages: Connected \u{00B7} \(all.count) group chat\(all.count == 1 ? "" : "s")"
+                    self.accessLost = false
+                    done?(true)
+                case .failure(let error):
+                    self.readNow = TestReport.shortError(error)
+                    self.access = "Messages: Lost access \u{00B7} Reconnect"
+                    self.accessLost = true
+                    done?(false)
+                }
+            }
         }
     }
 
@@ -245,7 +300,7 @@ final class AppModel: ObservableObject {
         let path = Permissions.defaultMessagesFolder.appendingPathComponent("chat.db").path
         let read = AccessProbe.posixRead(path)
         guard read.hasPrefix("ok") else {
-            connectState = .fullDiskAccess("Still blocked: \(TestReport.shortRead(read)). Switch Threadback on in the list, then click Check again. If it stays blocked, quit Threadback from the menu bar and open it again.")
+            connectState = .fullDiskAccess("Still blocked. Switch Threadback on in the list, then click Check again. If it stays blocked, quit Threadback and open it again.")
             return
         }
         folderURL = Permissions.defaultMessagesFolder
@@ -257,28 +312,41 @@ final class AppModel: ObservableObject {
 
     private func loadChats(method: String) {
         guard let engine else { return }
-        do {
-            let db = try openDatabase()
-            let token = engine.open(db)
-            defer { engine.close(token) }
-            let all = try engine.listChats(token: token, me: me, contacts: contacts())
-            chats = all
-            groupChats = all.count
-            totalMessages = all.reduce(0) { $0 + $1.messages }
-            readNow = "ok"
-            defaults.set(method, forKey: Key.method)
-            access = "Messages: Connected · \(all.count) group chat\(all.count == 1 ? "" : "s")"
-            accessLost = false
-            connectState = .connected("Connected: \(all.count) group chat\(all.count == 1 ? "" : "s"), \(RecapSummary.formatCount(totalMessages ?? 0)) messages.")
-        } catch {
-            chats = []
-            readNow = TestReport.shortError(error)
-            connectState = .failed("It did not work: macOS did not let Threadback read the Messages folder (\(TestReport.shortError(error))).")
+        connectState = .working
+        let me = self.me
+        work.async { [weak self] in
+            guard let self else { return }
+            var result: Result<[ChatInfo], Error>
+            do {
+                let db = try self.openDatabase()
+                let token = engine.open(db)
+                defer { engine.close(token) }
+                result = .success(try engine.listChats(token: token, me: me, contacts: self.contacts()))
+            } catch {
+                result = .failure(error)
+            }
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let all):
+                    self.chats = all
+                    self.groupChats = all.count
+                    self.totalMessages = all.reduce(0) { $0 + $1.messages }
+                    self.readNow = "ok"
+                    self.defaults.set(method, forKey: Key.method)
+                    self.access = "Messages: Connected \u{00B7} \(all.count) group chat\(all.count == 1 ? "" : "s")"
+                    self.accessLost = false
+                    self.connectState = .connected("Connected: \(all.count) group chat\(all.count == 1 ? "" : "s"), \(RecapSummary.formatCount(self.totalMessages ?? 0)) messages.")
+                case .failure(let error):
+                    self.chats = []
+                    self.readNow = TestReport.shortError(error)
+                    self.connectState = .failed("It did not work: macOS did not let Threadback read your messages. Click Try again and then Grant Access, or use Full Disk Access instead.")
+                }
+            }
         }
     }
 
     func askForContacts() {
-        Permissions.requestContacts { [weak self] granted, error in
+        Permissions.requestContacts { [weak self] granted, _ in
             guard let self else { return }
             self.contactsNote = granted ? "Names will show as first names." : "No contacts: people show as \u{2026}1234."
             self.loadChats(method: self.defaults.string(forKey: Key.method) ?? "folder grant")
@@ -287,47 +355,95 @@ final class AppModel: ObservableObject {
 
     func continueToChats() { step = .chats }
 
+    /// Your name must be there before a chat is turned on: the recap shows it to everyone.
+    var nameIsReady: Bool { !ownerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
     /// Step 3: turn on one chat, then (on purpose) the "control Messages" prompt.
     func turnOn(_ chat: ChatInfo) {
+        guard nameIsReady else { return }
         let ref = Agent.chatRef(chat)
         approved = [ref]
         if let data = try? JSONEncoder().encode(approved) { defaults.set(data, forKey: Key.approved) }
         defaults.set(true, forKey: Key.onboarded)
         makePreview(ref)
         if isFixture || DebugOptions.flag("TBNoAutomation") {
-            automationNote = "Messages control: skipped in this test run."
+            automationNote = "Sending: skipped in this test run."
             startAgent()
             return
         }
-        automationNote = "macOS is asking to let Threadback control Messages: click Allow."
+        automationNote = "macOS is asking whether Threadback may use Messages: click Allow."
         Permissions.requestAutomation { [weak self] result in
             guard let self else { return }
             self.defaults.set(Permissions.AutomationResult.describe(result.after), forKey: Key.automation)
             switch result.after {
-            case 0: self.automationNote = "Threadback can send into \(ref.name)."
-            case -1743: self.automationNote = "Not allowed to control Messages (error -1743). Turn it on in System Settings \u{203A} Privacy & Security \u{203A} Automation."
-            default: self.automationNote = "Messages control: \(Permissions.AutomationResult.describe(result.after))"
+            case 0: self.automationNote = "Threadback can reply in \(ref.name)."
+            case -1743: self.automationNote = "Threadback may not use Messages yet. Turn it on in System Settings \u{203A} Privacy & Security \u{203A} Automation \u{203A} Threadback \u{203A} Messages."
+            default: self.automationNote = "Messages did not answer yet. Open Messages once, then try again."
             }
             self.startAgent()
         }
     }
 
-    /// Exactly what a reply would contain: the image and the text (and the link only when
-    /// the story site is live).
+    /// Exactly what a reply would contain: the card and the text (and the link only when the
+    /// story site is live), built off the main thread.
     func makePreview(_ chat: ChatRef) {
         guard let engine else { return }
-        let sender = RecordingSender()
-        var config = agentConfig()
-        config.dryRun = true
-        config.outFolder = FileManager.default.temporaryDirectory.appendingPathComponent("threadback-onboarding-preview")
-        let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
-        let outcome = agent.preview(chat, period: nil)
-        let texts = sender.sent.filter { $0.kind == "text" }.map(\.payload)
-        recapPreview = texts.joined(separator: "\n\n")
-        if let card = sender.sent.first(where: { $0.kind == "file" }) {
-            cardImage = NSImage(contentsOfFile: card.payload)
-        } else if !outcome.error.isEmpty {
-            recapPreview = "Could not build the preview: \(outcome.error)"
+        previewing = true
+        let config: AgentConfig = {
+            var c = agentConfig()
+            c.dryRun = true
+            c.outFolder = FileManager.default.temporaryDirectory.appendingPathComponent("threadback-onboarding-preview")
+            return c
+        }()
+        work.async { [weak self] in
+            guard let self else { return }
+            let sender = RecordingSender()
+            let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
+            agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+            let outcome = agent.preview(chat, period: nil)
+            let texts = sender.sent.filter { $0.kind == "text" }.map(\.payload)
+            let image = sender.sent.first(where: { $0.kind == "file" }).flatMap { NSImage(contentsOfFile: $0.payload) }
+            DispatchQueue.main.async {
+                self.previewing = false
+                self.recapPreview = texts.joined(separator: "\n\n")
+                self.cardImage = image
+                if image == nil && !outcome.error.isEmpty {
+                    self.recapPreview = "Could not build the preview: \(outcome.error)"
+                }
+            }
+        }
+    }
+
+    /// Plays the interactive story for a chat in a window on this Mac (nothing is shared).
+    func playStory(_ chat: ChatRef) {
+        guard let engine else { return }
+        storyNote = "Opening the story\u{2026}"
+        let me = self.me
+        let tz = DebugOptions.string("TBTimeZone") ?? TimeZone.current.identifier
+        work.async { [weak self] in
+            guard let self else { return }
+            var payload: String?
+            var problem = ""
+            do {
+                let db = try self.openDatabase()
+                let token = engine.open(db)
+                defer { engine.close(token) }
+                let full = try engine.statsJSON(token: token, chat: String(chat.rowid), me: me, tz: tz, period: nil,
+                                                contacts: self.contacts(), shortNames: false)
+                let short = try engine.shortNames(statsJSON: full, me: me)
+                // The same payload a shared link would carry: short names, no message text.
+                let link = try engine.buildLink(statsJSON: short, quotes: false)
+                payload = URL(string: link).flatMap { RecapLink.payload(from: $0) }
+            } catch {
+                problem = "\(error)"
+            }
+            DispatchQueue.main.async {
+                if let payload, StoryWindow.play(payload: payload, chatName: chat.name) != nil {
+                    self.storyNote = ""
+                } else {
+                    self.storyNote = "The story could not be opened. \(problem)"
+                }
+            }
         }
     }
 
@@ -354,11 +470,7 @@ final class AppModel: ObservableObject {
 
     /// Turn off: forget the chat, stop answering, and do not open at login any more.
     func turnOff() {
-        timer?.invalidate()
-        timer = nil
-        agent = nil
-        if let activity { ProcessInfo.processInfo.endActivity(activity) }
-        activity = nil
+        stopAgent()
         approved = []
         defaults.removeObject(forKey: Key.approved)
         defaults.set(false, forKey: Key.onboarded)
@@ -380,8 +492,8 @@ final class AppModel: ObservableObject {
         if Permissions.loginItemStatus() == "enabled" {
             let alert = NSAlert()
             alert.messageText = "Quit Threadback?"
-            alert.informativeText = "It opens again at login and keeps answering /wrapped. Remove it from login items too?"
-            alert.addButton(withTitle: "Quit and remove from login")
+            alert.informativeText = "It opens again when you log in and keeps answering /wrapped. Stop that too?"
+            alert.addButton(withTitle: "Quit, and do not open at login")
             alert.addButton(withTitle: "Just quit")
             if alert.runModal() == .alertFirstButtonReturn { _ = Permissions.setLoginItem(false) }
         }
@@ -413,7 +525,7 @@ final class AppModel: ObservableObject {
         do {
             try FileManager.default.moveItem(at: source, to: target)
         } catch {
-            moveNote = "Could not move it (\(TestReport.shortError(error))). Drag Threadback onto Applications in the Finder instead."
+            moveNote = "Could not move it. Drag Threadback onto Applications in the Finder instead."
             return
         }
         let configuration = NSWorkspace.OpenConfiguration()
@@ -440,8 +552,11 @@ final class AppModel: ObservableObject {
         return support.appendingPathComponent("Threadback/state.json")
     }
 
+    /// Starts answering: a file watch on the Messages folder (with a slow safety poll), a
+    /// check after the Mac wakes up, and every read on the work queue.
     func startAgent() {
         guard let engine, !approved.isEmpty else { return }
+        stopAgent()
         let sender: MessageSender
         if isFixture {
             sender = RecordingSender()
@@ -453,18 +568,37 @@ final class AppModel: ObservableObject {
                           openDatabase: { [unowned self] in try self.openDatabase() }, statePath: isFixture ? nil : statePath)
         agent.approve(approved)
         agent.log = { line in NSLog("Threadback: %@", line) }
-        agent.onReply = { [weak self] outcome in self?.record(outcome) }
+        agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+        agent.onReply = { [weak self] outcome in
+            DispatchQueue.main.async { self?.record(outcome) }
+        }
         self.agent = agent
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        let watcher = FolderWatcher(folder: messagesFolder, queue: work) { [weak self] in self?.runAgent() }
+        watcher.start()
+        self.watcher = watcher
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            // After sleep: commands typed while it slept are answered only if younger than
+            // ten minutes (the agent's own limit); older ones are skipped.
             self?.tick()
         }
         if activity == nil {
             activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
-                                                             reason: "Answering /wrapped in the chat you turned on")
+                                                             reason: "Answering /wrapped in the chats you turned on")
         }
         status = onStatus
         tick()
+    }
+
+    func stopAgent() {
+        watcher?.stop()
+        watcher = nil
+        agent = nil
+        if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
+        wakeObserver = nil
+        if let activity { ProcessInfo.processInfo.endActivity(activity) }
+        activity = nil
     }
 
     private var onStatus: String {
@@ -480,26 +614,45 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func tick() {
-        guard let agent, !paused else { return }
+    /// Asks for one pass of the agent (from the main thread).
+    func tick() {
+        guard !paused else { return }
+        work.async { [weak self] in self?.runAgent() }
+    }
+
+    /// One pass of the agent, on the work queue. Bursts of file events are already coalesced
+    /// by the watcher; a pass that is asked for while one runs is folded into the next one.
+    private func runAgent() {
+        guard let agent else { return }
+        if tickQueued { return }
+        tickQueued = true
+        defer { tickQueued = false }
+        var failure: Error?
         do {
             try agent.runOnce()
-            status = onStatus
-            if accessLost || readNow != "ok" {
-                readNow = "ok"
-                accessLost = false
-                access = "Messages: Connected" + (groupChats.map { " · \($0) group chat\($0 == 1 ? "" : "s")" } ?? "")
-            }
         } catch {
-            readNow = TestReport.shortError(error)
-            access = "Messages: Lost access · Reconnect"
-            accessLost = true
+            failure = error
+        }
+        let watching = watcherOn
+        DispatchQueue.main.async {
+            if let failure {
+                self.readNow = TestReport.shortError(failure)
+                self.access = "Messages: Lost access \u{00B7} Reconnect"
+                self.accessLost = true
+            } else {
+                self.status = self.paused ? "Paused" : self.onStatus
+                self.readNow = "ok"
+                self.accessLost = false
+                self.access = "Messages: Connected" + (self.groupChats.map { " \u{00B7} \($0) group chat\($0 == 1 ? "" : "s")" } ?? "")
+                    + (watching ? "" : " (checking every minute)")
+            }
         }
     }
 
     func togglePause() {
         paused.toggle()
         status = paused ? "Paused" : onStatus
+        if !paused { tick() }
     }
 
     /// One click when reading fails: the same Open panel again.
@@ -518,8 +671,8 @@ final class AppModel: ObservableObject {
         return "Last /wrapped: \(formatter.string(from: last.time))"
     }
 
-    /// Design C stub: when a reply was not confirmed in chat.db, open a Messages compose
-    /// sheet pre-filled with the text (and the link), for the owner to press Send.
+    /// When a reply was not confirmed, open a Messages compose sheet pre-filled with the
+    /// text (and the link), for the owner to press Send.
     func sendByHand() {
         guard let outcome = lastUnconfirmed else { return }
         var items: [Any] = [outcome.text]
@@ -527,16 +680,20 @@ final class AppModel: ObservableObject {
         NSSharingService(named: .composeMessage)?.perform(withItems: items)
     }
 
-    /// Preview a reply for the approved chat into ~/Pictures/Threadback/preview and show it.
+    /// Preview a reply for the first chat that is on, into ~/Pictures/Threadback/preview.
     func previewInFinder() {
         guard let engine, let chat = approved.first else { return }
         var config = agentConfig()
         config.dryRun = true
         config.outFolder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/Threadback/preview")
-        let agent = Agent(engine: engine, sender: RecordingSender(), config: config,
-                          openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
-        if let folder = agent.preview(chat, period: nil).folder {
-            NSWorkspace.shared.activateFileViewerSelecting([folder])
+        work.async { [weak self] in
+            guard let self else { return }
+            let agent = Agent(engine: engine, sender: RecordingSender(), config: config,
+                              openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
+            agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+            if let folder = agent.preview(chat, period: nil).folder {
+                DispatchQueue.main.async { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
+            }
         }
     }
 
@@ -567,16 +724,24 @@ final class AppModel: ObservableObject {
         facts.loginItem = Permissions.loginItemStatus()
         facts.linkInReplies = MacConfig.storySiteIsLive ? "on" : "off (the story site is not live yet)"
         facts.chatsTurnedOn = approved.count
+        facts.watcher = agent == nil ? "not running" : (watcherOn ? "on (file events, safety check every minute)" : "off (safety check every minute only)")
+        facts.card = WebCard.pageURL == nil ? "missing" : "site card (\(WebCard.shared.lastMilliseconds) ms last time)"
         facts.replies = replies
         return facts
     }
 
     func copyTestReport() {
-        if readNow == "not tried" && onboarded { checkAccess() }
-        let text = TestReport.text(reportFacts())
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        copiedNote = "Copied. Paste it into your message (it has no names, chats or messages in it)."
+        let write = { [self] in
+            let text = TestReport.text(self.reportFacts())
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            self.copiedNote = "Copied. Paste it into your message (it has no names, chats or messages in it)."
+        }
+        if readNow == "not tried" && hasConnection {
+            checkAccess { _ in write() }
+        } else {
+            write()
+        }
     }
 }
 

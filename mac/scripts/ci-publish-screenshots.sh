@@ -8,7 +8,11 @@ set -euo pipefail
 
 describe() {
   case "$1" in
-    card-taco-2026) echo "The reply's image for the invented \"Taco Tuesday Crew\" chat, 2026, rendered by the app in a dry run (proof 3)." ;;
+    card-taco-2026) echo "The image friends receive, for the invented \"Taco Tuesday Crew\" chat, 2026: the site's own card (web/js/card.js) drawn by the app, 1080 x 1350." ;;
+    card-hostile-name) echo "The same card with a hostile chat name and sender (direction overrides, a phone number, an address, control characters)." ;;
+    card-long-name) echo "The same card with a very long chat name and sender name." ;;
+    story-1-playing) echo "Play the story: the bundled web story for the chosen chat, in its own window, on this Mac only." ;;
+    story-2-next) echo "The story after pressing the right arrow key: the next slide." ;;
     onboarding-1-welcome) echo "First run, screen 1 of 3: what Threadback does. One button: Continue." ;;
     onboarding-2-connect) echo "Screen 2 of 3: connect your messages. The button opens the Open panel already inside ~/Library/Messages." ;;
     onboarding-2b-connected) echo "Screen 2 after the folder grant (fixture data in this run): connected, with the optional Contacts step for first names." ;;
@@ -95,7 +99,7 @@ main() {
       echo "| [\`$name\`]($name.jpg) | $(describe "$name") |"
     done
     echo ""
-    for file in "$stage"/download-*.jpg "$stage"/gatekeeper-*.jpg "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/lifecycle-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
+    for file in "$stage"/download-*.jpg "$stage"/gatekeeper-*.jpg "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/story-*.jpg "$stage"/lifecycle-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
       name="$(basename "$file" .jpg)"
       echo "### $name"
       echo ""

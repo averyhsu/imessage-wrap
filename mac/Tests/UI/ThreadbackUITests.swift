@@ -118,8 +118,34 @@ final class OnboardingUITests: ThreadbackUITestCase {
         turnOn.click()
         let ready = element(app, "onboarding.ready")
         XCTAssertTrue(ready.waitForExistence(timeout: 30))
+        // The real card (the site's 1080 x 1350 card) appears in the preview.
+        XCTAssertTrue(element(app, "onboarding.card").waitForExistence(timeout: 40), "the preview shows the card")
         sleep(1)
         shootWindow(app, "onboarding-3b-on")
+        note("preview text: \(text(of: element(app, "onboarding.text")))")
+
+        // Play the story: the bundled web story in its own window, on this Mac only.
+        element(app, "onboarding.playStory").click()
+        let story = app.windows.matching(identifier: "threadback.story").firstMatch
+        XCTAssertTrue(story.waitForExistence(timeout: 20), "the story window opens")
+        var title = ""
+        for _ in 0..<30 {
+            title = story.title
+            if title.contains("slide") { break }
+            sleep(1)
+        }
+        note("story window after loading: \(title)")
+        XCTAssertTrue(title.contains("slide 1 of"), "the story reports ready")
+        sleep(2)
+        shootWindow(app, "story-1-playing")
+        app.typeKey(.rightArrow, modifierFlags: [])
+        sleep(2)
+        let after = story.title
+        note("story window after the right arrow: \(after)")
+        XCTAssertTrue(after.contains("slide 2 of"), "the right arrow advances the story")
+        shootWindow(app, "story-2-next")
+        story.buttons[XCUIIdentifierCloseWindow].click()
+        sleep(1)
 
         // "Copy test report": what the owner pastes back. No names, chats or numbers in it.
         let copy = element(app, "onboarding.copyReport")

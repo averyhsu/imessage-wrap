@@ -25,6 +25,7 @@ enum DebugCLI {
             case "--tb-decode-link": return try decodeLink(args)
             case "--tb-print-applescript": return try printAppleScript(args)
             case "--tb-probe": return probe(args)
+            case "--tb-card-test": return try cardTest(args)
             case "--tb-dmg-background":
                 let dir = URL(fileURLWithPath: args.value("--tb-dmg-background") ?? ".", isDirectory: true)
                 try DMGBackground.write(to: dir)
@@ -111,6 +112,12 @@ enum DebugCLI {
         let statePath = args.value("--state").map { URL(fileURLWithPath: $0) }
         let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { try SQLiteDB(path: dbPath) }, statePath: statePath)
         agent.log = { err("log: \($0)") }
+        // The card friends receive: the site's own card, drawn by WebKit (--native-card for
+        // the old small card).
+        if !args.flag("--native-card") {
+            _ = NSApplication.shared
+            agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+        }
         if agentPass {
             agent.approve(matches.map(Agent.chatRef))
             err("approved (frozen by id): " + matches.map { "\($0.name) [\($0.key)]" }.joined(separator: ", "))
@@ -125,6 +132,65 @@ enum DebugCLI {
         out("Preview for \"\(first.name)\" (nothing was sent): \(outcome.line)")
         if let folder = outcome.folder { out("Saved in \(folder.path)") }
         return 0
+    }
+
+    /// Draws the card for every chat of a database (two periods each) and for made-up
+    /// hostile names, checks each (1080 x 1350, not blank) and times it. Exit 1 on any failure.
+    ///   --tb-card-test OUTDIR --db P [--contacts DIR] [--me N] [--tz Z] [--budget-ms 4000]
+    static func cardTest(_ args: Args) throws -> Int32 {
+        _ = NSApplication.shared
+        guard let outDir = args.value("--tb-card-test") else { throw EngineError(code: "usage", message: "--tb-card-test OUTDIR") }
+        let folder = URL(fileURLWithPath: outDir, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let (engine, token, contacts, me) = try setUp(args)
+        let budget = Int(args.value("--budget-ms") ?? "") ?? 4000
+        var cases: [(String, String)] = []
+        for chat in try engine.listChats(token: token, me: me, contacts: contacts) {
+            for period in ["2026", "all"] {
+                let stats = try engine.statsJSON(token: token, chat: String(chat.id), me: me, tz: args.value("--tz"),
+                                                 period: period, contacts: contacts, shortNames: true)
+                cases.append(("chat\(chat.id)-\(period)", stats))
+            }
+        }
+        // Hostile and long names, as other people can type them into a group's name.
+        if let base = cases.first?.1, var object = try JSONSerialization.jsonObject(with: Data(base.utf8)) as? [String: Any] {
+            let long = String(repeating: "Ridiculously Long Group Name \u{1F389}\u{1F32E} ", count: 12)
+            let hostile = "\u{202E}evil\u{202C} +1 555 010 9999 \u{0000}\u{001B}[31m x@example.com \u{05E9}\u{05DC}\u{05D5}\u{05DD} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}"
+            for (name, chatName) in [("long-name", long), ("hostile-name", hostile), ("empty-name", "")] {
+                var copy = object
+                var chat = (copy["chat"] as? [String: Any]) ?? [:]
+                chat["name"] = chatName
+                copy["chat"] = chat
+                if var senders = copy["senders"] as? [[String: Any]], !senders.isEmpty {
+                    senders[0]["name"] = name == "long-name" ? String(repeating: "Bartholomew", count: 8) : hostile
+                    copy["senders"] = senders
+                }
+                let data = try JSONSerialization.data(withJSONObject: copy)
+                cases.append((name, String(decoding: data, as: UTF8.self)))
+            }
+            object["senders"] = []
+            object["totals"] = ["messages": 1, "words": 1]
+            let data = try JSONSerialization.data(withJSONObject: object)
+            cases.append(("one-message-no-senders", String(decoding: data, as: UTF8.self)))
+        }
+        var failures = 0
+        for (index, item) in cases.enumerated() {
+            do {
+                let png = try WebCard.shared.png(statsJSON: item.1)
+                let ms = WebCard.shared.lastMilliseconds
+                let problem = WebCard.check(png)
+                let limit = index == 0 ? budget * 3 : budget   // the first one also loads the page and the font
+                let slow = ms > limit
+                if problem != nil || slow { failures += 1 }
+                try png.write(to: folder.appendingPathComponent("card-\(item.0).png"))
+                out("\(problem == nil && !slow ? "OK  " : "FAIL") card \(item.0): \(png.count) bytes, \(ms) ms\(problem.map { ", \($0)" } ?? "")\(slow ? ", over \(limit) ms" : "")")
+            } catch {
+                failures += 1
+                out("FAIL card \(item.0): \(error)")
+            }
+        }
+        out("cards: \(cases.count - failures)/\(cases.count) passed")
+        return failures == 0 ? 0 : 1
     }
 
     static func decodeLink(_ args: Args) throws -> Int32 {

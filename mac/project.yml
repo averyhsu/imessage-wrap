@@ -40,6 +40,7 @@ targets:
           - "**/*.js"
           - "Info.plist"
           - "*.entitlements"
+          - "Card/*.html"
       - path: Threadback/Engine/bridge.js
         buildPhase: resources
       - path: Threadback/Engine/recap-text.js
@@ -60,6 +61,10 @@ targets:
       - path: ../ios/Shared/Brand.xcassets
       # App icon made from ios/App/.../AppIcon-1024.png by scripts/prepare.sh.
       - path: Generated/AppIcon.xcassets
+      # The web story and the card page (scripts/prepare.sh), as the folder web/ in the app.
+      - path: Generated/web
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.threadback.mac

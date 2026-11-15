@@ -32,6 +32,19 @@ struct AgentState: Codable {
     var cursor: Int?
     var cooldowns: [String: Double] = [:]
     var ownRowids: [Int] = []
+    /// The last command answered in each chat (message ROWID), so one command never gets
+    /// two replies, even across a crash or a relaunch. Written before anything is sent.
+    var answered: [String: Int] = [:]
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        cursor = try c.decodeIfPresent(Int.self, forKey: .cursor)
+        cooldowns = try c.decodeIfPresent([String: Double].self, forKey: .cooldowns) ?? [:]
+        ownRowids = try c.decodeIfPresent([Int].self, forKey: .ownRowids) ?? []
+        answered = try c.decodeIfPresent([String: Int].self, forKey: .answered) ?? [:]
+    }
 
     mutating func rememberOwn(_ rowid: Int?) {
         guard let rowid else { return }
@@ -79,6 +92,14 @@ final class Agent {
     let statePath: URL?
     var clock: () -> Date = Date.init
     var log: (String) -> Void = { _ in }
+    /// Draws the card from the short-name stats JSON. The app uses the site's own card
+    /// (WebCard); the default is the small native card, for tests without WebKit.
+    var renderCard: (String) throws -> Data = { stats in
+        guard let png = MacCardRenderer.pngData(for: try RecapSummary.decode(json: Data(stats.utf8))) else {
+            throw EngineError(code: "card", message: "the native card could not be drawn")
+        }
+        return png
+    }
     /// Called once per answered command (the menu and the test report show it).
     var onReply: (ReplyOutcome) -> Void = { _ in }
     private(set) var state: AgentState
@@ -169,6 +190,14 @@ final class Agent {
                 return false
             }
         }
+        if let done = state.answered[chat.key], done >= row.rowid {
+            log("ignored a /\(trigger.command) that was already answered (row \(row.rowid))")
+            return false
+        }
+        // At most once: remember the command as answered before anything is sent.
+        state.answered[chat.key] = row.rowid
+        state.cursor = row.rowid
+        state.save(statePath)
         let outcome = answer(chat, trigger: trigger)
         for (_, result) in outcome.results { state.rememberOwn(result.rowid) }
         if outcome.sentSomething { state.cooldowns[chat.key] = clock().timeIntervalSince1970 }
@@ -243,8 +272,11 @@ final class Agent {
                 return outcome
             }
             let summary = try RecapSummary.decode(json: Data(stats.utf8))
-            guard let png = MacCardRenderer.pngData(for: summary) else {
-                outcome.error = "could not render the card"
+            let png: Data
+            do {
+                png = try renderCard(stats)
+            } catch {
+                outcome.error = "could not render the card (\(error))"
                 return outcome
             }
             let label = summary.periodLabel

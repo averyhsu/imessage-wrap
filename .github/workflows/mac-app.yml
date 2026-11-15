@@ -18,7 +18,10 @@ on:
       - ".github/workflows/mac-app.yml"
       - "web/make/engine.js"
       - "web/make/db.js"
-      - "web/js/vendor/fflate.min.js"
+      - "web/js/**"
+      - "web/css/**"
+      - "web/index.html"
+      - "web/assets/**"
       - "ios/Shared/RecapPayload.swift"
       - "ios/Shared/RecapLink.swift"
       - "ios/Shared/RecapSummary.swift"
@@ -30,7 +33,7 @@ on:
 
 concurrency:
   group: mac-app-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   # contents: the step that commits docs/screenshots/mac/. actions: read, so the job can
@@ -249,6 +252,18 @@ jobs:
             A="$(find "$WORK/agent-app/out" -name recap.txt | head -1)"; P="$(find "$WORK/agent-py/out" -name recap.txt | head -1)"
             if [ -n "$A" ] && cmp -s "$A" "$P"; then echo "AGENT TEXT IDENTICAL (app vs Python helper with --no-link, both answering the same typed /wrapped 2026)"; else echo "AGENT TEXT DIFFERS"; diff "$A" "$P" || true; fi
           } 2>&1 | tee "$RES/04-dry-run.txt"
+
+      - name: "The card friends receive: the site's card for every fixture chat and hostile names"
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          {
+            echo "== The card (web/js/card.js drawn by WebKit inside the app, 1080 x 1350)"
+            "$BIN" --tb-card-test "$WORK/cards" --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles
+            "$BIN" --tb-card-test "$WORK/cards-evil" --db "$FX/evil/chat.db" --contacts "$FX/evil/AddressBook-v22.abcddb" --me Amara --tz UTC
+            cp "$WORK/cards/card-hostile-name.png" "$SHOTS/card-hostile-name.png"
+            cp "$WORK/cards/card-long-name.png" "$SHOTS/card-long-name.png"
+          } 2>&1 | tee "$RES/04b-card.txt"
 
       - name: "Proof 4: the app's AppleScript compiles against the real Messages dictionary (never run)"
         if: ${{ !cancelled() }}
@@ -514,7 +529,7 @@ jobs:
           "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
           import json, os, shutil, sys
           root, dst = sys.argv[1], sys.argv[2]
-          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-")
+          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-", "story-")
           for sub in sorted(os.listdir(root)):
               folder = os.path.join(root, sub)
               try:

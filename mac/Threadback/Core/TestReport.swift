@@ -70,6 +70,8 @@ struct ReportFacts {
     var loginItem = "?"
     var linkInReplies = "?"
     var chatsTurnedOn = 0
+    var watcher = "not running"
+    var card = "?"
     var replies: [ReplyRecord] = []
 }
 
@@ -94,6 +96,8 @@ enum TestReport {
             "Login item: \(facts.loginItem)",
             "Link in replies: \(facts.linkInReplies)",
             "Chats turned on: \(facts.chatsTurnedOn)",
+            "Watching for new messages: \(facts.watcher)",
+            "Card: \(facts.card)",
         ]
         if facts.replies.isEmpty {
             lines.append("Replies to /wrapped: none yet")

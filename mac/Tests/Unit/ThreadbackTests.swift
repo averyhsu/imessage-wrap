@@ -163,7 +163,7 @@ final class AgentTests: XCTestCase {
         return Int(rowid)
     }
 
-    private func makeAgent(_ sender: RecordingSender) throws -> (Agent, [String]) {
+    private func makeAgent(_ sender: RecordingSender, statePath: URL? = nil) throws -> (Agent, [String]) {
         let engine = try ThreadbackEngine()
         let token = engine.open(try SQLiteDB(path: dbPath))
         let chats = try engine.listChats(token: token, me: "Amara", contacts: [])
@@ -174,7 +174,7 @@ final class AgentTests: XCTestCase {
         config.joinAttempts = 2
         config.joinDelay = 0.05
         let path = dbPath!
-        let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { try SQLiteDB(path: path) }, statePath: nil)
+        let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { try SQLiteDB(path: path) }, statePath: statePath)
         agent.approve(chats.filter { $0.chatIdentifier == Fixture.tacoIdentifier }.map(Agent.chatRef))
         var lines: [String] = []
         agent.log = { lines.append($0) }
@@ -277,6 +277,40 @@ final class AgentTests: XCTestCase {
             XCTAssertFalse(report.contains(word), "the report contains \(word)")
         }
         XCTAssertGreaterThan(forbidden.count, 12)
+    }
+
+    /// One command never gets two replies, even when a relaunch starts reading from an
+    /// earlier row (the last answered message of each chat is stored before sending).
+    func testNeverTwoRepliesForOneCommandAcrossRelaunches() throws {
+        let statePath = folder.appendingPathComponent("state.json")
+        let first = RecordingSender()
+        let (agent1, _) = try makeAgent(first, statePath: statePath)
+        XCTAssertEqual(try agent1.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent1.runOnce(), 1)
+        XCTAssertEqual(first.sent.count, 2)
+        // A relaunch whose cursor is behind the command (as after a crash before the save).
+        var state = AgentState.load(statePath)
+        XCTAssertNotNil(state.answered[Fixture.tacoIdentifier])
+        state.cursor = (state.cursor ?? 1) - 1
+        state.cooldowns = [:]
+        state.save(statePath)
+        let second = RecordingSender()
+        let (agent2, _) = try makeAgent(second, statePath: statePath)
+        var log: [String] = []
+        agent2.log = { log.append($0) }
+        XCTAssertEqual(try agent2.runOnce(), 0, "the same command is not answered twice")
+        XCTAssertTrue(second.sent.isEmpty)
+        XCTAssertTrue(log.contains { $0.contains("already answered") }, log.joined(separator: " | "))
+    }
+
+    /// A state file written by an earlier version (no "answered") still loads.
+    func testOldStateFileStillLoads() throws {
+        let path = folder.appendingPathComponent("old-state.json")
+        try Data(#"{"cursor": 42, "cooldowns": {}, "ownRowids": [1]}"#.utf8).write(to: path)
+        let state = AgentState.load(path)
+        XCTAssertEqual(state.cursor, 42)
+        XCTAssertEqual(state.answered, [:])
     }
 
     func testIdFormIsACategory() {
