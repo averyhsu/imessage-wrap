@@ -43,7 +43,7 @@ against the real API).
 | **Maker page** | 568 checks: the invented Mac database with its write-ahead log, an iPhone backup folder, pasted exports and the sample chat all go from file to chat list to link; the numbers match the Python engine byte for byte; quotes off by default; the preview holds exactly what the link holds. Passes in WebKit and Firefox too, which found one real fault (pressing Create without a name could scroll the name field out of view in WebKit; fixed). Driven on the live site with sample data. | `web/make/`, [screenshots](docs/screenshots/web/) |
 | **Stats engines** (Python + JavaScript) | Byte-identical results on every invented chat, period and time zone in the conformance suite; the personality (25 kinds, each with the number that earned it) and the 15 awards are held to a shared set of cases worked out by hand; match a chat whose numbers were worked out by hand and an independent recount by a reviewer. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
 | **Command-line tool and helper** | `wrapped chats`, `stats`, `link` on the invented database; the Terminal version of `/wrapped` up to the moment of sending, against a fake Messages; its installer runs for real on a clean macOS runner. | `wrapped/`, [guide](docs/MAC.md) |
-| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
+| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. Its built-in sample is the site's current demo, and a test fails if the two ever differ. | `ios/`, [screenshots](docs/screenshots/ios/) |
 | **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also from the receiving side of the simulated chat. | `ios/MessagesExtension/` |
 
 CI runs on `main`: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac app`, plus
@@ -101,6 +101,14 @@ shown the moment it appears, a second one cannot start while one is up, and sett
 saved before the app quits), and test builds now record every window event, so a repeat
 would name its cause. On a real Mac the worst case is seeing that message twice and
 clicking OK twice. Nothing is sent because of it.
+
+**One slow iPhone test run.** While this change was in CI, one run of the iPhone app's
+tests failed: a test that waits up to 30 seconds for the story's very first start in the
+Simulator gave up. The same recap then started in 0.3 seconds in the same test, the other
+69 tests passed, and that whole run was two to five times slower than usual. The next run
+passed. Measured here, the story's first start is about 18% heavier than before (five more
+layout passes for the new lines), which is not enough to explain it. GitHub does not let
+this session re-run a job, so there is one passing run after it, not several.
 
 **Everything else**
 

@@ -486,3 +486,8 @@ pattern matching: a set of lines for each part of the recap, picked by how the c
 - **The demo follows its own numbers.** The invented demo chat used to be "The Night Owls"
   with 13% of its messages after midnight. Under the new rule it is "The Firehose" (154
   messages a day), and the pictures made from it were redone.
+- **The iPhone app's sample had been left behind.** It was a separate copy of the old demo
+  and would have gone on saying "The Night Owls. Peak hour: 11 PM." It is now built from
+  the site's demo by a script, and a test fails if the two ever differ. The old-shape test
+  recap that every engine reads stays as it is: it proves that links made by older builds
+  still open.
