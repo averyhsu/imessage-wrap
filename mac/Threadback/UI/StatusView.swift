@@ -47,6 +47,11 @@ struct StatusView: View {
                     }
                 }
                 .frame(maxHeight: 250)
+                if let line = model.limitLine {
+                    Text(line).font(.system(size: 13, weight: .semibold)).foregroundStyle(StatusView.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("status.limit")
+                }
                 if !model.turnOffNote.isEmpty {
                     Text(model.turnOffNote).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
                         .accessibilityIdentifier("status.turnOffNote")

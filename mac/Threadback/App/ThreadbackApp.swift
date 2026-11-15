@@ -95,6 +95,9 @@ struct MenuContent: View {
             }
         }
         Divider()
+        if let line = model.limitLine {
+            Text(line)
+        }
         if !model.needsReconsent.isEmpty {
             Button("Replies changed: confirm \(model.needsReconsent.count == 1 ? "1 chat" : "\(model.needsReconsent.count) chats")\u{2026}") {
                 NotificationCenter.default.post(name: .showStatus, object: nil)

@@ -70,6 +70,8 @@ final class AppModel: ObservableObject {
     /// answered until the owner confirms again.
     @Published var needsReconsent: [ChatRef] = []
     @Published var lastUnconfirmed: ReplyOutcome?
+    /// The last chat that reached the daily cap, and when (the menu says so for a day).
+    @Published var limitReached: (name: String, at: Date)?
     @Published var replies: [ReplyRecord] = []
     @Published var copiedNote = ""
     @Published var experimentNote = ""
@@ -518,17 +520,15 @@ final class AppModel: ObservableObject {
     func makePreview(_ chat: ChatRef) {
         guard let engine else { return }
         previewing = true
-        let config: AgentConfig = {
-            var c = agentConfig()
-            c.dryRun = true
-            c.outFolder = FileManager.default.temporaryDirectory.appendingPathComponent("threadback-onboarding-preview")
-            return c
-        }()
+        var config = agentConfig(withContacts: false)
+        config.dryRun = true
+        config.outFolder = FileManager.default.temporaryDirectory.appendingPathComponent("threadback-onboarding-preview")
         work.async { [weak self] in
             guard let self else { return }
+            config.contacts = self.contacts()
             let sender = RecordingSender()
             let agent = Agent(engine: engine, sender: sender, config: config, openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
-            agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+            agent.renderCard = { try WebCard.shared.cardOrNative(statsJSON: $0) }
             let outcome = agent.preview(chat, period: nil)
             let texts = sender.sent.filter { $0.kind == "text" }.map(\.payload)
             let image = sender.sent.first(where: { $0.kind == "file" }).flatMap { NSImage(contentsOfFile: $0.payload) }
@@ -673,7 +673,9 @@ final class AppModel: ObservableObject {
 
     // MARK: Agent
 
-    func agentConfig(withContacts: Bool = true) -> AgentConfig {
+    /// The agent's settings. Contacts go through the engine, so they are read on `work` only
+    /// (the callers add them there).
+    func agentConfig(withContacts: Bool = false) -> AgentConfig {
         var config = AgentConfig()
         config.me = me
         config.tz = DebugOptions.string("TBTimeZone") ?? TimeZone.current.identifier
@@ -719,9 +721,12 @@ final class AppModel: ObservableObject {
                 #if DEBUG
                 agent.log = { line in NSLog("Threadback: %@", line) }   // CI only: Release logs nothing
                 #endif
-                agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+                agent.renderCard = { try WebCard.shared.cardOrNative(statsJSON: $0) }
                 agent.onReply = { [weak self] outcome in
                     DispatchQueue.main.async { self?.record(outcome) }
+                }
+                agent.onLimit = { [weak self] chat in
+                    DispatchQueue.main.async { self?.limitReached = (chat.name, Date()) }
                 }
                 agent.control = self.control
                 self.agent = agent
@@ -833,6 +838,12 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.post(name: .showOnboarding, object: nil)
     }
 
+    /// "Daily limit reached in Taco Tuesday: ...", for 24 hours after it happened.
+    var limitLine: String? {
+        guard let limitReached, Date().timeIntervalSince(limitReached.at) < 86_400 else { return nil }
+        return "Daily limit reached in \(limitReached.name): \(AgentConfig().dailyCap) replies in 24 hours. It answers there again tomorrow."
+    }
+
     /// The last reply, for the menu: "Last /wrapped 14:02".
     var lastReplyTitle: String? {
         guard let last = replies.last else { return nil }
@@ -846,7 +857,17 @@ final class AppModel: ObservableObject {
     /// text (and the link), for the owner to press Send.
     func sendByHand() {
         guard let outcome = lastUnconfirmed else { return }
-        var items: [Any] = [outcome.text]
+        var items: [Any] = []
+        if let card = outcome.card {
+            let folder = AppleScriptSender.stagingFolder
+            let url = AppleScriptSender.stagedURL(in: folder, extension: "png")
+            if (try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)) != nil,
+               (try? card.write(to: url)) != nil {
+                items.append(url)
+                AppleScriptSender.prune(folder, keep: AppleScriptSender.keepStaged)
+            }
+        }
+        items.append(outcome.text)
         if let url = URL(string: outcome.link), !outcome.link.isEmpty { items.append(url) }
         NSSharingService(named: .composeMessage)?.perform(withItems: items)
     }
@@ -854,14 +875,15 @@ final class AppModel: ObservableObject {
     /// Preview a reply for the first chat that is on, into ~/Pictures/Threadback/preview.
     func previewInFinder() {
         guard let engine, let chat = approved.first else { return }
-        var config = agentConfig()
+        var config = agentConfig(withContacts: false)
         config.dryRun = true
         config.outFolder = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/Threadback/preview")
         work.async { [weak self] in
             guard let self else { return }
+            config.contacts = self.contacts()
             let agent = Agent(engine: engine, sender: RecordingSender(), config: config,
                               openDatabase: { [unowned self] in try self.openDatabase() }, statePath: nil)
-            agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+            agent.renderCard = { try WebCard.shared.cardOrNative(statsJSON: $0) }
             if let folder = agent.preview(chat, period: nil).folder {
                 DispatchQueue.main.async { NSWorkspace.shared.activateFileViewerSelecting([folder]) }
             }
@@ -896,7 +918,7 @@ final class AppModel: ObservableObject {
         facts.linkInReplies = MacConfig.storySiteIsLive ? "on" : "off (the story site is not live yet)"
         facts.chatsTurnedOn = approved.count
         facts.watcher = watcher == nil ? "not running" : (watcherOn ? "on (file events, safety check every minute)" : "off (safety check every minute only)")
-        facts.card = WebCard.pageURL == nil ? "missing" : "site card (\(WebCard.shared.lastMilliseconds) ms last time)"
+        facts.card = WebCard.pageURL == nil ? "missing" : "site card (\(WebCard.shared.lastMilliseconds) ms last time, \(WebCard.shared.reloads) reloads, \(WebCard.shared.usedNative) native fallbacks)"
         facts.replies = replies
         return facts
     }

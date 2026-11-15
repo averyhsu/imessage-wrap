@@ -6,7 +6,8 @@ import Foundation
 ///   renamed later is never added, whatever it is called
 /// - never replay commands typed before it started, or more than ten minutes ago, or dated
 ///   in the future
-/// - at most one reply per chat inside the cooldown
+/// - at most one reply per chat inside the cooldown (2 minutes; 10 minutes once a chat had
+///   3 replies within the hour), and at most 20 replies per chat in 24 hours
 /// - never react to its own replies
 /// - verify every send in chat.db (the sender does), and log one line per command, with no
 ///   message text
@@ -15,6 +16,12 @@ struct AgentConfig {
     var tz: String?
     var contacts: [[String]] = []
     var cooldown: TimeInterval = 120
+    /// After `repeatCount` replies within `repeatWindow`, the cooldown is `longCooldown`.
+    var repeatCount = 3
+    var repeatWindow: TimeInterval = 3600
+    var longCooldown: TimeInterval = 600
+    /// At most this many replies per chat in 24 hours; the menu says when it is reached.
+    var dailyCap = 20
     var staleAfter: TimeInterval = 600
     var futureSkew: TimeInterval = 30
     var link = MacConfig.storySiteIsLive  // a link only while the story site is live
@@ -35,6 +42,8 @@ struct AgentState: Codable {
     /// The last command answered in each chat (message ROWID), so one command never gets
     /// two replies, even across a crash or a relaunch. Written before anything is sent.
     var answered: [String: Int] = [:]
+    /// When each chat got a reply, over the last 24 hours (for the daily cap).
+    var replies: [String: [Double]] = [:]
 
     init() {}
 
@@ -44,6 +53,7 @@ struct AgentState: Codable {
         cooldowns = try c.decodeIfPresent([String: Double].self, forKey: .cooldowns) ?? [:]
         ownRowids = try c.decodeIfPresent([Int].self, forKey: .ownRowids) ?? []
         answered = try c.decodeIfPresent([String: Int].self, forKey: .answered) ?? [:]
+        replies = try c.decodeIfPresent([String: [Double]].self, forKey: .replies) ?? [:]
     }
 
     mutating func rememberOwn(_ rowid: Int?) {
@@ -74,6 +84,8 @@ struct ReplyOutcome {
     var folder: URL?
     var text = ""
     var link = ""
+    /// The card that was (or was to be) sent, for "send by hand" when a reply is not confirmed.
+    var card: Data?
 
     var sentSomething: Bool { results.contains { $0.1.sentSomething } }
 
@@ -102,6 +114,8 @@ final class Agent {
     }
     /// Called once per answered command (the menu and the test report show it).
     var onReply: (ReplyOutcome) -> Void = { _ in }
+    /// Called once when a chat reaches the daily cap (the menu says so).
+    var onLimit: (ChatRef) -> Void = { _ in }
     /// Pause and the live set of chats, read before every command and every send. Without
     /// one (tests, previews) everything approved may be answered.
     var control: AgentControl?
@@ -109,6 +123,7 @@ final class Agent {
     /// The approved chats, by key, frozen at consent.
     private(set) var approved: [String: ChatRef] = [:]
     private var warned = Set<String>()
+    private var limited: [String: Double] = [:]
 
     init(engine: ThreadbackEngine, sender: MessageSender, config: AgentConfig,
          openDatabase: @escaping () throws -> SQLiteDB, statePath: URL?) {
@@ -170,7 +185,8 @@ final class Agent {
             }
         }
         let now = clock().timeIntervalSince1970
-        state.cooldowns = state.cooldowns.filter { now - $0.value < max(config.cooldown, 1) * 4 }
+        state.cooldowns = state.cooldowns.filter { now - $0.value < max(config.cooldown, config.longCooldown, 1) * 2 }
+        state.replies = state.replies.mapValues { times in times.filter { now - $0 < 86_400 } }.filter { !$0.value.isEmpty }
         state.save(statePath)
         return answered
     }
@@ -203,10 +219,20 @@ final class Agent {
         let current = engine.safeChatName(chatRow.displayName)
         let chat = ChatRef(guid: chatRow.guid, identifier: chatRow.identifier,
                            name: current.isEmpty ? known.name : current, rowid: chatRow.rowid, members: known.members)
+        let recent = (state.replies[chat.key] ?? []).filter { now.timeIntervalSince1970 - $0 < 86_400 }
+        if recent.count >= config.dailyCap {
+            log("ignored /\(trigger.command) in \"\(chat.name)\": \(config.dailyCap) replies in 24 hours, the daily limit")
+            if let since = limited[chat.key], now.timeIntervalSince1970 - since < 86_400 { return false }
+            limited[chat.key] = now.timeIntervalSince1970
+            onLimit(chat)
+            return false
+        }
+        let busy = recent.filter { now.timeIntervalSince1970 - $0 < config.repeatWindow }.count >= config.repeatCount
+        let cooldown = busy ? max(config.cooldown, config.longCooldown) : config.cooldown
         if let last = state.cooldowns[chat.key] {
             let since = now.timeIntervalSince1970 - last
-            if since >= 0 && since < config.cooldown {
-                log("ignored /\(trigger.command) in \"\(chat.name)\": cooling down (\(Int(config.cooldown - since) + 1) s left)")
+            if since >= 0 && since < cooldown {
+                log("ignored /\(trigger.command) in \"\(chat.name)\": cooling down (\(Int(cooldown - since) + 1) s left)")
                 return false
             }
         }
@@ -224,7 +250,12 @@ final class Agent {
         state.save(statePath)
         let outcome = answer(chat, trigger: trigger)
         for (_, result) in outcome.results { state.rememberOwn(result.rowid) }
-        if outcome.sentSomething { state.cooldowns[chat.key] = clock().timeIntervalSince1970 }
+        // A timeout (-1712) may still have sent: it counts like a reply for the cooldown.
+        if outcome.sentSomething || outcome.results.contains(where: { $0.1.errorNumber == -1712 }) {
+            let at = clock().timeIntervalSince1970
+            state.cooldowns[chat.key] = at
+            state.replies[chat.key, default: []].append(at)
+        }
         log(outcome.line)
         state.cursor = row.rowid
         state.save(statePath)
@@ -301,6 +332,7 @@ final class Agent {
             let png: Data
             do {
                 png = try renderCard(stats)
+                outcome.card = png
             } catch {
                 outcome.error = "could not render the card (\(error))"
                 return outcome

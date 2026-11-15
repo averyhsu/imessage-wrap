@@ -551,4 +551,141 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(byId, before)
         XCTAssertThrowsError(try engine.statsJSON(token: token, chatID: 987_654, me: "Amara", tz: nil, period: nil, contacts: [], shortNames: true))
     }
+
+    // MARK: Review batch 2: verification, flood control
+
+    /// Test 4 (M2): a send counts only when OUR message shows up: the exact text, or the card's
+    /// unique file name. The owner's own photo or text sent meanwhile never counts, and the
+    /// status says what Messages recorded (written, sent, delivered).
+    func testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded() {
+        let decode: (String?, Data?) -> String = { text, _ in text ?? "" }
+        let chat: Set<Int> = [7]
+        typealias Row = MessagesDB.OutgoingRow
+        let ownPhoto = Row(rowid: 101, chatIDs: [7], error: 0, hasAttachment: true, text: "\u{FFFC}", attributedBody: nil,
+                           isSent: true, isDelivered: true, attachmentNames: ["IMG_0042.HEIC"])
+        let ownText = Row(rowid: 102, chatIDs: [7], error: 0, hasAttachment: false, text: "lol", attributedBody: nil, isSent: true, isDelivered: true)
+        let emptyText = Row(rowid: 103, chatIDs: [7], error: 0, hasAttachment: false, text: "", attributedBody: nil, isSent: true)
+        let card = "threadback-card-6F1C.png"
+        let ourCard = Row(rowid: 104, chatIDs: [7], error: 0, hasAttachment: true, text: nil, attributedBody: nil,
+                          isSent: true, isDelivered: false, attachmentNames: [card])
+        let reply = "\u{1F9F5} Taco Tuesday Crew \u{00B7} 2026\n2,869 messages"
+        let ourText = Row(rowid: 105, chatIDs: [7], error: 0, hasAttachment: false, text: reply, attributedBody: nil,
+                          isSent: false, isDelivered: false)
+
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ownText, emptyText], chatIDs: chat, text: "", fileName: card, decode: decode), .notFound,
+                       "the owner's own photo is not our card")
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ownText, emptyText], chatIDs: chat, text: reply, fileName: nil, decode: decode), .notFound,
+                       "the owner's own (or an empty) text is not our reply")
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ourCard], chatIDs: chat, text: "", fileName: card, decode: decode), .found(ourCard))
+        XCTAssertEqual(AppleScriptSender.judge([ownText, ourText], chatIDs: chat, text: reply, fileName: nil, decode: decode), .found(ourText))
+        XCTAssertEqual(AppleScriptSender.judge([ourCard], chatIDs: [8], text: "", fileName: card, decode: decode), .notFound, "another chat")
+
+        var orphan = ourCard
+        orphan.chatIDs = []
+        var unrelatedOrphan = ownPhoto
+        unrelatedOrphan.chatIDs = []
+        XCTAssertEqual(AppleScriptSender.judge([orphan], chatIDs: chat, text: "", fileName: card, decode: decode), .orphan)
+        XCTAssertEqual(AppleScriptSender.judge([unrelatedOrphan], chatIDs: chat, text: "", fileName: card, decode: decode), .notFound,
+                       "a chat-less row that is not ours is not our orphan")
+
+        XCTAssertEqual(AppleScriptSender.result(for: ownPhoto).status, .delivered)
+        XCTAssertEqual(AppleScriptSender.result(for: ourCard).status, .sent)
+        XCTAssertEqual(AppleScriptSender.result(for: ourText).status, .written)
+        let failed = Row(rowid: 106, chatIDs: [7], error: 22, hasAttachment: false, text: reply, attributedBody: nil, isSent: true)
+        XCTAssertEqual(AppleScriptSender.result(for: failed).status, .failed)
+        XCTAssertEqual(ReplyRecord.word(.written), "written, not yet sent")
+        XCTAssertEqual(ReplyRecord.word(.sent), "sent")
+    }
+
+    /// The fixture's chat.db as the sender reads it: is_sent, is_delivered and attachment names.
+    func testOutgoingRowsCarrySentDeliveredAndAttachmentNames() throws {
+        let db = try SQLiteDB(path: dbPath, readOnly: false)
+        let before = try MessagesDB.maxMessageRowid(db)
+        let chat = try XCTUnwrap(try db.query("SELECT ROWID FROM chat WHERE chat_identifier = ? ORDER BY ROWID LIMIT 1", [Fixture.tacoIdentifier]).rows.first?.first?.int)
+        let cols = try MessagesDB.messageColumns(db)
+        guard cols.contains("is_sent"), cols.contains("is_delivered") else { throw XCTSkip("the fixture has no is_sent / is_delivered") }
+        let rowid = Int(try db.execute("INSERT INTO message (guid, text, handle_id, date, is_from_me, is_sent, is_delivered) VALUES (?, 'x', 0, 0, 1, 1, 0)",
+                                       ["TEST-\(UUID().uuidString)"]))
+        _ = try db.execute("INSERT INTO chat_message_join (chat_id, message_id) VALUES (?, ?)", [chat, rowid])
+        if let attachment = try? db.execute("INSERT INTO attachment (guid, filename, transfer_name) VALUES (?, ?, ?)",
+                                            ["ATT-\(UUID().uuidString)", "~/Library/Messages/Attachments/ab/11/X/threadback-card-1.png", "threadback-card-1.png"]) {
+            _ = try db.execute("INSERT INTO message_attachment_join (message_id, attachment_id) VALUES (?, ?)", [rowid, Int(attachment)])
+        }
+        let rows = try MessagesDB.outgoingRows(db, after: before)
+        let row = try XCTUnwrap(rows.first { $0.rowid == rowid })
+        XCTAssertTrue(row.isSent)
+        XCTAssertFalse(row.isDelivered)
+        XCTAssertEqual(row.chatIDs, [chat])
+        XCTAssertTrue(row.attachmentNames.contains("threadback-card-1.png"), "\(row.attachmentNames)")
+        Fixture.note("outgoing row: sent \(row.isSent), delivered \(row.isDelivered), attachment names \(row.attachmentNames)")
+    }
+
+    /// M3: at most `dailyCap` replies per chat in 24 hours (the owner is told once), a longer
+    /// cooldown once a chat is busy, and a timeout that may have sent counts for the cooldown.
+    func testDailyCapLongerCooldownAndTimeouts() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        agent.config.link = false
+        agent.config.cooldown = 0
+        agent.config.longCooldown = 0
+        agent.config.dailyCap = 3
+        var limits: [String] = []
+        agent.onLimit = { limits.append($0.key) }
+        XCTAssertEqual(try agent.runOnce(), 0)
+        for _ in 0..<3 {
+            try insert("/wrapped", chat: Fixture.tacoIdentifier)
+            XCTAssertEqual(try agent.runOnce(), 1)
+        }
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "the daily cap")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertEqual(limits, [Fixture.tacoIdentifier], "the owner is told once")
+        XCTAssertEqual(sender.sent.count, 6)
+
+        // Busy: after `repeatCount` replies within the hour the cooldown is the long one.
+        let second = RecordingSender()
+        let (busy, _) = try makeAgent(second)
+        busy.config.link = false
+        busy.config.cooldown = 0
+        busy.config.repeatCount = 2
+        busy.config.longCooldown = 600
+        XCTAssertEqual(try busy.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 1)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 1)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 0, "the longer cooldown")
+
+        // A timeout (-1712) may have sent: no second try right after it.
+        let timeouts = TimeoutSender()
+        let engine = try ThreadbackEngine()
+        let path = dbPath!
+        let slow = Agent(engine: engine, sender: timeouts, config: busy.config, openDatabase: { try SQLiteDB(path: path) }, statePath: nil)
+        slow.approve(Array(busy.approved.values))
+        slow.config.longCooldown = 0
+        slow.config.cooldown = 120
+        XCTAssertEqual(try slow.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try slow.runOnce()
+        XCTAssertEqual(timeouts.calls, 1)
+        XCTAssertNotNil(slow.lastOutcome?.card, "the card is kept for send by hand")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try slow.runOnce()
+        XCTAssertEqual(timeouts.calls, 1, "no retry inside the cooldown after a timeout")
+    }
+}
+
+/// Messages answered "timed out" (-1712): it may or may not have sent.
+final class TimeoutSender: MessageSender {
+    private(set) var calls = 0
+    func sendFile(_ url: URL, to chat: ChatRef) -> SendResult { timeout() }
+    func sendText(_ text: String, to chat: ChatRef) -> SendResult { timeout() }
+    private func timeout() -> SendResult {
+        calls += 1
+        var result = SendResult(status: .failed, reason: AppleScriptSender.explain(-1712, ""))
+        result.errorNumber = -1712
+        return result
+    }
 }
