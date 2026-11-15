@@ -675,7 +675,7 @@ await section('progress', 'While files are read: progress sits by the drop zone,
  * prototypes, and says what it found. What the worker saw is only a hint: the proof is the
  * second server's own log of what arrived.
  */
-async function reach({ target, tag, modules }) {
+async function reach({ target, tag, modules, only }) {
   const chain = [];
   for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) chain.push(o);
   const find = (name) => {
@@ -691,6 +691,7 @@ async function reach({ target, tag, modules }) {
   const note = (event) => out.refused.push(event.effectiveDirective || event.violatedDirective);
   self.addEventListener('securitypolicyviolation', note);
   const attempt = async (name, fn) => {
+    if (only && !only.includes(name)) return;
     try { out.saw[name] = await fn(find(name)); } catch (error) { out.saw[name] = 'failed: ' + ((error && error.name) || 'error'); }
   };
   const gone = () => { throw new ReferenceError('not there'); };
@@ -770,18 +771,41 @@ await section('contain', 'The reader cannot talk to anyone: bound by the page\'s
     }
   }
 
+  // Playwright's Firefox can lose the whole tab ("Target crashed") during the probe. There,
+  // first find out which attempt does that, one fresh page per attempt, and leave those
+  // out of the probe below. (Whatever they did, nothing may have arrived from them.)
+  let only;
+  if (BROWSER === 'firefox') {
+    const crashes = [];
+    for (const way of [...WAYS, 'import()']) {
+      const h = await held();
+      const tag = 'alone-' + way.replace(/\W/g, '');
+      try {
+        const one = await h.worker.evaluate(reach, { target: other.url, tag, modules: way === 'import()', only: [way] });
+        ok(String(one.saw[way]).startsWith('failed'), `${way} on its own fails (${one.saw[way]})`);
+      } catch (error) {
+        crashes.push(way);
+      }
+      eq(arrived(tag), [], `${way} on its own: nothing arrives at the other origin`);
+      await h.close().catch(() => {});
+    }
+    if (crashes.length) note(`the tab crashes when the worker under the policy tries ${crashes.join(', ')}; ${crashes.length > 1 ? 'those are' : 'that is'} left out of the probe (nothing arrived)`);
+    ok(crashes.length < WAYS.length, `most ways can be probed in Firefox (crashed: ${crashes.join(', ') || 'none'})`);
+    only = [...WAYS, 'import()'].filter((way) => !crashes.includes(way));
+  }
+
   // 1. The page as it ships.
   const s = await held();
   eq(s.page.workers().length, 1, 'the page runs one worker');
   ok(s.worker.url().startsWith('blob:' + origin + '/'), `started from a blob: address, so the page's policy binds it (${s.worker.url().slice(0, 40)}…)`);
-  const before = await probe(s, { target: other.url, tag: 'before', modules: true });
+  const before = await probe(s, { target: other.url, tag: 'before', modules: true, only });
   eq(before.found.filter((name) => WAYS.includes(name)), WAYS, 'before it cuts itself off the worker still has its network functions');
   ok(Object.values(before.saw).every((saw) => saw.startsWith('failed')), `yet every attempt to reach another origin fails: ${JSON.stringify(before.saw)}`);
   eq(arrived('before'), [], 'and nothing arrives at the other origin (fetch, XMLHttpRequest, importScripts, WebSocket, EventSource, import())');
   s.release();
   await s.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
   eq((await listed(s.page)).length, cliChats(['--db', CHAT_DB, '--no-contacts']).chats.length, 'the reader itself still works: the chats are listed');
-  const after = await probe(s, { target: other.url, tag: 'after', modules: true });
+  const after = await probe(s, { target: other.url, tag: 'after', modules: true, only });
   eq(after.found, [], 'after that the functions are gone, from the global object and from every prototype behind it');
   ok(Object.values(after.saw).every((saw) => saw.startsWith('failed')), `every attempt fails: ${JSON.stringify(after.saw)}`);
   eq(arrived('after'), [], 'and nothing arrives at the other origin');
