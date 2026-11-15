@@ -463,7 +463,15 @@ await section('motion', 'Reduced motion: nothing moves, and the jump to the next
   await page.locator('#step-1 .mg-next').click();
   const right = await page.evaluate(() => scrollY);
   await page.waitForTimeout(700);
-  eq(await page.evaluate(() => scrollY), right, 'the page is already where it ends up (no smooth scroll)');
+  const later = await page.evaluate(() => scrollY);
+  if (IS_CHROMIUM || later === right) {
+    eq(later, right, 'the page is already where it ends up (no smooth scroll)');
+  } else {
+    // Firefox moved one more pixel after the instant jump (819 → 820 on CI): a scroll
+    // position settling onto whole pixels, not a smooth scroll, which travels hundreds.
+    note('a scroll position may settle by 1 px after an instant jump; more than that would be a smooth scroll');
+    ok(Math.abs(later - right) <= 1, `the page is already where it ends up (no smooth scroll): ${right} → ${later}`);
+  }
   eq(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName || a.constructor.name)), [], 'no animation runs');
   s.clean('reduced motion');
   await s.close();
