@@ -51,6 +51,11 @@ CI runs on `main`: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac
 Results: [Actions](https://github.com/averyhsu/imessage-wrap/actions). Mac app builds are
 on the [Releases page](https://github.com/averyhsu/imessage-wrap/releases).
 
+After the last merge (2026-11-15) the public site was driven in a browser once more: the
+front page, the demo story to its last slide, the Mac guide with its Download button, the
+maker with sample data, and the link the maker produced. No errors, and no requests to any
+other site.
+
 ## What is not proven
 
 None of this has been claimed as working. It needs real devices.

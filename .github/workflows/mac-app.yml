@@ -1,4 +1,4 @@
-# "Threadback for Mac" feasibility spike (mac/): builds the menu-bar app ad-hoc signed on a
+# "Threadback for Mac" (mac/): builds the menu-bar app ad-hoc signed on a
 # macOS 26 runner, compares its stats and text with the Python tools byte for byte, makes a
 # dry-run reply, compiles its AppleScript, screenshots the onboarding, and runs the permission
 # experiments (Open panel instead of Full Disk Access, the Automation prompt, the login item).
@@ -587,7 +587,7 @@ jobs:
                               print("exported", base, "from", sub)
           EOF
           {
-            echo "Threadback for Mac: feasibility spike results"
+            echo "Threadback for Mac: results of the CI run"
             echo "Run:    $RUN_URL"
             echo "Commit: $GITHUB_SHA"
             echo "All data is invented (tests/fixtures/build_fixture.py). Nothing was sent anywhere."
