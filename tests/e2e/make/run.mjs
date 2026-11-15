@@ -1451,7 +1451,7 @@ await section('name', 'Your name: asked first, needed for a recap, "Me" only by 
   await page.waitForFunction(() => { const r = document.getElementById('me-field').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 }).catch(() => {});
   const box = await page.locator('#me-field').boundingBox();
   const tall = page.viewportSize().height;
-  ok(box.y >= 0 && box.y + box.height <= tall, 'the field is scrolled into view');
+  ok(box.y >= 0 && box.y + box.height <= tall, `the field is scrolled into view (top ${Math.round(box.y)}, height ${Math.round(box.height)}, window ${tall}, scrolled ${await page.evaluate(() => Math.round(scrollY))})`);
 
   // Type it: the complaint goes, the recap is made with that name.
   await page.keyboard.type('Amara');

@@ -1856,7 +1856,9 @@
       // Without it the recap would call the owner "Me", which means someone else to
       // everyone who opens it. Staying "Me" is allowed, but only as a choice.
       meProblem(true);
-      $('me-name').focus();
+      // One scroll, ours: focus() scrolls on its own too, and in WebKit the two could
+      // leave the field out of view.
+      try { $('me-name').focus({ preventScroll: true }); } catch (error) { $('me-name').focus(); }
       keepInView($('me-field'));
       say('Type your first name: it is the first thing asked in this step.');
       return;
