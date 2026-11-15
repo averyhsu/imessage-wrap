@@ -414,6 +414,14 @@ Once the owner's two tests had passed (D15), the Mac app stopped being an experi
 - **The merge waited for the fixes.** The pull request was green when the review came back.
   It was held anyway, because merging is what links the download from the public guide page,
   and a build whose Pause button does nothing should not be the first one strangers get.
+- **The web pages are now tested in Safari's engine too.** Everyone who gets a recap on an
+  iPhone opens it in Safari, and until now every browser test had run in Chromium. The
+  story, the maker and the Mac guide suites now also run in WebKit (on Linux and macOS) and
+  in Firefox on every push. Almost everything that failed at first was a test leaning on
+  Chromium's automation. One real fault turned up, in the maker under WebKit: pressing
+  Create without a name could scroll the name field out of view. This is the engine in a
+  test harness, not the Safari app on a phone, which stays on the list of things to check
+  on a real device.
 - **Accepted, not changed.** A person without a contact name whose handle is an e-mail
   address shows as the part before the `@` (up to 16 characters), which can be a full name;
   and two people who share a first name and an initial are shown with their full contact

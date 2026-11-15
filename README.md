@@ -105,10 +105,11 @@ is in [docs/DECISIONS.md](docs/DECISIONS.md) and the notes behind it in
 Almost everything was built and tested without a real iPhone or Mac at hand: on Linux, and
 on GitHub's macOS runners for the Apple parts. The one exception is the Mac app, which its
 owner set up by clicking on their own Mac and which answered `/wrapped` in a real group
-chat. That is one Mac on one version of macOS. The web pages were driven in Chromium only,
-not Safari. [STATUS.md](STATUS.md) lists exactly what has been seen working, what has only
-been tested against invented data, and short checks for the things only a real device can
-confirm.
+chat. That is one Mac on one version of macOS. The web pages pass their tests in Chromium,
+in WebKit (the engine behind Safari) and in Firefox, but nobody has yet opened a recap in
+Safari on a real iPhone. [STATUS.md](STATUS.md) lists exactly what has been seen working,
+what has only been tested against invented data, and short checks for the things only a
+real device can confirm.
 
 ## For developers
 
@@ -146,7 +147,8 @@ wrapped chats            # list your group chats
 wrapped link "Dinner Club" --year 2026     # print the recap link; add --quotes to include message text
 ```
 
-CI runs on every push: the web story and maker on Linux, both engines on Linux and macOS
+CI runs on every push: the web story, the maker and the Mac guide page in Chromium, WebKit
+and Firefox (`BROWSER=webkit npm run test:e2e` picks one), both stats engines on Linux and macOS
 (including a check against text archived by Apple's own code), the Mac app and the
 command-line helper on macOS, and the iPhone app in the iOS Simulator. A push to `main`
 that changes `web/` republishes the site, and one that changes the Mac app publishes a new
