@@ -1,6 +1,6 @@
 Threadback for Mac: results of the CI run
-Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43715832122
-Commit: 84031af2debe3172e9b2b2e64c4d749c3d8cc5eb
+Run:    https://github.com/averyhsu/imessage-wrap/actions/runs/43717699614
+Commit: 5739a9fbb87eb8000cccbc5efb4761dff90bace9
 All data is invented (tests/fixtures/build_fixture.py). Nothing was sent anywhere.
 
 == Runner
@@ -9,15 +9,15 @@ arch arm64; user runner (501); HOME=/Users/runner
 Xcode 26.6 Build version 17F113 
 csrutil status: System Integrity Protection status: disabled. 
 csrutil authenticated-root: Authenticated Root status: enabled 
-this shell: pid 1308, parents: /Users/runner/actions-runner/cached/bin/Runner.Worker <- /Users/runner/actions-runner/cached/bin/Runner.Listener
+this shell: pid 1994, parents: /Users/runner/actions-runner/cached/bin/Runner.Worker <- /Users/runner/actions-runner/cached/bin/Runner.Listener
 ~/Library/Messages before anything ran:
 total 1432
 drwxrwxrwx   8 runner  staff     256 Nov  1 20:03 .
-drwx------@ 82 runner  staff    2624 Nov 15 04:49 ..
+drwx------@ 82 runner  staff    2624 Nov 15 05:10 ..
 	com.apple.FinderInfo	    32 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
--rw-r--r--   1 runner  staff   32768 Nov 15 04:49 chat.db-shm
--rw-r--r--   1 runner  staff  646872 Nov 15 04:49 chat.db-wal
+-rw-r--r--   1 runner  staff   32768 Nov 15 05:09 chat.db-shm
+-rw-r--r--   1 runner  staff  646872 Nov 15 05:09 chat.db-wal
 drwxrwxrwx   4 runner  staff     128 Nov  1 20:03 CollaborationNoticeCache
 drwxrwxrwx  23 runner  staff     736 Nov  1 20:03 NickNameCache
 drwxr-xr-x   5 runner  staff     160 Nov  1 20:03 Sync
@@ -117,11 +117,11 @@ NSContactsUsageDescription="Optional: so the recap shows first names like "Sam" 
 Gatekeeper assessment (spctl): /Users/runner/work/_temp/tb/DerivedData/Build/Products/Debug/Threadback.app: rejected 
 
 == Proof 2: stats from the app (JavaScriptCore + system SQLite) vs python3 -m wrapped stats --compact
-IDENTICAL taco-2026: 3072 bytes, sha256 a93a2344a22dbe4f, 0.39 s
-IDENTICAL bookclub-all-berlin-nocontacts: 2540 bytes, sha256 7e46fba1c0ff6351, 0.05 s
-IDENTICAL longname-2026-tokyo-fullnames: 8867 bytes, sha256 411a4bc09981055e, 0.17 s
-IDENTICAL bookclub-by-name-all: 2499 bytes, sha256 8edaef3dff88cd6a, 0.06 s
-IDENTICAL unnamed-2025-newyork-empty: 816 bytes, sha256 6ddbdcb5bd9462eb, 0.07 s
+IDENTICAL taco-2026: 3072 bytes, sha256 a93a2344a22dbe4f, 0.64 s
+IDENTICAL bookclub-all-berlin-nocontacts: 2540 bytes, sha256 7e46fba1c0ff6351, 0.08 s
+IDENTICAL longname-2026-tokyo-fullnames: 8867 bytes, sha256 411a4bc09981055e, 0.31 s
+IDENTICAL bookclub-by-name-all: 2499 bytes, sha256 8edaef3dff88cd6a, 0.07 s
+IDENTICAL unnamed-2025-newyork-empty: 816 bytes, sha256 6ddbdcb5bd9462eb, 0.10 s
 RESULT: 5/5 byte-identical
 chat list from the app:
      1      3712        7  Taco Tuesday Crew 🌮
@@ -131,7 +131,7 @@ chat list from the app:
 
 == Proof 3: dry-run reply vs the Python helper for the same chat (the story site is live: card, text, link)
 Preview for "Taco Tuesday Crew 🌮" (nothing was sent): /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run
-Saved in /Users/runner/work/_temp/tb/swift-preview/20261115-045103-taco-tuesday-crew
+Saved in /Users/runner/work/_temp/tb/swift-preview/20261115-051258-taco-tuesday-crew
 files: link.txt recap.txt threadback-taco-tuesday-crew-2026.png 
 TEXT IDENTICAL to the Python helper's recap.txt (with the link)
 --- recap.txt (app) ---
@@ -158,59 +158,59 @@ Done: 0 command(s) answered.
 8014
 approved (frozen by id): Taco Tuesday Crew 🌮 [chat100000000000000001]
 log: /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run
-would send file to chat100000000000000001: /Users/runner/work/_temp/tb/agent-app/out/20261115-045110-taco-tuesday-crew/threadback-taco-tuesday-crew-2026.png
+would send file to chat100000000000000001: /Users/runner/work/_temp/tb/agent-app/out/20261115-051306-taco-tuesday-crew/threadback-taco-tuesday-crew-2026.png
 would send text to chat100000000000000001: 356 characters
-would send text to chat100000000000000001: 1661 characters
+would send text to chat100000000000000001: 1659 characters
 Done: 1 command(s) answered.
-Saved in /Users/runner/work/_temp/tb/agent-app/out/20261115-045110-taco-tuesday-crew
+Saved in /Users/runner/work/_temp/tb/agent-app/out/20261115-051306-taco-tuesday-crew
 approved (frozen by id): Taco Tuesday Crew 🌮 [chat100000000000000001]
 Done: 0 command(s) answered.
 8014
 Done: 1 command(s) answered.
-Wrote /Users/runner/work/_temp/tb/agent-py/out/20261115-045111-taco-tuesday-crew
+Wrote /Users/runner/work/_temp/tb/agent-py/out/20261115-051307-taco-tuesday-crew
 AGENT TEXT IDENTICAL (app vs Python helper, both answering the same typed /wrapped 2026, with the link)
-AGENT LINK starts with https://averyhsu.github.io/imessage-wrap/#w1= (1661 characters)
+AGENT LINK starts with https://averyhsu.github.io/imessage-wrap/#w1= (1659 characters)
 
 == The card (web/js/card.js drawn by WebKit inside the app, 1080 x 1350)
-OK   card chat1-2026: 840525 bytes, 2225 ms
-OK   card chat1-all: 838728 bytes, 518 ms
-OK   card chat5-2026: 901983 bytes, 90 ms
-OK   card chat5-all: 900913 bytes, 56 ms
-OK   card chat4-2026: 878638 bytes, 41 ms
-OK   card chat4-all: 877745 bytes, 38 ms
-OK   card chat3-2026: 965707 bytes, 43 ms
-OK   card chat3-all: 966644 bytes, 42 ms
-OK   card long-name: 848714 bytes, 59 ms
-OK   card hostile-name: 834889 bytes, 63 ms
-OK   card empty-name: 818397 bytes, 42 ms
-OK   card one-message-no-senders: 1008418 bytes, 49 ms
+OK   card chat1-2026: 840525 bytes, 2528 ms
+OK   card chat1-all: 838728 bytes, 600 ms
+OK   card chat5-2026: 901983 bytes, 114 ms
+OK   card chat5-all: 900913 bytes, 70 ms
+OK   card chat4-2026: 878638 bytes, 49 ms
+OK   card chat4-all: 877745 bytes, 45 ms
+OK   card chat3-2026: 965707 bytes, 51 ms
+OK   card chat3-all: 966644 bytes, 49 ms
+OK   card long-name: 848714 bytes, 55 ms
+OK   card hostile-name: 834889 bytes, 64 ms
+OK   card empty-name: 818397 bytes, 49 ms
+OK   card one-message-no-senders: 1008418 bytes, 53 ms
 cards: 12/12 passed
-OK   card after a WebKit process crash: 840526 bytes, 314 ms
+OK   card after a WebKit process crash: 840526 bytes, 375 ms
 OK   a page that does not load falls back to the native card (1080x810)
-OK   card chat3-2026: 950886 bytes, 2176 ms
-OK   card chat3-all: 949906 bytes, 600 ms
-OK   card chat5-2026: 953255 bytes, 42 ms
-OK   card chat5-all: 952450 bytes, 40 ms
-OK   card chat1-2026: 949171 bytes, 41 ms
-OK   card chat1-all: 948214 bytes, 40 ms
-OK   card chat2-2026: 951812 bytes, 40 ms
-OK   card chat2-all: 950933 bytes, 40 ms
-OK   card chat4-2026: 951389 bytes, 41 ms
-OK   card chat4-all: 950346 bytes, 40 ms
-OK   card chat6-2026: 950581 bytes, 39 ms
-OK   card chat6-all: 949782 bytes, 40 ms
-OK   card chat8-2026: 953577 bytes, 41 ms
-OK   card chat8-all: 952791 bytes, 41 ms
-OK   card chat9-2026: 960911 bytes, 60 ms
-OK   card chat9-all: 959901 bytes, 66 ms
-OK   card chat7-2026: 1078188 bytes, 55 ms
-OK   card chat7-all: 1077190 bytes, 47 ms
-OK   card long-name: 982780 bytes, 143 ms
-OK   card hostile-name: 971526 bytes, 53 ms
-OK   card empty-name: 953015 bytes, 41 ms
-OK   card one-message-no-senders: 1005716 bytes, 49 ms
+OK   card chat3-2026: 950886 bytes, 2398 ms
+OK   card chat3-all: 949906 bytes, 640 ms
+OK   card chat5-2026: 953255 bytes, 46 ms
+OK   card chat5-all: 952450 bytes, 44 ms
+OK   card chat1-2026: 949171 bytes, 46 ms
+OK   card chat1-all: 948214 bytes, 45 ms
+OK   card chat2-2026: 951812 bytes, 46 ms
+OK   card chat2-all: 950933 bytes, 44 ms
+OK   card chat4-2026: 951389 bytes, 46 ms
+OK   card chat4-all: 950346 bytes, 45 ms
+OK   card chat6-2026: 950581 bytes, 44 ms
+OK   card chat6-all: 949782 bytes, 46 ms
+OK   card chat8-2026: 953577 bytes, 44 ms
+OK   card chat8-all: 952791 bytes, 44 ms
+OK   card chat9-2026: 960911 bytes, 65 ms
+OK   card chat9-all: 959901 bytes, 54 ms
+OK   card chat7-2026: 1078188 bytes, 51 ms
+OK   card chat7-all: 1077190 bytes, 51 ms
+OK   card long-name: 982780 bytes, 174 ms
+OK   card hostile-name: 971526 bytes, 61 ms
+OK   card empty-name: 953015 bytes, 46 ms
+OK   card one-message-no-senders: 1005716 bytes, 58 ms
 cards: 22/22 passed
-OK   card after a WebKit process crash: 950899 bytes, 231 ms
+OK   card after a WebKit process crash: 950899 bytes, 283 ms
 OK   a page that does not load falls back to the native card (1080x810)
 
 == Commands (the whole message only; /wrapped, /recap, a year, all)
@@ -232,57 +232,57 @@ on send_reply(chatGuid, messageText, filePath)
 end send_reply
 
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackTests -resultBundlePath /Users/runner/work/_temp/tb/out/Unit.xcresult
-xcodebuild exited with status 0 after 16s (127 log lines in /Users/runner/work/_temp/tb/out/logs/unit.log)
+xcodebuild exited with status 0 after 13s (127 log lines in /Users/runner/work/_temp/tb/out/logs/unit.log)
 ---- highlights ----
 WRAPPED_NOTE agent log: first run: starting after message row 8013; older commands are ignored || /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run || ignored /wrapped in "Taco Tuesday Crew 🌮": cooling down (120 s left) || ignored /wrapped in a group chat that is not in the approved list (id ending 0002); set it up again to add it || ignored a /wrapped that is 20 min old (row 8017) || ignored a /wrapped dated 3599 s in the future (row 8018)
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (1.168 seconds).
-Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.021 seconds).
-Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (1.061 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.383 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.002 seconds).
+Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.345 seconds).
 WRAPPED_NOTE consent: Turn on Threadback for “Taco Tuesday Crew”? | When anyone in this chat types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link.
-Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.073 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.718 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.667 seconds).
+Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.065 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.286 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.248 seconds).
 WRAPPED_NOTE dry run wrote: link.txt, recap.txt, threadback-taco-tuesday-crew-2026.png
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.249 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.230 seconds).
 Test Case '-[ThreadbackTests.AgentTests testIdFormIsACategory]' passed (0.002 seconds).
 Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.308 seconds).
+Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.259 seconds).
 Test Case '-[ThreadbackTests.AgentTests testOldStateFileStillLoads]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (1.074 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (0.816 seconds).
 WRAPPED_NOTE outgoing row: sent true, delivered false, attachment names ["threadback-card-1.png", "threadback-card-1.png"]
-Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.020 seconds).
-Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.282 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.238 seconds).
-Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.352 seconds).
-WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T12:51:37Z)
-Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.381 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.635 seconds).
-Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.004 seconds).
-Test Suite 'AgentTests' passed at 2026-11-15 12:51:38.091.
-	 Executed 19 tests, with 0 failures (0 unexpected) in 8.259 (8.266) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.032 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.024 seconds).
+Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.250 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.240 seconds).
+Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.353 seconds).
+WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:13:31Z)
+Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.302 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.577 seconds).
+Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.003 seconds).
+Test Suite 'AgentTests' passed at 2026-11-15 13:13:32.078.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 5.390 (5.396) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.034 seconds).
 WRAPPED_NOTE JavaScriptCore: TextDecoder is function (TextDecoder); Intl in Asia/Tokyo at epoch: 09; engine wrapped/1
-Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.012 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.011 seconds).
 WRAPPED_NOTE link: 1692 characters; RecapLink decodes Taco Tuesday Crew 🌮 · 2026 in review, 2,869 messages
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.233 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.183 seconds).
 WRAPPED_NOTE listChats: Taco Tuesday Crew 🌮 (3712) | The Extremely Long-Named Group Chat Of Unreasonable Proportions ✨🪩🎉 (est. 2019) … (645) | Bram, Sam, …0007 & 1 more (447) | Book Club 📚 (29)
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.023 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.019 seconds).
 WRAPPED_NOTE recap text identical to the Python helper: no link true, with link true
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.250 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.168 seconds).
 WRAPPED_NOTE parity taco-2026: IDENTICAL (3071 bytes vs 3071)
 WRAPPED_NOTE parity bookclub-all-berlin-nocontacts: IDENTICAL (2539 bytes vs 2539)
 WRAPPED_NOTE parity longname-2026-tokyo-fullnames: IDENTICAL (8866 bytes vs 8866)
 WRAPPED_NOTE parity bookclub-by-name-all: IDENTICAL (2498 bytes vs 2498)
 WRAPPED_NOTE parity unnamed-2025-newyork-empty: IDENTICAL (815 bytes vs 815)
 WRAPPED_NOTE parity: 5/5 cases byte-identical to Python
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.484 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.008 seconds).
-Test Suite 'EngineTests' passed at 2026-11-15 12:51:39.136.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 1.042 (1.045) seconds
-Test Suite 'ThreadbackTests.xctest' passed at 2026-11-15 12:51:39.136.
-	 Executed 26 tests, with 0 failures (0 unexpected) in 9.301 (9.312) seconds
-Test Suite 'All tests' passed at 2026-11-15 12:51:39.136.
-	 Executed 26 tests, with 0 failures (0 unexpected) in 9.301 (9.313) seconds
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.350 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.009 seconds).
+Test Suite 'EngineTests' passed at 2026-11-15 13:13:32.854.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.774 (0.776) seconds
+Test Suite 'ThreadbackTests.xctest' passed at 2026-11-15 13:13:32.855.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 6.164 (6.173) seconds
+Test Suite 'All tests' passed at 2026-11-15 13:13:32.855.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 6.164 (6.174) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 == Proof 6a: direct read, before any grant
@@ -309,22 +309,22 @@ sqlite.inplace: ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 3360 uid 501",
+  "process" : "Threadback pid 5220 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-15T12:51:40Z"
+  "time" : "2026-11-15T13:13:33Z"
 }-- open Messages once (not signed in) to see whether it creates ~/Library/Messages
 total 1464
-drwxrwxrwx  10 runner  staff     320 Nov 15 04:51 .
-drwx------@ 83 runner  staff    2656 Nov 15 04:50 ..
+drwxrwxrwx  10 runner  staff     320 Nov 15 05:13 .
+drwx------@ 84 runner  staff    2688 Nov 15 05:12 ..
 	com.apple.FinderInfo	    32 
-drwxr-xr-x@  3 runner  staff      96 Nov 15 04:51 Attachments
+drwxr-xr-x@  3 runner  staff      96 Nov 15 05:13 Attachments
 	com.apple.quarantine	    23 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
--rw-r--r--   1 runner  staff   32768 Nov 15 04:49 chat.db-shm
--rw-r--r--   1 runner  staff  663352 Nov 15 04:51 chat.db-wal
+-rw-r--r--   1 runner  staff   32768 Nov 15 05:09 chat.db-shm
+-rw-r--r--   1 runner  staff  663352 Nov 15 05:13 chat.db-wal
 drwxrwxrwx   4 runner  staff     128 Nov  1 20:03 CollaborationNoticeCache
-drwxr-xr-x@  2 runner  staff      64 Nov 15 04:51 Drafts
+drwxr-xr-x@  2 runner  staff      64 Nov 15 05:13 Drafts
 	com.apple.quarantine	    23 
 drwxrwxrwx  23 runner  staff     736 Nov  1 20:03 NickNameCache
 drwxr-xr-x   5 runner  staff     160 Nov  1 20:03 Sync
@@ -353,377 +353,370 @@ sqlite.inplace: ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 4484 uid 501",
+  "process" : "Threadback pid 5819 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-15T12:52:08Z"
+  "time" : "2026-11-15T13:14:02Z"
 }
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/OnboardingUITests -resultBundlePath /Users/runner/work/_temp/tb/out/Onboarding.xcresult
-xcodebuild exited with status 0 after 44s (206 log lines in /Users/runner/work/_temp/tb/out/logs/onboarding.log)
+xcodebuild exited with status 0 after 51s (209 log lines in /Users/runner/work/_temp/tb/out/logs/onboarding.log)
 ---- highlights ----
 WRAPPED_NOTE onboarding: Connected: 4 group chats, 4,833 messages.
 WRAPPED_NOTE consent sheet: Turn on Threadback for “Book Club 📚”? | When anyone in this chat types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link. |  | Anyone in the chat can trigger it, at most once every 2 minutes. |  | The link opens the recap (the chat’s name, first names and counts; no message text) for anyone it is forwarded to.
 WRAPPED_NOTE preview text: 🧵 Book Club 📚 — 2026 in review | 💬 21 messages · 8 active days | 🤫 You are The Quiet Ones — peak hour 12 PM | 🥇 Nora 38% · 🥈 Amara 33% · 🥉 …0012 29% | 🏆 Yapper: Nora · Lurker: …0012 · Night Owl: Amara | ❤️ 10 tapbacks · most generous: Amara | 📅 Busiest day: Jul 4 (7 messages) | 👇 The full story is in the link below (Threadback) |  | https://averyhsu.github.io/imessage-wrap/#w1=nVbLbtNAFP2V0aydYDtJG7IDJMQCykNsEELROJ7GQ2xPsMcNIYrElhUgFkhsuqjUHXsk_qY_QD-Bc8eOY7sPJJpWcmbO3HPm3nOvu-EnfOI5fBYJwycbnopE8gm_r_WCPYiLgF2efvvBHZ7IJJBZzieDrcOXMlM6JHgsAhkD77v-AVC5ERnC2K8918MvFmUKaLnkeT1vxBHBaCNiRNsgcJ6LucSzDxkrnYV49Aa-w4UxYhYlMjVE6_BMiplROqV91-GhWOdTWjmB4LHDY50ijJnmBsAFwoEmWE8jX
 WRAPPED_NOTE story window after loading: Book Club 📚 · story · slide 1 of 12
 WRAPPED_NOTE story window after the right arrow: Book Club 📚 · story · slide 2 of 12
-WRAPPED_NOTE test report copied by the app: Threadback test report (2026-11-15T12:52:52Z) | App: 0.1.0 (1), commit 84031af, signature ad-hoc | macOS: Version 26.7.2 (Build 25G332), Apple silicon (arm64) | Running from: somewhere else | Messages folder: |   direct read before Grant Access: not tried |   read after Grant Access: not tried |   chat.db-wal readable: not tried |   access method: fixture |   bookmark on this launch: not used |   read now: ok | Counts: 4 group chats, 4833 messages | Contacts: notDetermined | Automation (control Messages): not asked | Login item: notFound | Link in replies: on | Chats turned on: 1 | Watching for new messages: on (file events, safety check every minu
+WRAPPED_NOTE test report copied by the app: Threadback test report (2026-11-15T13:14:54Z) | App: 0.1.0 (1), commit 5739a9f, signature ad-hoc | macOS: Version 26.7.2 (Build 25G332), Apple silicon (arm64) | Running from: somewhere else | Messages folder: |   direct read before Grant Access: not tried |   read after Grant Access: not tried |   chat.db-wal readable: not tried |   access method: fixture |   bookmark on this launch: not used |   read now: ok | Counts: 4 group chats, 4833 messages | Contacts: notDetermined | Automation (control Messages): not asked | Login item: notFound | Link in replies: on | Chats turned on: 1 | Watching for new messages: on (file events, safety check every minu
 WRAPPED_NOTE closing the window says: ["Threadback keeps answering from the menu bar.", "To stop it, open Threadback again (from Applications) and click Turn off or Quit Threadback."]
-Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (36.815 seconds).
-Test Suite 'OnboardingUITests' passed at 2026-11-15 12:52:58.068.
-	 Executed 1 test, with 0 failures (0 unexpected) in 36.815 (36.817) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 12:52:58.069.
-Test Suite 'Selected tests' passed at 2026-11-15 12:52:58.069.
-	 Executed 1 test, with 0 failures (0 unexpected) in 36.815 (36.818) seconds
+Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (38.275 seconds).
+Test Suite 'OnboardingUITests' passed at 2026-11-15 13:14:59.795.
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.278) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:14:59.795.
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.279) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:14:59.796.
+	 Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.281) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/LifecycleUITests -resultBundlePath /Users/runner/work/_temp/tb/out/Lifecycle.xcresult
-xcodebuild exited with status 0 after 179s (772 log lines in /Users/runner/work/_temp/tb/out/logs/lifecycle.log)
+xcodebuild exited with status 0 after 186s (760 log lines in /Users/runner/work/_temp/tb/out/logs/lifecycle.log)
 ---- highlights ----
 WRAPPED_NOTE lifecycle: window closed before setup -> state 1 (1 = not running)
-Test Case '-[ThreadbackUITests.LifecycleUITests test1_ClosingTheWindowBeforeSetupQuits]' passed (3.900 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test2_QuitButtonQuits]' passed (3.135 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test3_CommandQQuits]' passed (3.619 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test1_ClosingTheWindowBeforeSetupQuits]' passed (4.021 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test2_QuitButtonQuits]' passed (3.234 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test3_CommandQQuits]' passed (3.289 seconds).
 WRAPPED_NOTE lifecycle: with a chat on, after closing the window: state 3, windows 0
 WRAPPED_NOTE lifecycle: opened again -> On.; uninstall line present: true
-Test Case '-[ThreadbackUITests.LifecycleUITests test4_WithAChatOnItKeepsRunningAndOpeningAgainShowsTheWindow]' passed (19.000 seconds).
-WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true
+Test Case '-[ThreadbackUITests.LifecycleUITests test4_WithAChatOnItKeepsRunningAndOpeningAgainShowsTheWindow]' passed (19.121 seconds).
+WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE menu-bar notice (second close): not shown
-WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 84031af
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.699 seconds).
+WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 5739a9f
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.451 seconds).
 WRAPPED_NOTE after a relaunch: Paused.
 WRAPPED_NOTE replies-changed sheet: Replies in “Book Club 📚” now include a link | Since you turned this chat on, Threadback’s replies changed: each reply is now three messages from your Apple ID, a picture, a short text and a link. |  | The link opens the recap (the chat’s name, first names and counts; no message text) for anyone it is forwarded to. |  | Nothing is sent in this chat until you choose.
-Test Case '-[ThreadbackUITests.LifecycleUITests test6_PauseLastsAcrossARelaunchAndAChangedReplyAsksAgain]' passed (26.710 seconds).
-WRAPPED_NOTE single instance: first copy pid 8980 alive true; second copy pid 9303 quit true; copies now 1
+Test Case '-[ThreadbackUITests.LifecycleUITests test6_PauseLastsAcrossARelaunchAndAChangedReplyAsksAgain]' passed (26.659 seconds).
+WRAPPED_NOTE single instance: first copy pid 10832 alive true; second copy pid 11161 quit true; copies now 1
 WRAPPED_NOTE after a second copy launched with the reset flag: On.
-Test Case '-[ThreadbackUITests.LifecycleUITests test7_ASecondCopyShowsTheFirstAndQuits]' passed (51.905 seconds).
-WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true
+Test Case '-[ThreadbackUITests.LifecycleUITests test7_ASecondCopyShowsTheFirstAndQuits]' passed (52.287 seconds).
+WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE walk: 1 notice(s) dismissed; sheets after the second chat's consent 0; sheets over the status window 0
-Test Case '-[ThreadbackUITests.LifecycleUITests test8_ASecondCloseRequestNeverStacksASecondNotice]' passed (31.126 seconds).
-Test Suite 'LifecycleUITests' passed at 2026-11-15 12:55:56.812.
-	 Executed 8 tests, with 0 failures (0 unexpected) in 174.094 (174.100) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 12:55:56.814.
-	 Executed 8 tests, with 0 failures (0 unexpected) in 174.094 (174.102) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 12:55:56.814.
+Test Case '-[ThreadbackUITests.LifecycleUITests test8_ASecondCloseRequestNeverStacksASecondNotice]' passed (33.866 seconds).
+Test Suite 'LifecycleUITests' passed at 2026-11-15 13:18:05.697.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.934) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:18:05.698.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.935) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:18:05.698.
+	 Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.937) seconds
 ** TEST EXECUTE SUCCEEDED **
 
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/LifecycleUITests/test5_TwoChatsAddTurnOffPause -test-iterations 5 -run-tests-until-failure -resultBundlePath /Users/runner/work/_temp/tb/out/LifecycleRepeat.xcresult
-xcodebuild exited with status 0 after 176s (1046 log lines in /Users/runner/work/_temp/tb/out/logs/lifecycle-repeat.log)
+xcodebuild exited with status 0 after 194s (990 log lines in /Users/runner/work/_temp/tb/out/logs/lifecycle-repeat.log)
 ---- highlights ----
-WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true
+WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE menu-bar notice (second close): not shown
-WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 84031af
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.126 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (33.646 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.056 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (33.887 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.674 seconds).
-Test Suite 'LifecycleUITests' passed at 2026-11-15 12:58:52.927.
-	 Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.396) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 12:58:52.928.
-	 Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.397) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 12:58:52.929.
-	 Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.399) seconds
+WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 5739a9f
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (38.001 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (35.954 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.146 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.834 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.997 seconds).
+Test Suite 'LifecycleUITests' passed at 2026-11-15 13:21:20.168.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.936) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:21:20.169.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.937) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:21:20.170.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.938) seconds
 ** TEST EXECUTE SUCCEEDED **
 
-== Lifecycle trace (TBTRACE lines from the Debug app, since 2026-11-15 04:52:58)
-12:53:03.348 pid 6145: launch: lock held
-12:53:03.405 pid 6145: settings: reset true, told about the menu bar false
-12:53:03.616 pid 6145: finished launching: chat on false, told about the menu bar false
-12:53:05.164 pid 6145: close asked: chat on false, told false, notice pending false, sheets on the window 0
-12:53:05.165 pid 6145: window closes: chat on false
-12:53:05.194 pid 6145: window closes: chat on false
-12:53:06.827 pid 6366: launch: lock held
-12:53:06.864 pid 6366: settings: reset true, told about the menu bar false
-12:53:06.979 pid 6366: finished launching: chat on false, told about the menu bar false
-12:53:08.642 pid 6366: window closes: chat on false
-12:53:09.992 pid 6373: launch: lock held
-12:53:10.050 pid 6373: settings: reset true, told about the menu bar false
-12:53:10.247 pid 6373: finished launching: chat on false, told about the menu bar false
-12:53:11.941 pid 6373: window closes: chat on false
-12:53:13.600 pid 6383: launch: lock held
-12:53:13.640 pid 6383: settings: reset true, told about the menu bar false
-12:53:13.817 pid 6383: finished launching: chat on false, told about the menu bar false
-12:53:19.281 pid 6383: a sheet begins on threadback.main; sheets now 0
-12:53:21.011 pid 6383: a sheet ended on threadback.main; sheets now 0
-12:53:22.561 pid 6383: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:53:22.604 pid 6383: a sheet begins on threadback.main; sheets now 0
-12:53:26.157 pid 6383: menu-bar notice answered: OK
-12:53:26.157 pid 6383: window closes: chat on true
-12:53:26.178 pid 6383: a sheet ended on threadback.main; sheets now 0
-12:53:29.597 pid 6383: reopen: visible windows false, sheets on the window 0
-12:53:31.109 pid 6383: window closes: chat on true
-12:53:32.653 pid 6977: launch: lock held
-12:53:32.711 pid 6977: settings: reset true, told about the menu bar false
-12:53:32.910 pid 6977: finished launching: chat on false, told about the menu bar false
-12:53:38.024 pid 6977: a sheet begins on threadback.main; sheets now 0
-12:53:39.568 pid 6977: a sheet ended on threadback.main; sheets now 0
-12:53:41.251 pid 6977: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:53:41.285 pid 6977: a sheet begins on threadback.main; sheets now 0
-12:53:44.354 pid 6977: menu-bar notice answered: OK
-12:53:44.354 pid 6977: window closes: chat on true
-12:53:44.440 pid 6977: a sheet ended on threadback.main; sheets now 0
-12:53:47.697 pid 6977: reopen: visible windows false, sheets on the window 0
-12:53:51.829 pid 6977: a sheet begins on threadback.main; sheets now 0
-12:53:53.449 pid 6977: a sheet ended on threadback.main; sheets now 0
-12:53:54.925 pid 6977: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:53:54.925 pid 6977: window closes: chat on true
-12:54:01.116 pid 6977: reopen: visible windows false, sheets on the window 0
-12:54:05.699 pid 6977: window closes: chat on true
-12:54:07.423 pid 7922: launch: lock held
-12:54:07.510 pid 7922: settings: reset true, told about the menu bar false
-12:54:07.825 pid 7922: finished launching: chat on false, told about the menu bar false
-12:54:13.627 pid 7922: a sheet begins on threadback.main; sheets now 0
-12:54:15.300 pid 7922: a sheet ended on threadback.main; sheets now 0
-12:54:18.745 pid 7922: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:54:18.803 pid 7922: a sheet begins on threadback.main; sheets now 0
-12:54:20.392 pid 7922: menu-bar notice answered: OK
-12:54:20.392 pid 7922: window closes: chat on true
-12:54:20.408 pid 7922: a sheet ended on threadback.main; sheets now 0
-12:54:22.580 pid 7922: reopen: visible windows false, sheets on the window 0
-12:54:26.273 pid 8762: launch: lock held
-12:54:26.320 pid 8762: settings: reset false, told about the menu bar true
-12:54:26.540 pid 8762: finished launching: chat on true, told about the menu bar true
-12:54:29.149 pid 8958: launch: lock held
-12:54:29.186 pid 8958: settings: reset false, told about the menu bar true
-12:54:29.324 pid 8958: finished launching: chat on true, told about the menu bar true
-12:54:29.640 pid 8958: a sheet begins on threadback.main; sheets now 0
-12:54:31.641 pid 8958: a sheet ended on threadback.main; sheets now 0
-12:54:34.142 pid 8980: launch: lock held
-12:54:34.184 pid 8980: settings: reset true, told about the menu bar false
-12:54:34.423 pid 8980: finished launching: chat on false, told about the menu bar false
-12:54:40.045 pid 8980: a sheet begins on threadback.main; sheets now 0
-12:54:41.588 pid 8980: a sheet ended on threadback.main; sheets now 0
-12:55:03.064 pid 10000: launch: lock held
-12:55:03.104 pid 10000: settings: reset false, told about the menu bar false
-12:55:03.258 pid 10000: finished launching: chat on true, told about the menu bar false
-12:55:26.063 pid 10943: launch: lock held
-12:55:26.128 pid 10943: settings: reset true, told about the menu bar false
-12:55:26.323 pid 10943: finished launching: chat on false, told about the menu bar false
-12:55:31.638 pid 10943: a sheet begins on threadback.main; sheets now 0
-12:55:33.277 pid 10943: a sheet ended on threadback.main; sheets now 0
-12:55:35.259 pid 10943: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:55:35.317 pid 10943: a sheet begins on threadback.main; sheets now 0
-12:55:37.404 pid 10943: menu-bar notice answered: OK
-12:55:37.404 pid 10943: window closes: chat on true
-12:55:37.445 pid 10943: a sheet ended on threadback.main; sheets now 0
-12:55:40.740 pid 10943: reopen: visible windows false, sheets on the window 0
-12:55:44.865 pid 10943: a sheet begins on threadback.main; sheets now 0
-12:55:46.446 pid 10943: a sheet ended on threadback.main; sheets now 0
-12:55:49.952 pid 10943: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:55:49.952 pid 10943: window closes: chat on true
-12:55:49.972 pid 10943: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:55:52.119 pid 10943: reopen: visible windows false, sheets on the window 0
-12:56:02.991 pid 12127: launch: lock held
-12:56:03.034 pid 12127: settings: reset true, told about the menu bar false
-12:56:03.238 pid 12127: finished launching: chat on false, told about the menu bar false
-12:56:08.571 pid 12127: a sheet begins on threadback.main; sheets now 0
-12:56:10.147 pid 12127: a sheet ended on threadback.main; sheets now 0
-12:56:11.890 pid 12127: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:56:11.943 pid 12127: a sheet begins on threadback.main; sheets now 0
-12:56:14.403 pid 12127: menu-bar notice answered: OK
-12:56:14.403 pid 12127: window closes: chat on true
-12:56:14.413 pid 12127: a sheet ended on threadback.main; sheets now 0
-12:56:17.589 pid 12127: reopen: visible windows false, sheets on the window 0
-12:56:21.574 pid 12127: a sheet begins on threadback.main; sheets now 0
-12:56:23.083 pid 12127: a sheet ended on threadback.main; sheets now 0
-12:56:24.559 pid 12127: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:56:24.559 pid 12127: window closes: chat on true
-12:56:30.780 pid 12127: reopen: visible windows false, sheets on the window 0
-12:56:35.368 pid 12127: window closes: chat on true
-12:56:36.902 pid 13412: launch: lock held
-12:56:36.949 pid 13412: settings: reset true, told about the menu bar false
-12:56:37.178 pid 13412: finished launching: chat on false, told about the menu bar false
-12:56:42.389 pid 13412: a sheet begins on threadback.main; sheets now 0
-12:56:43.942 pid 13412: a sheet ended on threadback.main; sheets now 0
-12:56:45.766 pid 13412: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:56:45.795 pid 13412: a sheet begins on threadback.main; sheets now 0
-12:56:48.169 pid 13412: menu-bar notice answered: OK
-12:56:48.169 pid 13412: window closes: chat on true
-12:56:48.186 pid 13412: a sheet ended on threadback.main; sheets now 0
-12:56:51.395 pid 13412: reopen: visible windows false, sheets on the window 0
-12:56:55.408 pid 13412: a sheet begins on threadback.main; sheets now 0
-12:56:56.944 pid 13412: a sheet ended on threadback.main; sheets now 0
-12:56:58.391 pid 13412: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:56:58.391 pid 13412: window closes: chat on true
-12:57:04.670 pid 13412: reopen: visible windows false, sheets on the window 0
-12:57:09.084 pid 13412: window closes: chat on true
-12:57:10.599 pid 14601: launch: lock held
-12:57:10.641 pid 14601: settings: reset true, told about the menu bar false
-12:57:10.778 pid 14601: finished launching: chat on false, told about the menu bar false
-12:57:15.893 pid 14601: a sheet begins on threadback.main; sheets now 0
-12:57:17.480 pid 14601: a sheet ended on threadback.main; sheets now 0
-12:57:19.320 pid 14601: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:57:19.349 pid 14601: a sheet begins on threadback.main; sheets now 0
-12:57:21.888 pid 14601: menu-bar notice answered: OK
-12:57:21.888 pid 14601: window closes: chat on true
-12:57:21.914 pid 14601: a sheet ended on threadback.main; sheets now 0
-12:57:25.178 pid 14601: reopen: visible windows false, sheets on the window 0
-12:57:29.346 pid 14601: a sheet begins on threadback.main; sheets now 0
-12:57:30.923 pid 14601: a sheet ended on threadback.main; sheets now 0
-12:57:32.368 pid 14601: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:57:32.369 pid 14601: window closes: chat on true
-12:57:38.498 pid 14601: reopen: visible windows false, sheets on the window 0
-12:57:43.031 pid 14601: window closes: chat on true
-12:57:44.701 pid 15692: launch: lock held
-12:57:44.768 pid 15692: settings: reset true, told about the menu bar false
-12:57:45.003 pid 15692: finished launching: chat on false, told about the menu bar false
-12:57:50.451 pid 15692: a sheet begins on threadback.main; sheets now 0
-12:57:52.036 pid 15692: a sheet ended on threadback.main; sheets now 0
-12:57:53.714 pid 15692: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:57:53.749 pid 15692: a sheet begins on threadback.main; sheets now 0
-12:57:55.998 pid 15692: menu-bar notice answered: OK
-12:57:55.998 pid 15692: window closes: chat on true
-12:57:56.014 pid 15692: a sheet ended on threadback.main; sheets now 0
-12:57:59.240 pid 15692: reopen: visible windows false, sheets on the window 0
-12:58:03.351 pid 15692: a sheet begins on threadback.main; sheets now 0
-12:58:04.861 pid 15692: a sheet ended on threadback.main; sheets now 0
-12:58:06.376 pid 15692: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:58:06.376 pid 15692: window closes: chat on true
-12:58:12.730 pid 15692: reopen: visible windows false, sheets on the window 0
-12:58:17.077 pid 15692: window closes: chat on true
-12:58:18.522 pid 17118: launch: lock held
-12:58:18.577 pid 17118: settings: reset true, told about the menu bar false
-12:58:18.763 pid 17118: finished launching: chat on false, told about the menu bar false
-12:58:23.869 pid 17118: a sheet begins on threadback.main; sheets now 0
-12:58:25.522 pid 17118: a sheet ended on threadback.main; sheets now 0
-12:58:27.511 pid 17118: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:58:27.566 pid 17118: a sheet begins on threadback.main; sheets now 0
-12:58:30.271 pid 17118: menu-bar notice answered: OK
-12:58:30.271 pid 17118: window closes: chat on true
-12:58:30.287 pid 17118: a sheet ended on threadback.main; sheets now 0
-12:58:33.574 pid 17118: reopen: visible windows false, sheets on the window 0
-12:58:37.798 pid 17118: a sheet begins on threadback.main; sheets now 0
-12:58:39.429 pid 17118: a sheet ended on threadback.main; sheets now 0
-12:58:40.921 pid 17118: close asked: chat on true, told true, notice pending false, sheets on the window 0
-12:58:40.921 pid 17118: window closes: chat on true
-12:58:47.177 pid 17118: reopen: visible windows false, sheets on the window 0
-12:58:51.713 pid 17118: window closes: chat on true
-12:58:57.840 pid 18468: launch: lock held
-12:58:57.881 pid 18468: settings: reset true, told about the menu bar false
-12:58:58.070 pid 18468: finished launching: chat on false, told about the menu bar false
-12:59:03.222 pid 18468: a sheet begins on threadback.main; sheets now 0
-12:59:04.764 pid 18468: a sheet ended on threadback.main; sheets now 0
-12:59:06.444 pid 18468: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:59:06.474 pid 18468: a sheet begins on threadback.main; sheets now 0
-12:59:09.624 pid 18468: reopen: visible windows true, sheets on the window 1
-12:59:40.719 pid 20075: launch: lock held
-12:59:40.779 pid 20075: settings: reset true, told about the menu bar false
-12:59:41.001 pid 20075: finished launching: chat on false, told about the menu bar false
-12:59:46.355 pid 20075: a sheet begins on threadback.main; sheets now 0
-12:59:48.025 pid 20075: a sheet ended on threadback.main; sheets now 0
-12:59:49.860 pid 20075: close asked: chat on true, told false, notice pending false, sheets on the window 0
-12:59:49.905 pid 20075: a sheet begins on threadback.main; sheets now 0
-12:59:52.674 pid 20075: menu-bar notice (legacy) answered: OK
-12:59:52.674 pid 20075: window closes: chat on true
-12:59:52.693 pid 20075: a sheet ended on threadback.main; sheets now 0
-12:59:55.916 pid 20075: reopen: visible windows false, sheets on the window 0
-13:00:00.156 pid 20075: a sheet begins on threadback.main; sheets now 0
-13:00:01.826 pid 20075: a sheet ended on threadback.main; sheets now 0
-13:00:05.337 pid 20075: close asked: chat on true, told true, notice pending false, sheets on the window 0
-13:00:05.337 pid 20075: window closes: chat on true
-13:00:07.447 pid 20075: reopen: visible windows false, sheets on the window 0
-13:00:12.280 pid 21406: launch: lock held
-13:00:12.328 pid 21406: settings: reset true, told about the menu bar false
-13:00:12.530 pid 21406: finished launching: chat on false, told about the menu bar false
-13:00:17.627 pid 21406: a sheet begins on threadback.main; sheets now 0
-13:00:19.185 pid 21406: a sheet ended on threadback.main; sheets now 0
-13:00:20.974 pid 21406: close asked: chat on true, told false, notice pending false, sheets on the window 0
-13:00:21.012 pid 21406: a sheet begins on threadback.main; sheets now 0
-13:00:23.329 pid 21406: menu-bar notice (legacy) answered: OK
-13:00:23.329 pid 21406: window closes: chat on true
-13:00:23.345 pid 21406: a sheet ended on threadback.main; sheets now 0
-13:00:26.597 pid 21406: reopen: visible windows false, sheets on the window 0
-13:00:30.863 pid 21406: a sheet begins on threadback.main; sheets now 0
-13:00:32.531 pid 21406: a sheet ended on threadback.main; sheets now 0
-13:00:36.151 pid 21406: close asked: chat on true, told true, notice pending false, sheets on the window 0
-13:00:36.152 pid 21406: window closes: chat on true
-13:00:36.218 pid 21406: close asked: chat on true, told true, notice pending false, sheets on the window 0
-13:00:38.454 pid 21406: reopen: visible windows false, sheets on the window 0
-2026-11-15 13:01:18.241 Df log[23286:11273] [com.apple.log:] log run noninteractively, parent: 23273 (sudo), args: 'log' 'show' '--style' 'compact' '--info' '--start' '2026-11-15 04:52:58' '--predicate' 'eventMessage CONTAINS "TBTRACE"'
+== Lifecycle trace (TBTRACE lines from the Debug app, since 2026-11-15 05:15:00)
+13:15:06.260 pid 7839: launch: lock held
+13:15:06.336 pid 7839: settings: reset true, told about the menu bar false
+13:15:06.631 pid 7839: finished launching: chat on false, told about the menu bar false
+13:15:08.408 pid 7839: close asked: chat on false, told false, notice pending false, sheets on the window 0
+13:15:08.408 pid 7839: window closes: chat on false
+13:15:08.408 pid 7839: quitting: settings flushed true, told about the menu bar false
+13:15:08.411 pid 7839: window closes: chat on false
+13:15:09.976 pid 8121: launch: lock held
+13:15:10.011 pid 8121: settings: reset true, told about the menu bar false
+13:15:10.127 pid 8121: finished launching: chat on false, told about the menu bar false
+13:15:11.906 pid 8121: quitting: settings flushed true, told about the menu bar false
+13:15:11.909 pid 8121: window closes: chat on false
+13:15:13.213 pid 8131: launch: lock held
+13:15:13.252 pid 8131: settings: reset true, told about the menu bar false
+13:15:13.372 pid 8131: finished launching: chat on false, told about the menu bar false
+13:15:14.913 pid 8131: quitting: settings flushed true, told about the menu bar false
+13:15:14.914 pid 8131: window closes: chat on false
+13:15:16.619 pid 8141: launch: lock held
+13:15:16.675 pid 8141: settings: reset true, told about the menu bar false
+13:15:16.861 pid 8141: finished launching: chat on false, told about the menu bar false
+13:15:22.513 pid 8141: a sheet begins on threadback.main; sheets now 0
+13:15:24.866 pid 8141: a sheet ended on threadback.main; sheets now 0
+13:15:27.070 pid 8141: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:15:27.180 pid 8141: a sheet begins on threadback.main; sheets now 0
+13:15:29.020 pid 8141: menu-bar notice answered: OK
+13:15:29.020 pid 8141: window closes: chat on true
+13:15:29.057 pid 8141: a sheet ended on threadback.main; sheets now 0
+13:15:32.641 pid 8141: reopen: visible windows false, sheets on the window 0
+13:15:34.174 pid 8141: quitting: settings flushed true, told about the menu bar true
+13:15:34.177 pid 8141: window closes: chat on true
+13:15:35.709 pid 8765: launch: lock held
+13:15:35.758 pid 8765: settings: reset true, told about the menu bar false
+13:15:35.942 pid 8765: finished launching: chat on false, told about the menu bar false
+13:15:41.463 pid 8765: a sheet begins on threadback.main; sheets now 0
+13:15:43.669 pid 8765: a sheet ended on threadback.main; sheets now 0
+13:15:45.669 pid 8765: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:15:45.713 pid 8765: a sheet begins on threadback.main; sheets now 0
+13:15:49.437 pid 8765: menu-bar notice answered: OK
+13:15:49.437 pid 8765: window closes: chat on true
+13:15:49.477 pid 8765: a sheet ended on threadback.main; sheets now 0
+13:15:52.781 pid 8765: reopen: visible windows false, sheets on the window 0
+13:15:56.989 pid 8765: a sheet begins on threadback.main; sheets now 0
+13:15:59.131 pid 8765: a sheet ended on threadback.main; sheets now 0
+13:16:00.616 pid 8765: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:16:00.616 pid 8765: window closes: chat on true
+13:16:06.968 pid 8765: reopen: visible windows false, sheets on the window 0
+13:16:11.573 pid 8765: quitting: settings flushed true, told about the menu bar true
+13:16:11.575 pid 8765: window closes: chat on true
+13:16:13.194 pid 10145: launch: lock held
+13:16:13.272 pid 10145: settings: reset true, told about the menu bar false
+13:16:13.556 pid 10145: finished launching: chat on false, told about the menu bar false
+13:16:19.306 pid 10145: a sheet begins on threadback.main; sheets now 0
+13:16:21.427 pid 10145: a sheet ended on threadback.main; sheets now 0
+13:16:23.335 pid 10145: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:16:23.388 pid 10145: a sheet begins on threadback.main; sheets now 0
+13:16:26.128 pid 10145: menu-bar notice answered: OK
+13:16:26.128 pid 10145: window closes: chat on true
+13:16:26.153 pid 10145: a sheet ended on threadback.main; sheets now 0
+13:16:28.315 pid 10145: reopen: visible windows false, sheets on the window 0
+13:16:32.028 pid 10505: launch: lock held
+13:16:32.104 pid 10505: settings: reset false, told about the menu bar true
+13:16:32.355 pid 10505: finished launching: chat on true, told about the menu bar true
+13:16:35.090 pid 10792: launch: lock held
+13:16:35.132 pid 10792: settings: reset false, told about the menu bar true
+13:16:35.275 pid 10792: finished launching: chat on true, told about the menu bar true
+13:16:35.663 pid 10792: a sheet begins on threadback.main; sheets now 0
+13:16:37.445 pid 10792: a sheet ended on threadback.main; sheets now 0
+13:16:39.738 pid 10832: launch: lock held
+13:16:39.791 pid 10832: settings: reset true, told about the menu bar false
+13:16:39.938 pid 10832: finished launching: chat on false, told about the menu bar false
+13:16:45.316 pid 10832: a sheet begins on threadback.main; sheets now 0
+13:16:47.583 pid 10832: a sheet ended on threadback.main; sheets now 0
+13:17:08.803 pid 11997: launch: lock held
+13:17:08.916 pid 11997: settings: reset false, told about the menu bar false
+13:17:09.181 pid 11997: finished launching: chat on true, told about the menu bar false
+13:17:32.224 pid 12669: launch: lock held
+13:17:32.288 pid 12669: settings: reset true, told about the menu bar false
+13:17:32.664 pid 12669: finished launching: chat on false, told about the menu bar false
+13:17:38.105 pid 12669: a sheet begins on threadback.main; sheets now 0
+13:17:40.228 pid 12669: a sheet ended on threadback.main; sheets now 0
+13:17:42.112 pid 12669: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:17:42.160 pid 12669: a sheet begins on threadback.main; sheets now 0
+13:17:45.727 pid 12669: menu-bar notice answered: OK
+13:17:45.727 pid 12669: window closes: chat on true
+13:17:45.743 pid 12669: a sheet ended on threadback.main; sheets now 0
+13:17:49.007 pid 12669: reopen: visible windows false, sheets on the window 0
+13:17:53.160 pid 12669: a sheet begins on threadback.main; sheets now 0
+13:17:55.330 pid 12669: a sheet ended on threadback.main; sheets now 0
+13:17:58.860 pid 12669: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:17:58.860 pid 12669: window closes: chat on true
+13:17:58.881 pid 12669: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:18:01.018 pid 12669: reopen: visible windows false, sheets on the window 0
+13:18:13.789 pid 14509: launch: lock held
+13:18:13.862 pid 14509: settings: reset true, told about the menu bar false
+13:18:14.139 pid 14509: finished launching: chat on false, told about the menu bar false
+13:18:20.113 pid 14509: a sheet begins on threadback.main; sheets now 0
+13:18:22.390 pid 14509: a sheet ended on threadback.main; sheets now 0
+13:18:25.021 pid 14509: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:18:25.079 pid 14509: a sheet begins on threadback.main; sheets now 0
+13:18:28.145 pid 14509: menu-bar notice answered: OK
+13:18:28.145 pid 14509: window closes: chat on true
+13:18:28.165 pid 14509: a sheet ended on threadback.main; sheets now 0
+13:18:31.401 pid 14509: reopen: visible windows false, sheets on the window 0
+13:18:35.611 pid 14509: a sheet begins on threadback.main; sheets now 0
+13:18:37.709 pid 14509: a sheet ended on threadback.main; sheets now 0
+13:18:39.193 pid 14509: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:18:39.193 pid 14509: window closes: chat on true
+13:18:45.484 pid 14509: reopen: visible windows false, sheets on the window 0
+13:18:49.975 pid 14509: quitting: settings flushed true, told about the menu bar true
+13:18:49.976 pid 14509: window closes: chat on true
+13:18:51.543 pid 15569: launch: lock held
+13:18:51.598 pid 15569: settings: reset true, told about the menu bar false
+13:18:51.780 pid 15569: finished launching: chat on false, told about the menu bar false
+13:18:57.127 pid 15569: a sheet begins on threadback.main; sheets now 0
+13:18:59.200 pid 15569: a sheet ended on threadback.main; sheets now 0
+13:19:00.947 pid 15569: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:19:00.986 pid 15569: a sheet begins on threadback.main; sheets now 0
+13:19:03.819 pid 15569: menu-bar notice answered: OK
+13:19:03.820 pid 15569: window closes: chat on true
+13:19:03.835 pid 15569: a sheet ended on threadback.main; sheets now 0
+13:19:07.157 pid 15569: reopen: visible windows false, sheets on the window 0
+13:19:11.333 pid 15569: a sheet begins on threadback.main; sheets now 0
+13:19:13.431 pid 15569: a sheet ended on threadback.main; sheets now 0
+13:19:15.021 pid 15569: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:19:15.021 pid 15569: window closes: chat on true
+13:19:21.448 pid 15569: reopen: visible windows false, sheets on the window 0
+13:19:25.953 pid 15569: quitting: settings flushed true, told about the menu bar true
+13:19:25.954 pid 15569: window closes: chat on true
+13:19:27.455 pid 16951: launch: lock held
+13:19:27.511 pid 16951: settings: reset true, told about the menu bar false
+13:19:27.724 pid 16951: finished launching: chat on false, told about the menu bar false
+13:19:33.182 pid 16951: a sheet begins on threadback.main; sheets now 0
+13:19:35.238 pid 16951: a sheet ended on threadback.main; sheets now 0
+13:19:37.096 pid 16951: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:19:37.148 pid 16951: a sheet begins on threadback.main; sheets now 0
+13:19:40.264 pid 16951: menu-bar notice answered: OK
+13:19:40.265 pid 16951: window closes: chat on true
+13:19:40.294 pid 16951: a sheet ended on threadback.main; sheets now 0
+13:19:43.538 pid 16951: reopen: visible windows false, sheets on the window 0
+13:19:47.731 pid 16951: a sheet begins on threadback.main; sheets now 0
+13:19:49.847 pid 16951: a sheet ended on threadback.main; sheets now 0
+13:19:51.665 pid 16951: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:19:51.665 pid 16951: window closes: chat on true
+13:19:58.102 pid 16951: reopen: visible windows false, sheets on the window 0
+13:20:02.880 pid 16951: quitting: settings flushed true, told about the menu bar true
+13:20:02.883 pid 16951: window closes: chat on true
+13:20:04.617 pid 17916: launch: lock held
+13:20:04.680 pid 17916: settings: reset true, told about the menu bar false
+13:20:04.940 pid 17916: finished launching: chat on false, told about the menu bar false
+13:20:10.415 pid 17916: a sheet begins on threadback.main; sheets now 0
+13:20:12.639 pid 17916: a sheet ended on threadback.main; sheets now 0
+13:20:14.548 pid 17916: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:20:14.622 pid 17916: a sheet begins on threadback.main; sheets now 0
+13:20:18.295 pid 17916: menu-bar notice answered: OK
+13:20:18.296 pid 17916: window closes: chat on true
+13:20:18.344 pid 17916: a sheet ended on threadback.main; sheets now 0
+13:20:21.811 pid 17916: reopen: visible windows false, sheets on the window 0
+13:20:26.167 pid 17916: a sheet begins on threadback.main; sheets now 0
+13:20:28.300 pid 17916: a sheet ended on threadback.main; sheets now 0
+13:20:29.797 pid 17916: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:20:29.797 pid 17916: window closes: chat on true
+13:20:36.185 pid 17916: reopen: visible windows false, sheets on the window 0
+13:20:40.836 pid 17916: quitting: settings flushed true, told about the menu bar true
+13:20:40.839 pid 17916: window closes: chat on true
+13:20:42.460 pid 19305: launch: lock held
+13:20:42.535 pid 19305: settings: reset true, told about the menu bar false
+13:20:42.770 pid 19305: finished launching: chat on false, told about the menu bar false
+13:20:48.637 pid 19305: a sheet begins on threadback.main; sheets now 0
+13:20:50.808 pid 19305: a sheet ended on threadback.main; sheets now 0
+13:20:53.003 pid 19305: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:20:53.077 pid 19305: a sheet begins on threadback.main; sheets now 0
+13:20:56.205 pid 19305: menu-bar notice answered: OK
+13:20:56.205 pid 19305: window closes: chat on true
+13:20:56.244 pid 19305: a sheet ended on threadback.main; sheets now 0
+13:20:59.555 pid 19305: reopen: visible windows false, sheets on the window 0
+13:21:03.898 pid 19305: a sheet begins on threadback.main; sheets now 0
+13:21:06.139 pid 19305: a sheet ended on threadback.main; sheets now 0
+13:21:07.648 pid 19305: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:21:07.648 pid 19305: window closes: chat on true
+13:21:14.027 pid 19305: reopen: visible windows false, sheets on the window 0
+13:21:18.802 pid 19305: quitting: settings flushed true, told about the menu bar true
+13:21:18.809 pid 19305: window closes: chat on true
+13:21:27.386 pid 20621: launch: lock held
+13:21:27.473 pid 20621: settings: reset true, told about the menu bar false
+13:21:27.790 pid 20621: finished launching: chat on false, told about the menu bar false
+13:21:33.876 pid 20621: a sheet begins on threadback.main; sheets now 0
+13:21:36.047 pid 20621: a sheet ended on threadback.main; sheets now 0
+13:21:38.103 pid 20621: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:21:38.182 pid 20621: a sheet begins on threadback.main; sheets now 0
+13:21:41.432 pid 20621: reopen: visible windows true, sheets on the window 1
+13:22:10.845 pid 20621: reopen: visible windows true, sheets on the window 1
+13:22:23.126 pid 22685: launch: lock held
+13:22:23.222 pid 22685: settings: reset true, told about the menu bar false
+13:22:23.487 pid 22685: finished launching: chat on false, told about the menu bar false
+13:22:29.059 pid 22685: a sheet begins on threadback.main; sheets now 0
+13:22:31.289 pid 22685: a sheet ended on threadback.main; sheets now 0
+13:22:33.364 pid 22685: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:22:33.454 pid 22685: a sheet begins on threadback.main; sheets now 0
+13:22:36.706 pid 22685: menu-bar notice (legacy) answered: OK
+13:22:36.707 pid 22685: window closes: chat on true
+13:22:36.766 pid 22685: a sheet ended on threadback.main; sheets now 0
+13:22:40.145 pid 22685: reopen: visible windows false, sheets on the window 0
+13:22:44.357 pid 22685: a sheet begins on threadback.main; sheets now 0
+13:22:46.525 pid 22685: a sheet ended on threadback.main; sheets now 0
+13:22:50.078 pid 22685: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:22:50.078 pid 22685: window closes: chat on true
+13:22:52.284 pid 22685: reopen: visible windows false, sheets on the window 0
+13:22:57.350 pid 23731: launch: lock held
+13:22:57.429 pid 23731: settings: reset true, told about the menu bar false
+13:22:57.662 pid 23731: finished launching: chat on false, told about the menu bar false
+13:23:03.500 pid 23731: a sheet begins on threadback.main; sheets now 0
+13:23:05.781 pid 23731: a sheet ended on threadback.main; sheets now 0
+13:23:07.773 pid 23731: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:23:07.838 pid 23731: a sheet begins on threadback.main; sheets now 0
+13:23:11.332 pid 23731: menu-bar notice (legacy) answered: Quit
+13:23:11.341 pid 23731: window closes: chat on true
+13:23:11.391 pid 23731: a sheet ended on threadback.main; sheets now 0
+13:23:12.065 pid 24157: launch: lock held
+13:23:12.191 pid 24157: settings: reset false, told about the menu bar true
+13:23:12.720 pid 24157: finished launching: chat on true, told about the menu bar true
+13:23:17.959 pid 24157: a sheet begins on threadback.main; sheets now 0
+13:23:20.241 pid 24157: a sheet ended on threadback.main; sheets now 0
+13:23:22.098 pid 24157: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:23:22.098 pid 24157: window closes: chat on true
+13:23:24.645 pid 24157: reopen: visible windows false, sheets on the window 0
+13:23:30.392 pid 24693: launch: lock held
+13:23:30.478 pid 24693: settings: reset true, told about the menu bar false
+13:23:30.755 pid 24693: finished launching: chat on false, told about the menu bar false
+13:23:36.954 pid 24693: a sheet begins on threadback.main; sheets now 0
+13:23:39.133 pid 24693: a sheet ended on threadback.main; sheets now 0
+13:23:41.225 pid 24693: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:23:41.331 pid 24693: a sheet begins on threadback.main; sheets now 0
+13:23:44.708 pid 24693: menu-bar notice (legacy) answered: OK
+13:23:44.709 pid 24693: window closes: chat on true
+13:23:44.772 pid 24693: a sheet ended on threadback.main; sheets now 0
+13:23:48.046 pid 24693: reopen: visible windows false, sheets on the window 0
+13:23:52.435 pid 24693: a sheet begins on threadback.main; sheets now 0
+13:23:54.610 pid 24693: a sheet ended on threadback.main; sheets now 0
+13:23:58.467 pid 24693: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:23:58.468 pid 24693: window closes: chat on true
+13:23:58.520 pid 24693: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:24:00.768 pid 24693: reopen: visible windows false, sheets on the window 0
+13:24:05.858 pid 25562: launch: lock held
+13:24:05.923 pid 25562: settings: reset true, told about the menu bar false
+13:24:06.140 pid 25562: finished launching: chat on false, told about the menu bar false
+13:24:11.786 pid 25562: a sheet begins on threadback.main; sheets now 0
+13:24:13.978 pid 25562: a sheet ended on threadback.main; sheets now 0
+13:24:15.837 pid 25562: close asked: chat on true, told false, notice pending false, sheets on the window 0
+13:24:15.998 pid 25562: a sheet begins on threadback.main; sheets now 0
+13:24:19.530 pid 25562: menu-bar notice answered: Quit
+13:24:19.534 pid 25562: quitting: settings flushed true, told about the menu bar true
+13:24:19.536 pid 25562: window closes: chat on true
+13:24:19.563 pid 25562: a sheet ended on threadback.main; sheets now 0
+13:24:20.044 pid 26102: launch: lock held
+13:24:20.150 pid 26102: settings: reset false, told about the menu bar true
+13:24:20.476 pid 26102: finished launching: chat on true, told about the menu bar true
+13:24:25.266 pid 26102: a sheet begins on threadback.main; sheets now 0
+13:24:27.438 pid 26102: a sheet ended on threadback.main; sheets now 0
+13:24:29.083 pid 26102: close asked: chat on true, told true, notice pending false, sheets on the window 0
+13:24:29.083 pid 26102: window closes: chat on true
+13:24:31.368 pid 26102: reopen: visible windows false, sheets on the window 0
+2026-11-15 13:24:53.840 Df log[27065:12c24] [com.apple.log:] log run noninteractively, parent: 27060 (sudo), args: 'log' 'show' '--style' 'compact' '--info' '--start' '2026-11-15 05:15:00' '--predicate' 'eventMessage CONTAINS "TBTRACE"'
 
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/NoticeDiagnosticsUITests -resultBundlePath /Users/runner/work/_temp/tb/out/NoticeDiagnostics.xcresult
-xcodebuild exited with status 65 after 127s (530 log lines in /Users/runner/work/_temp/tb/out/logs/notice-diagnostics.log)
+xcodebuild exited with status 0 after 195s (832 log lines in /Users/runner/work/_temp/tb/out/logs/notice-diagnostics.log)
 ---- highlights ----
-/Users/runner/work/imessage-wrap/imessage-wrap/mac/Tests/UI/ThreadbackUITests.swift:544: error: -[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeFirstOKNotReceived] : Failed to click "onboarding.done" Any: No matches found for first query match sequence: `Descendants matching type Any` -> `Elements matching predicate '"onboarding.done" IN identifiers'`, given input App element pid: 18468
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeFirstOKNotReceived]' failed (41.920 seconds).
-WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true
+WRAPPED_NOTE diagnostic first OK not received: welcome: yes; connected: yes; first chat on: yes; notice shown at the first close: yes; status after reopen: yes; sheets after reopen: 1; Add a chat opened the chooser: NO; second chat ready: NO; two chats listed: NO; sheets over the status window: 1
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeFirstOKNotReceived]' passed (56.389 seconds).
+WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE walk: 1 notice(s) dismissed; sheets after the second chat's consent 0; sheets over the status window 0
 WRAPPED_NOTE diagnostic legacy notice, one close request: notices 1, sheets over the status window 0, Turn off worked true
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeOneCloseRequest]' passed (32.662 seconds).
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeOneCloseRequest]' passed (34.276 seconds).
+WRAPPED_NOTE diagnostic legacy notice answered with Quit, then opened again: notice shown: true; quit: true; status after opening again: true; sheets after the second close: 0; two chats listed: true; sheets over the status window: 0
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeQuitThenOpenAgain]' passed (32.980 seconds).
 WRAPPED_NOTE diagnostic legacy notice, two close requests: notices 1, sheets over the status window 0, Turn off worked true
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeTwoCloseRequests]' passed (30.978 seconds).
-Test Suite 'NoticeDiagnosticsUITests' failed at 2026-11-15 13:00:43.040.
-	 Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.563) seconds
-Test Suite 'ThreadbackUITests.xctest' failed at 2026-11-15 13:00:43.041.
-Test Suite 'Selected tests' failed at 2026-11-15 13:00:43.041.
-	 Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.564) seconds
-Failing tests:
-** TEST EXECUTE FAILED **
----- last 60 lines of /Users/runner/work/_temp/tb/out/logs/notice-diagnostics.log ----
-    t =    18.88s Waiting 10.0s for Sheet (First Match) to exist
-    t =    19.90s     Checking `Expect predicate `existsNoRetry == 1` for object Sheet (First Match)`
-    t =    19.90s         Checking existence of `Sheet (First Match)`
-    t =    19.91s Get all elements bound by index for: Descendants matching type StaticText
-    t =    19.92s Find the StaticText (Element at index 0)
-    t =    19.92s Find the StaticText (Element at index 1)
-    t =    19.93s Checking existence of `"onboarding.ready" Any`
-    t =    20.11s Click "Turn on" Button
-    t =    20.11s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    20.12s     Find the "Turn on" Button
-    t =    20.12s     Check for interrupting elements affecting "action-button-1" Button
-    t =    20.14s     Synthesize event
-    t =    20.55s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    20.55s Waiting 30.0s for "onboarding.ready" Any to exist
-    t =    21.56s     Checking `Expect predicate `existsNoRetry == 1` for object "onboarding.ready" Any`
-    t =    21.57s         Checking existence of `"onboarding.ready" Any`
-    t =    23.60s Get number of matches for: Descendants matching type Sheet
-    t =    23.67s Click "onboarding.done" Any
-    t =    23.67s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    23.67s     Find the "onboarding.done" Any
-    t =    23.69s     Check for interrupting elements affecting "onboarding.done" Button
-    t =    23.71s     Synthesize event
-    t =    24.27s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    26.37s Waiting 15.0s for "status.last.1" Any to exist
-    t =    27.39s     Checking `Expect predicate `existsNoRetry == 1` for object "status.last.1" Any`
-    t =    27.39s         Checking existence of `"status.last.1" Any`
-    t =    28.43s Get number of matches for: Descendants matching type Sheet
-WRAPPED_NOTE walk: 1 notice(s) dismissed; sheets after the second chat's consent 0; sheets over the status window 0
-    t =    28.48s Click "status.turnOff.1" Any
-    t =    28.48s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    28.49s     Find the "status.turnOff.1" Any
-    t =    28.51s     Check for interrupting elements affecting "status.turnOff.1" Button
-    t =    28.52s     Synthesize event
-    t =    28.89s     Wait for io.github.averyhsu.threadback.mac to idle
-    t =    28.89s Waiting 10.0s for "status.turnOffNote" Any to exist
-    t =    29.90s     Checking `Expect predicate `existsNoRetry == 1` for object "status.turnOffNote" Any`
-    t =    29.91s         Checking existence of `"status.turnOffNote" Any`
-WRAPPED_NOTE diagnostic legacy notice, two close requests: notices 1, sheets over the status window 0, Turn off worked true
-    t =    29.92s Terminate io.github.averyhsu.threadback.mac:21406
-    t =    30.94s Tear Down
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeTwoCloseRequests]' passed (30.978 seconds).
-Test Suite 'NoticeDiagnosticsUITests' failed at 2026-11-15 13:00:43.040.
-	 Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.563) seconds
-Test Suite 'ThreadbackUITests.xctest' failed at 2026-11-15 13:00:43.041.
-	 Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.563) seconds
-Test Suite 'Selected tests' failed at 2026-11-15 13:00:43.041.
-	 Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.564) seconds
-2026-11-15 05:00:47.349 xcodebuild[18218:55429] [MT] IDETestOperationsObserverDebug: 110.430 elapsed -- Testing started completed.
-2026-11-15 05:00:47.349 xcodebuild[18218:55429] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
-2026-11-15 05:00:47.349 xcodebuild[18218:55429] [MT] IDETestOperationsObserverDebug: 110.430 sec, +110.430 sec -- end
-
-Test session results, code coverage, and logs:
-	/Users/runner/work/_temp/tb/out/NoticeDiagnostics.xcresult
-
-Failing tests:
-	NoticeDiagnosticsUITests.testLegacyNoticeFirstOKNotReceived()
-
-** TEST EXECUTE FAILED **
-
-Testing started
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeTwoCloseRequests]' passed (35.539 seconds).
+WRAPPED_NOTE diagnostic current notice answered with Quit, then opened again: notice shown: true; quit: true; status after opening again: true; sheets after the second close: 0; two chats listed: true; sheets over the status window: 0
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testNoticeQuitThenOpenAgain]' passed (30.087 seconds).
+Test Suite 'NoticeDiagnosticsUITests' passed at 2026-11-15 13:24:35.623.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.277) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:24:35.624.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.279) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:24:35.625.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.280) seconds
+** TEST EXECUTE SUCCEEDED **
 
 before: toldAboutMenuBar 1
-first copy pid 22807 running: yes
-second copy exited with 0 after 3s
+first copy pid 26704 running: yes
+second copy exited with 0 after 4s
 after the second copy: toldAboutMenuBar 1; first copy still running: yes
 control (no first copy): toldAboutMenuBar missing (the reset removes it)
 still running: 
@@ -732,20 +725,19 @@ SECOND COPY CHECK PASSED: a second copy launched with the reset flag quit and ch
 == Proof 6b
 messages database origin: messages-created
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/AccessUITests/test1_FolderGrantThroughOpenPanel -resultBundlePath /Users/runner/work/_temp/tb/out/Access1.xcresult
-xcodebuild exited with status 0 after 34s (161 log lines in /Users/runner/work/_temp/tb/out/logs/access1.log)
+xcodebuild exited with status 0 after 38s (161 log lines in /Users/runner/work/_temp/tb/out/logs/access1.log)
 ---- highlights ----
 WRAPPED_NOTE open panel appeared: true (sheets 1, dialogs 0)
 WRAPPED_NOTE panel buttons: ["", "", "back", "forward", "search", "", "", "", "", "", ""]
 WRAPPED_NOTE clicked Grant Access
 WRAPPED_NOTE after the Open panel: CONNECTED: Connected: 0 group chats, 0 messages.
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone "] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone number. Names stay on this Mac."] buttons=["Help", "Don’t Allow", "Allow"] ;; CLICKED "Allow" in com.apple.UserNotificationCenter dialog 0
-Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (29.532 seconds).
-Test Suite 'AccessUITests' passed at 2026-11-15 13:01:59.578.
-	 Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.534) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:01:59.580.
-	 Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.535) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 13:01:59.581.
-	 Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.537) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (32.843 seconds).
+Test Suite 'AccessUITests' passed at 2026-11-15 13:25:40.211.
+	 Executed 1 test, with 0 failures (0 unexpected) in 32.843 (32.844) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:25:40.211.
+Test Suite 'Selected tests' passed at 2026-11-15 13:25:40.212.
+	 Executed 1 test, with 0 failures (0 unexpected) in 32.843 (32.845) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report written by the app right after the panel:
 {
@@ -761,30 +753,30 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:01:59.581.
   "folder.list" : "ok: 8 entries: Attachments, CollaborationNoticeCache, Drafts, NickNameCache, Sync, chat.db, chat.db-shm, chat.db-wal",
   "folder.xattrs" : "none",
   "label" : "after the Open panel (folder chosen by the user)",
-  "process" : "Threadback pid 24000 uid 501",
+  "process" : "Threadback pid 27426 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-15T13:01:50Z"
+  "time" : "2026-11-15T13:25:31Z"
 }-- xattrs on the folder now (com.apple.macl = the Open-panel consent):
 total 1368
-drwxrwxrwx  10 runner  staff     320 Nov 15 04:51 .
-drwx------@ 84 runner  staff    2688 Nov 15 04:52 ..
+drwxrwxrwx  10 runner  staff     320 Nov 15 05:13 .
+drwx------@ 84 runner  staff    2688 Nov 15 05:12 ..
 	com.apple.FinderInfo	    32 
-drwxr-xr-x@  3 runner  staff      96 Nov 15 04:51 Attachments
+drwxr-xr-x@  3 runner  staff      96 Nov 15 05:13 Attachments
 	com.apple.quarantine	    23 
 -rw-r--r--   1 runner  staff    4096 Nov  1 20:03 chat.db
--rw-r--r--   1 runner  staff   32768 Nov 15 04:49 chat.db-shm
+-rw-r--r--   1 runner  staff   32768 Nov 15 05:09 chat.db-shm
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/AccessUITests/test2_BookmarkRestoresAccessAfterRelaunch -resultBundlePath /Users/runner/work/_temp/tb/out/Access2.xcresult
-xcodebuild exited with status 0 after 9s (52 log lines in /Users/runner/work/_temp/tb/out/logs/access2.log)
+xcodebuild exited with status 0 after 10s (52 log lines in /Users/runner/work/_temp/tb/out/logs/access2.log)
 ---- highlights ----
 WRAPPED_NOTE bookmark probe: bookmark: resolved to /Users/runner/Library/Messages; stale=false; startAccessingSecurityScopedResource=true | bundle: /Users/runner/work/_temp/tb/DerivedData/Build/Products/Debug/Threadback.app | chat.db-shm.posix: ok: read 16 bytes of 32768 ("..-.............") | chat.db-wal.posix: ok: read 16 bytes of 663352 ("7....-..........") | chat.db.posix: ok: read 16 bytes of 4096 ("SQLite format 3.") | chat.db.xattrs: none | control.addressbook: readable: 5 entries | control.mail: readable: 1 entries | control.safari: readable: 7 entries | copy: ok: chat.db, chat.db-wal, chat.db-shm | folder: /Users/runner/Library/Messages | folder.exists: true (folder) | folder.list: 
-Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (5.075 seconds).
-Test Suite 'AccessUITests' passed at 2026-11-15 13:02:08.711.
-	 Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.077) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:02:08.712.
-	 Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.078) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 13:02:08.713.
-	 Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.079) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (5.232 seconds).
+Test Suite 'AccessUITests' passed at 2026-11-15 13:25:49.878.
+	 Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.236) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:25:49.881.
+	 Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.239) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:25:49.882.
+	 Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.241) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report after relaunch, through the stored bookmark:
 {
@@ -804,10 +796,10 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:02:08.713.
   "folder.xattrs" : "none",
   "label" : "after relaunch, through the stored bookmark",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 25067 uid 501",
+  "process" : "Threadback pid 28954 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-15T13:02:04Z"
+  "time" : "2026-11-15T13:25:45Z"
 }-- and a plain direct read by a fresh launch (no bookmark used):
 {
   "bundle" : "\/Users\/runner\/work\/_temp\/tb\/DerivedData\/Build\/Products\/Debug\/Threadback.app",
@@ -825,31 +817,31 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:02:08.713.
   "folder.xattrs" : "none",
   "label" : "direct, nothing granted to the app",
   "launched.by" : "pid 1 is the parent",
-  "process" : "Threadback pid 25425 uid 501",
+  "process" : "Threadback pid 29292 uid 501",
   "sqlite.copy" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
   "sqlite.inplace" : "ok: 0 messages (max ROWID -1), 0 chats, journal_mode wal",
-  "time" : "2026-11-15T13:02:09Z"
+  "time" : "2026-11-15T13:25:50Z"
 }
 == Proof 7
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/SystemPromptUITests/testAutomationPrompt -resultBundlePath /Users/runner/work/_temp/tb/out/Automation.xcresult
-xcodebuild exited with status 0 after 14s (89 log lines in /Users/runner/work/_temp/tb/out/logs/automation.log)
+xcodebuild exited with status 0 after 15s (89 log lines in /Users/runner/work/_temp/tb/out/logs/automation.log)
 ---- highlights ----
 WRAPPED_NOTE automation round 1: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to d", "Threadback replies in the group chat you chose by asking Messages to send the recap image,"] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to documents and data in “Messages”, and to perform actions within that ap", "Threadback replies in the group chat you chose by asking Messages to send the recap image, text and link. It never sends anywhere else."] buttons=["Help", "Don’t Allow",
-WRAPPED_NOTE automation finished after ~6 s: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.1 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
-WRAPPED_NOTE automation final: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.1 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
-Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (10.008 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:02:27.227.
-	 Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.010) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:02:27.228.
-	 Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.011) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 13:02:27.229.
-	 Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.013) seconds
+WRAPPED_NOTE automation finished after ~6 s: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.2 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
+WRAPPED_NOTE automation final: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.2 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
+Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (10.491 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:26:08.977.
+	 Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.492) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:26:08.978.
+	 Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.493) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:26:08.978.
+	 Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.494) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report:
 {
   "harmless.event" : "count of chats = 0",
   "messages.running" : "true",
-  "seconds.waiting.for.answer" : "2.1",
+  "seconds.waiting.for.answer" : "2.2",
   "status.after.ask" : "0 (allowed)",
   "status.before.ask" : "-1744 errAEEventWouldRequireUserConsent (not asked yet)"
 }-- user TCC.db AppleEvents rows now:
@@ -869,13 +861,13 @@ xcodebuild exited with status 0 after 12s (85 log lines in /Users/runner/work/_t
 ---- highlights ----
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; com.apple.coreservices.uiagent [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; app under test [state 4, 0 dialogs/alerts/sheets] buttons=[] texts=["Threadback experiment", "CONTACTS DONE\nerror: \ngranted: true\nstatus.after: authorized\nstatus.before: authorized"]
 WRAPPED_NOTE contacts final: CONTACTS DONE | error:  | granted: true | status.after: authorized | status.before: authorized
-Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (7.303 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:02:39.641.
-	 Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.305) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:02:39.642.
-	 Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.306) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 13:02:39.643.
-	 Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.307) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (7.554 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:26:20.998.
+	 Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.556) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:26:21.000.
+	 Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.559) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:26:21.001.
+	 Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.560) seconds
 ** TEST EXECUTE SUCCEEDED **
 {
   "error" : "",
@@ -885,17 +877,17 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:02:39.643.
 }
 == Proof 8
 + xcodebuild test-without-building -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/DerivedData -only-testing:ThreadbackUITests/SystemPromptUITests/testLoginItem -resultBundlePath /Users/runner/work/_temp/tb/out/Login.xcresult
-xcodebuild exited with status 0 after 16s (65 log lines in /Users/runner/work/_temp/tb/out/logs/login.log)
+xcodebuild exited with status 0 after 18s (65 log lines in /Users/runner/work/_temp/tb/out/logs/login.log)
 ---- highlights ----
 WRAPPED_NOTE login item after register: LOGIN ITEM REGISTERED | register: ok; status notFound -> enabled
 WRAPPED_NOTE login item final: LOGIN ITEM DONE | register: register: ok; status notFound -> enabled | status.after.10s: enabled | status.at.launch: notFound | unregister: unregister: ok; status enabled -> notRegistered
-Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (12.581 seconds).
-Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:02:56.420.
-	 Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.582) seconds
-Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:02:56.421.
-	 Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.583) seconds
-Test Suite 'Selected tests' passed at 2026-11-15 13:02:56.422.
-	 Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.585) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (12.885 seconds).
+Test Suite 'SystemPromptUITests' passed at 2026-11-15 13:26:39.366.
+	 Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.887) seconds
+Test Suite 'ThreadbackUITests.xctest' passed at 2026-11-15 13:26:39.367.
+	 Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.888) seconds
+Test Suite 'Selected tests' passed at 2026-11-15 13:26:39.368.
+	 Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.889) seconds
 ** TEST EXECUTE SUCCEEDED **
 -- report:
 {
@@ -905,8 +897,8 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:02:56.422.
   "unregister" : "unregister: ok; status enabled -> notRegistered"
 }-- background task management database (sfltool dumpbtm), entries for Threadback:
 
- #5:
-                 UUID: AB52C881-9152-4790-84A6-FF251A2F97D8
+ #4:
+                 UUID: 678EB998-6FE5-4B8D-87F1-83EFE917C891
                  Name: Threadback
        Developer Name: (null)
                  Type: app (0x2)
@@ -917,7 +909,7 @@ Test Suite 'Selected tests' passed at 2026-11-15 13:02:56.422.
            Generation: 2
     Bundle Identifier: io.github.averyhsu.threadback.mac
 
- #6:
+ #5:
                  UUID: 4C815886-F630-4211-AF7C-AA08FD776EBD
                  Name: Veertu Inc
        Developer Name: Veertu Inc
@@ -940,20 +932,20 @@ Release entitlements:
 	<key>com.apple.security.automation.apple-events</key>
 	<key>com.apple.security.get-task-allow</key>
 Gatekeeper on the Release app: /Users/runner/work/_temp/tb/release-dd/Build/Products/Release/Threadback.app: rejected 
-commit in the Release app: 84031af
-wrote background.png and background@2x.png to /var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.ED83mH7TjC/bg
-2 images written to /var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.ED83mH7TjC/background.tiff.
+commit in the Release app: 5739a9f
+wrote background.png and background@2x.png to /var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.mzXZzUSKjp/bg
+2 images written to /var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.mzXZzUSKjp/background.tiff.
 Creating disk image...
-created: /Users/runner/work/_temp/tb/out/download/rw.29553.Threadback-for-Mac.dmg
+created: /Users/runner/work/_temp/tb/out/download/rw.33270.Threadback-for-Mac.dmg
 Mounting disk image...
 Device name:     /dev/disk33
 Searching for mounted interstitial disk image using /dev/disk33s... 
-Mount dir:       /Volumes/dmg.EKCGvy
-Copying background file '/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.ED83mH7TjC/background.tiff'...
+Mount dir:       /Volumes/dmg.mptFtP
+Copying background file '/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/tmp.mzXZzUSKjp/background.tiff'...
 Making link to Applications dir...
-/Volumes/dmg.EKCGvy
+/Volumes/dmg.mptFtP
 Will sleep for 5 seconds to workaround occasions "Can't get disk (-1728)" issues...
-Running AppleScript to make Finder stuff pretty: /usr/bin/osascript "/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/createdmg.tmp.XXXXXXXXXX.LKcfhDMAEU" "dmg.EKCGvy" "/Volumes/dmg.EKCGvy"
+Running AppleScript to make Finder stuff pretty: /usr/bin/osascript "/var/folders/h5/t85nd63d71x27_8gl5gw3l_w0000gn/T/createdmg.tmp.XXXXXXXXXX.VQ35ODZJU6" "dmg.mptFtP" "/Volumes/dmg.mptFtP"
 waited 1 seconds for .DS_STORE to be created.
 Done running the AppleScript...
 Fixing permissions...
@@ -967,24 +959,24 @@ Preparing imaging engine…
 Reading Protective Master Boot Record (MBR : 0)…
    (CRC32 $F6749F05: Protective Master Boot Record (MBR : 0))
 Reading GPT Header (Primary GPT Header : 1)…
-   (CRC32 $F7143E88: GPT Header (Primary GPT Header : 1))
+   (CRC32 $C73F0852: GPT Header (Primary GPT Header : 1))
 Reading GPT Partition Data (Primary GPT Table : 2)…
-   (CRC32 $57464B0E: GPT Partition Data (Primary GPT Table : 2))
+   (CRC32 $982FF049: GPT Partition Data (Primary GPT Table : 2))
 Reading  (Apple_Free : 3)…
    (CRC32 $00000000:  (Apple_Free : 3))
 Reading disk image (Apple_HFS : 4)…
-   (CRC32 $074054FF: disk image (Apple_HFS : 4))
+   (CRC32 $8581F645: disk image (Apple_HFS : 4))
 Reading  (Apple_Free : 5)…
    (CRC32 $00000000:  (Apple_Free : 5))
 Reading GPT Partition Data (Backup GPT Table : 6)…
-   (CRC32 $57464B0E: GPT Partition Data (Backup GPT Table : 6))
+   (CRC32 $982FF049: GPT Partition Data (Backup GPT Table : 6))
 Reading GPT Header (Backup GPT Header : 7)…
-   (CRC32 $CDA5AC88: GPT Header (Backup GPT Header : 7))
+   (CRC32 $FD8E9A52: GPT Header (Backup GPT Header : 7))
 Adding resources…
-Elapsed Time:  3.076s
-File size: 2501421 bytes, Checksum: CRC32 $97A74382
+Elapsed Time:  2.940s
+File size: 2501522 bytes, Checksum: CRC32 $20015622
 Sectors processed: 59468, 12380 compressed
-Speed: 2.0MB/s
+Speed: 2.1MB/s
 Savings: 91.8%
 created: /Users/runner/work/_temp/tb/out/download/Threadback-for-Mac.dmg
 hdiutil does not support internet-enable. Note it was removed in macOS 10.15.
@@ -992,99 +984,99 @@ Disk image done
 Checksumming Protective Master Boot Record (MBR : 0)…
 Protective Master Boot Record (MBR :: verified   CRC32 $F6749F05
 Checksumming GPT Header (Primary GPT Header : 1)…
- GPT Header (Primary GPT Header : 1): verified   CRC32 $F7143E88
+ GPT Header (Primary GPT Header : 1): verified   CRC32 $C73F0852
 Checksumming GPT Partition Data (Primary GPT Table : 2)…
-GPT Partition Data (Primary GPT Tabl: verified   CRC32 $57464B0E
+GPT Partition Data (Primary GPT Tabl: verified   CRC32 $982FF049
 Checksumming  (Apple_Free : 3)…
                     (Apple_Free : 3): verified   CRC32 $00000000
 Checksumming disk image (Apple_HFS : 4)…
-          disk image (Apple_HFS : 4): verified   CRC32 $074054FF
+          disk image (Apple_HFS : 4): verified   CRC32 $8581F645
 Checksumming  (Apple_Free : 5)…
                     (Apple_Free : 5): verified   CRC32 $00000000
 Checksumming GPT Partition Data (Backup GPT Table : 6)…
-GPT Partition Data (Backup GPT Table: verified   CRC32 $57464B0E
+GPT Partition Data (Backup GPT Table: verified   CRC32 $982FF049
 Checksumming GPT Header (Backup GPT Header : 7)…
-  GPT Header (Backup GPT Header : 7): verified   CRC32 $CDA5AC88
-verified   CRC32 $97A74382
+  GPT Header (Backup GPT Header : 7): verified   CRC32 $FD8E9A52
+verified   CRC32 $20015622
 hdiutil: verify: checksum of "/Users/runner/work/_temp/tb/out/download/Threadback-for-Mac.dmg" is VALID
 make-dmg: wrote /Users/runner/work/_temp/tb/out/download/Threadback-for-Mac.dmg (2.4M)
 disk image: Threadback-for-Mac.dmg (2.4M)
 zipped for download: artifact Threadback-for-Mac -> Threadback-for-Mac.zip (2.0M); artifact Threadback-debug-with-probes (2.0M)
 
 + xcodebuild test -project mac/ThreadbackMac.xcodeproj -scheme Threadback -configuration Release -destination platform=macOS -derivedDataPath /Users/runner/work/_temp/tb/release-test-dd -only-testing:ThreadbackTests -resultBundlePath /Users/runner/work/_temp/tb/out/UnitRelease.xcresult
-xcodebuild exited with status 0 after 70s (1383 log lines in /Users/runner/work/_temp/tb/out/logs/unit-release.log)
+xcodebuild exited with status 0 after 82s (1384 log lines in /Users/runner/work/_temp/tb/out/logs/unit-release.log)
 ---- highlights ----
 WRAPPED_NOTE agent log: first run: starting after message row 8013; older commands are ignored || /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run || ignored /wrapped in "Taco Tuesday Crew 🌮": cooling down (120 s left) || ignored /wrapped in a group chat that is not in the approved list (id ending 0002); set it up again to add it || ignored a /wrapped that is 20 min old (row 8017) || ignored a /wrapped dated 3599 s in the future (row 8018)
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.594 seconds).
-Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.400 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.702 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.004 seconds).
+Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.407 seconds).
 WRAPPED_NOTE consent: Turn on Threadback for “Taco Tuesday Crew”? | When anyone in this chat types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link.
-Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.069 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.243 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.234 seconds).
+Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.091 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.408 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.324 seconds).
 WRAPPED_NOTE dry run wrote: link.txt, recap.txt, threadback-taco-tuesday-crew-2026.png
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.287 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.288 seconds).
 Test Case '-[ThreadbackTests.AgentTests testIdFormIsACategory]' passed (0.003 seconds).
-Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.004 seconds).
-Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.288 seconds).
+Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.003 seconds).
+Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.549 seconds).
 Test Case '-[ThreadbackTests.AgentTests testOldStateFileStillLoads]' passed (0.003 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (1.163 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (0.967 seconds).
 WRAPPED_NOTE outgoing row: sent true, delivered false, attachment names ["threadback-card-1.png", "threadback-card-1.png"]
-Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.054 seconds).
-Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.263 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.361 seconds).
-Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.434 seconds).
-WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:05:47Z)
-Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.262 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.486 seconds).
-Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.002 seconds).
-Test Suite 'AgentTests' passed at 2026-11-15 13:05:47.811.
-	 Executed 19 tests, with 0 failures (0 unexpected) in 6.152 (6.162) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.035 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.045 seconds).
+Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.350 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.311 seconds).
+Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.407 seconds).
+WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:29:43Z)
+Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.369 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.636 seconds).
+Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.004 seconds).
+Test Suite 'AgentTests' passed at 2026-11-15 13:29:44.201.
+	 Executed 19 tests, with 0 failures (0 unexpected) in 6.873 (6.886) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.043 seconds).
 WRAPPED_NOTE JavaScriptCore: TextDecoder is function (TextDecoder); Intl in Asia/Tokyo at epoch: 09; engine wrapped/1
-Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.012 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.015 seconds).
 WRAPPED_NOTE link: 1692 characters; RecapLink decodes Taco Tuesday Crew 🌮 · 2026 in review, 2,869 messages
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.183 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.247 seconds).
 WRAPPED_NOTE listChats: Taco Tuesday Crew 🌮 (3712) | The Extremely Long-Named Group Chat Of Unreasonable Proportions ✨🪩🎉 (est. 2019) … (645) | Bram, Sam, …0007 & 1 more (447) | Book Club 📚 (29)
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.021 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.032 seconds).
 WRAPPED_NOTE recap text identical to the Python helper: no link true, with link true
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.169 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.221 seconds).
 WRAPPED_NOTE parity taco-2026: IDENTICAL (3071 bytes vs 3071)
 WRAPPED_NOTE parity bookclub-all-berlin-nocontacts: IDENTICAL (2539 bytes vs 2539)
 WRAPPED_NOTE parity longname-2026-tokyo-fullnames: IDENTICAL (8866 bytes vs 8866)
 WRAPPED_NOTE parity bookclub-by-name-all: IDENTICAL (2498 bytes vs 2498)
 WRAPPED_NOTE parity unnamed-2025-newyork-empty: IDENTICAL (815 bytes vs 815)
 WRAPPED_NOTE parity: 5/5 cases byte-identical to Python
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.387 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.011 seconds).
-Test Suite 'EngineTests' passed at 2026-11-15 13:05:48.633.
-	 Executed 7 tests, with 0 failures (0 unexpected) in 0.820 (0.823) seconds
-Test Suite 'ThreadbackTests.xctest' passed at 2026-11-15 13:05:48.634.
-	 Executed 26 tests, with 0 failures (0 unexpected) in 6.971 (6.986) seconds
-Test Suite 'All tests' passed at 2026-11-15 13:05:48.634.
-	 Executed 26 tests, with 0 failures (0 unexpected) in 6.971 (6.987) seconds
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.413 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.012 seconds).
+Test Suite 'EngineTests' passed at 2026-11-15 13:29:45.187.
+	 Executed 7 tests, with 0 failures (0 unexpected) in 0.982 (0.985) seconds
+Test Suite 'ThreadbackTests.xctest' passed at 2026-11-15 13:29:45.187.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 7.855 (7.872) seconds
+Test Suite 'All tests' passed at 2026-11-15 13:29:45.187.
+	 Executed 26 tests, with 0 failures (0 unexpected) in 7.855 (7.874) seconds
 ** TEST SUCCEEDED **
 
 == The owner's download (the built files, before publishing)
 -- Threadback-for-Mac.dmg
-  sha256 22a31359f368665fd927e9ba8e7a3b38aa8a98a62b9851d42ce41ba80722e949; same bytes as built: yes
+  sha256 3735425323266d7545c98546d7a24959267bc5e5503512b0dd6f9991fcb41343; same bytes as built: yes
   Finder windows after the double-click: Threadback
   the disk image window OPENED BY ITSELF
   Applications shortcut: -> /Applications
   disk image: codesign --verify --deep --strict: valid
   disk image: main executable is executable
-  disk image: every file identical to the build (tree sha256 66422fbc2e0db8c4)
+  disk image: every file identical to the build (tree sha256 020305d421fcdb40)
 -- Threadback-for-Mac.zip
   after one pass of Archive Utility: Threadback-for-Mac.zip Threadback.app 
   zip via Archive Utility: codesign --verify --deep --strict: valid
   zip via Archive Utility: main executable is executable
-  zip via Archive Utility: every file identical to the build (tree sha256 66422fbc2e0db8c4)
+  zip via Archive Utility: every file identical to the build (tree sha256 020305d421fcdb40)
 DOWNLOAD CHECK PASSED: the disk image opens its window by itself with the exact app and an Applications shortcut; the zip expands with one pass of Archive Utility into the exact app
 
 == Gatekeeper on this runner
 spctl --status: assessments enabled
 SIP: System Integrity Protection status: disabled.
-quarantine set to: 0083;6af9ae38;Safari;745841F5-A68C-4C85-8F47-5E72D737A2A2 (as Safari writes it on a download)
+quarantine set to: 0083;6af9b3d4;Safari;5F93C8D4-3BC7-4560-A369-2DAF1D75CC7D (as Safari writes it on a download)
 spctl assessment: /Users/runner/Downloads/threadback-gatekeeper/Threadback.app: rejected 
 -- 1. open it, as a double-click does
 the app is not running (blocked, as expected)
@@ -1098,7 +1090,7 @@ click Done: no button Done in CoreServicesUIAgent
 pressed Escape instead
 dialog still there: 1
 open said: 
-mac/scripts/ci-gatekeeper-photos.sh: line 140: 34326 Terminated: 15          open "$GK/Threadback.app" > "$GK/open.txt" 2>&1
+mac/scripts/ci-gatekeeper-photos.sh: line 140: 38100 Terminated: 15          open "$GK/Threadback.app" > "$GK/open.txt" 2>&1
 -- 2. System Settings > Privacy & Security
 deep link x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Security: no Open Anyway button visible in its window
 deep link x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension: no Open Anyway button visible in its window
@@ -1118,38 +1110,41 @@ WRAPPED_NOTE after the Open panel: CONNECTED: Connected: 0 group chats, 0 messag
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone "] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” would like to access your Contacts.", "Optional: so the recap shows first names like \"Sam\" instead of the last digits of a phone number. Names stay on this Mac."] buttons=["Help", "Don’t Allow", "Allow"] ;; CLICKED "Allow" in com.apple.UserNotificationCenter dialog 0
 WRAPPED_NOTE bookmark probe: bookmark: resolved to /Users/runner/Library/Messages; stale=false; startAccessingSecurityScopedResource=true | bundle: /Users/runner/work/_temp/tb/DerivedData/Build/Products/Debug/Threadback.app | chat.db-shm.posix: ok: read 16 bytes of 32768 ("..-.............") | chat.db-wal.posix: ok: read 16 bytes of 663352 ("7....-..........") | chat.db.posix: ok: read 16 bytes of 4096 ("SQLite format 3.") | chat.db.xattrs: none | control.addressbook: readable: 5 entries | control.mail: readable: 1 entries | control.safari: readable: 7 entries | copy: ok: chat.db, chat.db-wal, chat.db-shm | folder: /Users/runner/Library/Messages | folder.exists: true (folder) | folder.list: ok: 8 entries: Attachments, CollaborationNoticeCache, Drafts, NickNameCache, Sync, chat.db, chat.db-shm, chat.db-wal | folder.xattrs: none | label: after relaunch, through the stored bookmark | launch
 WRAPPED_NOTE automation round 1: com.apple.UserNotificationCenter [state 4, 1 dialogs/alerts/sheets] buttons=["Help"] texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to d", "Threadback replies in the group chat you chose by asking Messages to send the recap image,"] ;; com.apple.UserNotificationCenter dialog 0: texts=["“Threadback” wants access to control “Messages”. Allowing control will provide access to documents and data in “Messages”, and to perform actions within that ap", "Threadback replies in the group chat you chose by asking Messages to send the recap image, text and link. It never sends anywhere else."] buttons=["Help", "Don’t Allow", "Allow"] ;; CLICKED "Allow" in com.apple.UserNotificationCenter dialog 0
-WRAPPED_NOTE automation finished after ~6 s: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.1 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
-WRAPPED_NOTE automation final: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.1 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
+WRAPPED_NOTE automation finished after ~6 s: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.2 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
+WRAPPED_NOTE automation final: AUTOMATION DONE | harmless.event: count of chats = 0 | messages.running: true | seconds.waiting.for.answer: 2.2 | status.after.ask: 0 (allowed) | status.before.ask: -1744 errAEEventWouldRequireUserConsent (not asked yet)
 WRAPPED_NOTE contacts prompt: com.apple.UserNotificationCenter [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; com.apple.coreservices.uiagent [state 3, 0 dialogs/alerts/sheets] buttons=[] texts=[] ;; app under test [state 4, 0 dialogs/alerts/sheets] buttons=[] texts=["Threadback experiment", "CONTACTS DONE\nerror: \ngranted: true\nstatus.after: authorized\nstatus.before: authorized"]
 WRAPPED_NOTE contacts final: CONTACTS DONE | error:  | granted: true | status.after: authorized | status.before: authorized
-WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true
+WRAPPED_NOTE menu-bar notice (first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE menu-bar notice (second close): not shown
-WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 84031af
+WRAPPED_NOTE status with two chats: Messages: Connected · 4 group chats | No /wrapped yet. | Threadback 0.1.0 (1), commit 5739a9f
 WRAPPED_NOTE lifecycle: window closed before setup -> state 1 (1 = not running)
 WRAPPED_NOTE lifecycle: with a chat on, after closing the window: state 3, windows 0
 WRAPPED_NOTE lifecycle: opened again -> On.; uninstall line present: true
 WRAPPED_NOTE after a relaunch: Paused.
 WRAPPED_NOTE replies-changed sheet: Replies in “Book Club 📚” now include a link | Since you turned this chat on, Threadback’s replies changed: each reply is now three messages from your Apple ID, a picture, a short text and a link. |  | The link opens the recap (the chat’s name, first names and counts; no message text) for anyone it is forwarded to. |  | Nothing is sent in this chat until you choose.
-WRAPPED_NOTE single instance: first copy pid 8980 alive true; second copy pid 9303 quit true; copies now 1
+WRAPPED_NOTE single instance: first copy pid 10832 alive true; second copy pid 11161 quit true; copies now 1
 WRAPPED_NOTE after a second copy launched with the reset flag: On.
-WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true
+WRAPPED_NOTE menu-bar notice (walk, first close): shown, OK clicked, gone true, still running true
 WRAPPED_NOTE walk: 1 notice(s) dismissed; sheets after the second chat's consent 0; sheets over the status window 0
 WRAPPED_NOTE login item after register: LOGIN ITEM REGISTERED | register: ok; status notFound -> enabled
 WRAPPED_NOTE login item final: LOGIN ITEM DONE | register: register: ok; status notFound -> enabled | status.after.10s: enabled | status.at.launch: notFound | unregister: unregister: ok; status enabled -> notRegistered
+WRAPPED_NOTE diagnostic first OK not received: welcome: yes; connected: yes; first chat on: yes; notice shown at the first close: yes; status after reopen: yes; sheets after reopen: 1; Add a chat opened the chooser: NO; second chat ready: NO; two chats listed: NO; sheets over the status window: 1
 WRAPPED_NOTE diagnostic legacy notice, one close request: notices 1, sheets over the status window 0, Turn off worked true
+WRAPPED_NOTE diagnostic legacy notice answered with Quit, then opened again: notice shown: true; quit: true; status after opening again: true; sheets after the second close: 0; two chats listed: true; sheets over the status window: 0
 WRAPPED_NOTE diagnostic legacy notice, two close requests: notices 1, sheets over the status window 0, Turn off worked true
+WRAPPED_NOTE diagnostic current notice answered with Quit, then opened again: notice shown: true; quit: true; status after opening again: true; sheets after the second close: 0; two chats listed: true; sheets over the status window: 0
 WRAPPED_NOTE onboarding: Connected: 4 group chats, 4,833 messages.
 WRAPPED_NOTE consent sheet: Turn on Threadback for “Book Club 📚”? | When anyone in this chat types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link. |  | Anyone in the chat can trigger it, at most once every 2 minutes. |  | The link opens the recap (the chat’s name, first names and counts; no message text) for anyone it is forwarded to.
 WRAPPED_NOTE preview text: 🧵 Book Club 📚 — 2026 in review | 💬 21 messages · 8 active days | 🤫 You are The Quiet Ones — peak hour 12 PM | 🥇 Nora 38% · 🥈 Amara 33% · 🥉 …0012 29% | 🏆 Yapper: Nora · Lurker: …0012 · Night Owl: Amara | ❤️ 10 tapbacks · most generous: Amara | 📅 Busiest day: Jul 4 (7 messages) | 👇 The full story is in the link below (Threadback) |  | https://averyhsu.github.io/imessage-wrap/#w1=nVbLbtNAFP2V0aydYDtJG7IDJMQCykNsEELROJ7GQ2xPsMcNIYrElhUgFkhsuqjUHXsk_qY_QD-Bc8eOY7sPJJpWcmbO3HPm3nOvu-EnfOI5fBYJwycbnopE8gm_r_WCPYiLgF2efvvBHZ7IJJBZzieDrcOXMlM6JHgsAhkD77v-AVC5ERnC2K8918MvFmUKaLnkeT1vxBHBaCNiRNsgcJ6LucSzDxkrnYV49Aa-w4UxYhYlMjVE6_BMiplROqV91-GhWOdTWjmB4LHDY50ijJnmBsAFwoEmWE8jXWR88nrgDBzX8fBXfnZPo3ql_AxL3Bt7diXlAjQ4Xh7wAR87o3Iz0amJsOVjmTbo9GEV2XdcAhW5IkU2xAaCDaW2zM1hzx3atO5uf1jmNdepiJWxBxTl7V2hpJnqFBikTZmYYryMJHtOG-xpuRHERRZg4xmuzujKE-b57NmTPnsoV8xmtc_uxTHTx8xEMmEzXaSmj5NLn
 WRAPPED_NOTE story window after loading: Book Club 📚 · story · slide 1 of 12
 WRAPPED_NOTE story window after the right arrow: Book Club 📚 · story · slide 2 of 12
-WRAPPED_NOTE test report copied by the app: Threadback test report (2026-11-15T12:52:52Z) | App: 0.1.0 (1), commit 84031af, signature ad-hoc | macOS: Version 26.7.2 (Build 25G332), Apple silicon (arm64) | Running from: somewhere else | Messages folder: |   direct read before Grant Access: not tried |   read after Grant Access: not tried |   chat.db-wal readable: not tried |   access method: fixture |   bookmark on this launch: not used |   read now: ok | Counts: 4 group chats, 4833 messages | Contacts: notDetermined | Automation (control Messages): not asked | Login item: notFound | Link in replies: on | Chats turned on: 1 | Watching for new messages: on (file events, safety check every minute) | Card: site card (6513 ms last time, 0 reloads, 0 native fallbacks) | Replies to /wrapped: none yet
+WRAPPED_NOTE test report copied by the app: Threadback test report (2026-11-15T13:14:54Z) | App: 0.1.0 (1), commit 5739a9f, signature ad-hoc | macOS: Version 26.7.2 (Build 25G332), Apple silicon (arm64) | Running from: somewhere else | Messages folder: |   direct read before Grant Access: not tried |   read after Grant Access: not tried |   chat.db-wal readable: not tried |   access method: fixture |   bookmark on this launch: not used |   read now: ok | Counts: 4 group chats, 4833 messages | Contacts: notDetermined | Automation (control Messages): not asked | Login item: notFound | Link in replies: on | Chats turned on: 1 | Watching for new messages: on (file events, safety check every minute) | Card: site card (6738 ms last time, 0 reloads, 0 native fallbacks) | Replies to /wrapped: none yet
 WRAPPED_NOTE closing the window says: ["Threadback keeps answering from the menu bar.", "To stop it, open Threadback again (from Applications) and click Turn off or Quit Threadback."]
 WRAPPED_NOTE agent log: first run: starting after message row 8013; older commands are ignored || /wrapped in "Taco Tuesday Crew 🌮" (2026): card=dry-run text=dry-run link=dry-run || ignored /wrapped in "Taco Tuesday Crew 🌮": cooling down (120 s left) || ignored /wrapped in a group chat that is not in the approved list (id ending 0002); set it up again to add it || ignored a /wrapped that is 20 min old (row 8017) || ignored a /wrapped dated 3599 s in the future (row 8018)
 WRAPPED_NOTE consent: Turn on Threadback for “Taco Tuesday Crew”? | When anyone in this chat types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link.
 WRAPPED_NOTE dry run wrote: link.txt, recap.txt, threadback-taco-tuesday-crew-2026.png
 WRAPPED_NOTE outgoing row: sent true, delivered false, attachment names ["threadback-card-1.png", "threadback-card-1.png"]
-WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:05:47Z)
+WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:29:43Z)
 WRAPPED_NOTE JavaScriptCore: TextDecoder is function (TextDecoder); Intl in Asia/Tokyo at epoch: 09; engine wrapped/1
 WRAPPED_NOTE link: 1692 characters; RecapLink decodes Taco Tuesday Crew 🌮 · 2026 in review, 2,869 messages
 WRAPPED_NOTE listChats: Taco Tuesday Crew 🌮 (3712) | The Extremely Long-Named Group Chat Of Unreasonable Proportions ✨🪩🎉 (est. 2019) … (645) | Bram, Sam, …0007 & 1 more (447) | Book Club 📚 (29)
@@ -1160,114 +1155,119 @@ WRAPPED_NOTE parity longname-2026-tokyo-fullnames: IDENTICAL (8866 bytes vs 8866
 WRAPPED_NOTE parity bookclub-by-name-all: IDENTICAL (2498 bytes vs 2498)
 WRAPPED_NOTE parity unnamed-2025-newyork-empty: IDENTICAL (815 bytes vs 815)
 WRAPPED_NOTE parity: 5/5 cases byte-identical to Python
-WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T12:51:37Z)
+WRAPPED_NOTE test report sample: Threadback test report (2026-11-15T13:13:31Z)
 
 == Test verdicts
-Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (29.532 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.534) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.535) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 29.532 (29.537) seconds
-Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (5.075 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.077) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.078) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 5.075 (5.079) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (10.008 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.010) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.011) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 10.008 (10.013) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (7.303 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.305) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.306) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 7.303 (7.307) seconds
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.126 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (33.646 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.056 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (33.887 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.674 seconds).
-Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.396) seconds
-Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.397) seconds
-Executed 5 tests, with 0 failures (0 unexpected) in 170.388 (170.399) seconds
-Test Case '-[ThreadbackUITests.LifecycleUITests test1_ClosingTheWindowBeforeSetupQuits]' passed (3.900 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test2_QuitButtonQuits]' passed (3.135 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test3_CommandQQuits]' passed (3.619 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test4_WithAChatOnItKeepsRunningAndOpeningAgainShowsTheWindow]' passed (19.000 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (34.699 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test6_PauseLastsAcrossARelaunchAndAChangedReplyAsksAgain]' passed (26.710 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test7_ASecondCopyShowsTheFirstAndQuits]' passed (51.905 seconds).
-Test Case '-[ThreadbackUITests.LifecycleUITests test8_ASecondCloseRequestNeverStacksASecondNotice]' passed (31.126 seconds).
-Executed 8 tests, with 0 failures (0 unexpected) in 174.094 (174.100) seconds
-Executed 8 tests, with 0 failures (0 unexpected) in 174.094 (174.102) seconds
-Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (12.581 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.582) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.583) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 12.581 (12.585) seconds
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeFirstOKNotReceived]' failed (41.920 seconds).
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeOneCloseRequest]' passed (32.662 seconds).
-Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeTwoCloseRequests]' passed (30.978 seconds).
-Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.563) seconds
-Executed 3 tests, with 1 failure (0 unexpected) in 105.560 (105.564) seconds
-Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (36.815 seconds).
-Executed 1 test, with 0 failures (0 unexpected) in 36.815 (36.817) seconds
-Executed 1 test, with 0 failures (0 unexpected) in 36.815 (36.818) seconds
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.594 seconds).
-Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.400 seconds).
-Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.069 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.243 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.234 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.287 seconds).
+Test Case '-[ThreadbackUITests.AccessUITests test1_FolderGrantThroughOpenPanel]' passed (32.843 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 32.843 (32.844) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 32.843 (32.845) seconds
+Test Case '-[ThreadbackUITests.AccessUITests test2_BookmarkRestoresAccessAfterRelaunch]' passed (5.232 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.236) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.239) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 5.232 (5.241) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testAutomationPrompt]' passed (10.491 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.492) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.493) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 10.491 (10.494) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testContactsPrompt]' passed (7.554 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.556) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.559) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 7.554 (7.560) seconds
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (38.001 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (35.954 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.146 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.834 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.997 seconds).
+Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.936) seconds
+Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.937) seconds
+Executed 5 tests, with 0 failures (0 unexpected) in 186.931 (186.938) seconds
+Test Case '-[ThreadbackUITests.LifecycleUITests test1_ClosingTheWindowBeforeSetupQuits]' passed (4.021 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test2_QuitButtonQuits]' passed (3.234 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test3_CommandQQuits]' passed (3.289 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test4_WithAChatOnItKeepsRunningAndOpeningAgainShowsTheWindow]' passed (19.121 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test5_TwoChatsAddTurnOffPause]' passed (37.451 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test6_PauseLastsAcrossARelaunchAndAChangedReplyAsksAgain]' passed (26.659 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test7_ASecondCopyShowsTheFirstAndQuits]' passed (52.287 seconds).
+Test Case '-[ThreadbackUITests.LifecycleUITests test8_ASecondCloseRequestNeverStacksASecondNotice]' passed (33.866 seconds).
+Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.934) seconds
+Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.935) seconds
+Executed 8 tests, with 0 failures (0 unexpected) in 179.929 (179.937) seconds
+Test Case '-[ThreadbackUITests.SystemPromptUITests testLoginItem]' passed (12.885 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.887) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.888) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 12.885 (12.889) seconds
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeFirstOKNotReceived]' passed (56.389 seconds).
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeOneCloseRequest]' passed (34.276 seconds).
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeQuitThenOpenAgain]' passed (32.980 seconds).
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testLegacyNoticeTwoCloseRequests]' passed (35.539 seconds).
+Test Case '-[ThreadbackUITests.NoticeDiagnosticsUITests testNoticeQuitThenOpenAgain]' passed (30.087 seconds).
+Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.277) seconds
+Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.279) seconds
+Executed 5 tests, with 0 failures (0 unexpected) in 189.271 (189.280) seconds
+Test Case '-[ThreadbackUITests.OnboardingUITests testOnboardingWalkthroughWithFixture]' passed (38.275 seconds).
+Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.278) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.279) seconds
+Executed 1 test, with 0 failures (0 unexpected) in 38.275 (38.281) seconds
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.702 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.004 seconds).
+Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.407 seconds).
+Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.091 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.408 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.324 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.288 seconds).
 Test Case '-[ThreadbackTests.AgentTests testIdFormIsACategory]' passed (0.003 seconds).
-Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.004 seconds).
-Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.288 seconds).
+Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.003 seconds).
+Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.549 seconds).
 Test Case '-[ThreadbackTests.AgentTests testOldStateFileStillLoads]' passed (0.003 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (1.163 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.054 seconds).
-Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.263 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.361 seconds).
-Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.434 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.262 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.486 seconds).
-Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.002 seconds).
-Executed 19 tests, with 0 failures (0 unexpected) in 6.152 (6.162) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.035 seconds).
-Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.012 seconds).
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.183 seconds).
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.021 seconds).
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.169 seconds).
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.387 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.011 seconds).
-Executed 7 tests, with 0 failures (0 unexpected) in 0.820 (0.823) seconds
-Executed 26 tests, with 0 failures (0 unexpected) in 6.971 (6.986) seconds
-Executed 26 tests, with 0 failures (0 unexpected) in 6.971 (6.987) seconds
-Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (1.168 seconds).
-Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.021 seconds).
-Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (1.061 seconds).
-Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.073 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.718 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.667 seconds).
-Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.249 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (0.967 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.045 seconds).
+Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.350 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.311 seconds).
+Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.407 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.369 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.636 seconds).
+Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.004 seconds).
+Executed 19 tests, with 0 failures (0 unexpected) in 6.873 (6.886) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.043 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.015 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.247 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.032 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.221 seconds).
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.413 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.012 seconds).
+Executed 7 tests, with 0 failures (0 unexpected) in 0.982 (0.985) seconds
+Executed 26 tests, with 0 failures (0 unexpected) in 7.855 (7.872) seconds
+Executed 26 tests, with 0 failures (0 unexpected) in 7.855 (7.874) seconds
+Test Case '-[ThreadbackTests.AgentTests testAnswersOnceInTheApprovedChatAndFollowsTheRules]' passed (0.383 seconds).
+Test Case '-[ThreadbackTests.AgentTests testAppLocation]' passed (0.002 seconds).
+Test Case '-[ThreadbackTests.AgentTests testCollidingSlugsNeverShareACard]' passed (0.345 seconds).
+Test Case '-[ThreadbackTests.AgentTests testConsentAndAChangeInWhatARepliesCarriesAsksAgain]' passed (0.065 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDailyCapLongerCooldownAndTimeouts]' passed (1.286 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDefaultReplyFollowsTheStorySiteSwitch]' passed (0.248 seconds).
+Test Case '-[ThreadbackTests.AgentTests testDryRunWritesCardTextAndLink]' passed (0.230 seconds).
 Test Case '-[ThreadbackTests.AgentTests testIdFormIsACategory]' passed (0.002 seconds).
 Test Case '-[ThreadbackTests.AgentTests testLinkGuard]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.308 seconds).
+Test Case '-[ThreadbackTests.AgentTests testNeverTwoRepliesForOneCommandAcrossRelaunches]' passed (0.259 seconds).
 Test Case '-[ThreadbackTests.AgentTests testOldStateFileStillLoads]' passed (0.002 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (1.074 seconds).
-Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.020 seconds).
-Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.282 seconds).
-Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.238 seconds).
-Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.352 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.381 seconds).
-Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.635 seconds).
-Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.004 seconds).
-Executed 19 tests, with 0 failures (0 unexpected) in 8.259 (8.266) seconds
-Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.032 seconds).
-Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.233 seconds).
-Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.023 seconds).
-Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.250 seconds).
-Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.484 seconds).
-Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.008 seconds).
-Executed 7 tests, with 0 failures (0 unexpected) in 1.042 (1.045) seconds
-Executed 26 tests, with 0 failures (0 unexpected) in 9.301 (9.312) seconds
-Executed 26 tests, with 0 failures (0 unexpected) in 9.301 (9.313) seconds
+Test Case '-[ThreadbackTests.AgentTests testOnlyOneCopyHoldsTheInstanceLock]' passed (0.816 seconds).
+Test Case '-[ThreadbackTests.AgentTests testOutgoingRowsCarrySentDeliveredAndAttachmentNames]' passed (0.024 seconds).
+Test Case '-[ThreadbackTests.AgentTests testPausedSendsNothingAndResumeStartsFromNow]' passed (0.250 seconds).
+Test Case '-[ThreadbackTests.AgentTests testRenamedApprovedChatStaysApprovedAndNewNameAddsNothing]' passed (0.240 seconds).
+Test Case '-[ThreadbackTests.AgentTests testStatsByIdNeverFallsBackToAName]' passed (0.353 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTestReportHasNoNamesNumbersOrChats]' passed (0.302 seconds).
+Test Case '-[ThreadbackTests.AgentTests testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown]' passed (0.577 seconds).
+Test Case '-[ThreadbackTests.AgentTests testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded]' passed (0.003 seconds).
+Executed 19 tests, with 0 failures (0 unexpected) in 5.390 (5.396) seconds
+Test Case '-[ThreadbackTests.EngineTests testCardRenders]' passed (0.034 seconds).
+Test Case '-[ThreadbackTests.EngineTests testEngineLoadsInJavaScriptCore]' passed (0.011 seconds).
+Test Case '-[ThreadbackTests.EngineTests testLinkRoundTripsThroughSharedSwiftDecoder]' passed (0.183 seconds).
+Test Case '-[ThreadbackTests.EngineTests testListsTheFixtureGroupChats]' passed (0.019 seconds).
+Test Case '-[ThreadbackTests.EngineTests testRecapTextMatchesPythonHelper]' passed (0.168 seconds).
+Test Case '-[ThreadbackTests.EngineTests testStatsAreByteIdenticalToPython]' passed (0.350 seconds).
+Test Case '-[ThreadbackTests.EngineTests testTriggers]' passed (0.009 seconds).
+Executed 7 tests, with 0 failures (0 unexpected) in 0.774 (0.776) seconds
+Executed 26 tests, with 0 failures (0 unexpected) in 6.164 (6.173) seconds
+Executed 26 tests, with 0 failures (0 unexpected) in 6.164 (6.174) seconds
 
 == Publish job
 https://github.com/averyhsu/imessage-wrap/releases/tag/mac-preview
@@ -1275,21 +1275,21 @@ https://github.com/averyhsu/imessage-wrap/releases/tag/mac-preview
 release: https://github.com/averyhsu/imessage-wrap/releases/tag/mac-preview
 disk image: https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.dmg
 zip: https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.zip
-commit: 84031af; assets: Threadback-for-Mac.dmg 2501421 bytes;Threadback-for-Mac.zip 2092356 bytes;
+commit: 5739a9f; assets: Threadback-for-Mac.dmg 2501522 bytes;Threadback-for-Mac.zip 2092504 bytes;
 == The owner's download (from the release page, as a browser gets it)
 -- Threadback-for-Mac.dmg
-  GET https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.dmg -> HTTP 200, 2501421 bytes (no sign-in)
-  sha256 22a31359f368665fd927e9ba8e7a3b38aa8a98a62b9851d42ce41ba80722e949; same bytes as built: yes
+  GET https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.dmg -> HTTP 200, 2501522 bytes (no sign-in)
+  sha256 3735425323266d7545c98546d7a24959267bc5e5503512b0dd6f9991fcb41343; same bytes as built: yes
   Finder windows after the double-click: Threadback
   the disk image window OPENED BY ITSELF
   Applications shortcut: -> /Applications
   disk image: codesign --verify --deep --strict: valid
   disk image: main executable is executable
-  disk image: every file identical to the build (tree sha256 66422fbc2e0db8c4)
+  disk image: every file identical to the build (tree sha256 020305d421fcdb40)
 -- Threadback-for-Mac.zip
-  GET https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.zip -> HTTP 200, 2092356 bytes (no sign-in)
+  GET https://github.com/averyhsu/imessage-wrap/releases/download/mac-preview/Threadback-for-Mac.zip -> HTTP 200, 2092504 bytes (no sign-in)
   after one pass of Archive Utility: Threadback-for-Mac.zip Threadback.app 
   zip via Archive Utility: codesign --verify --deep --strict: valid
   zip via Archive Utility: main executable is executable
-  zip via Archive Utility: every file identical to the build (tree sha256 66422fbc2e0db8c4)
+  zip via Archive Utility: every file identical to the build (tree sha256 020305d421fcdb40)
 DOWNLOAD CHECK PASSED: the disk image opens its window by itself with the exact app and an Applications shortcut; the zip expands with one pass of Archive Utility into the exact app
