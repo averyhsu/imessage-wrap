@@ -436,8 +436,8 @@ jobs:
 
       - name: Release build, universal (arm64 + x86_64)
         if: ${{ !cancelled() }}
-        continue-on-error: true
         run: |
+          set -o pipefail
           {
             echo "== Release build (universal)"
             ios/scripts/ci-xcodebuild.sh "$OUT/logs/release.log" build \
@@ -464,44 +464,42 @@ jobs:
       # The owner's download: ONE file, the ditto zip of the app, not re-zipped by GitHub
       # (archive: false), so the browser saves Threadback-for-Mac.zip and one double-click
       # (or Safari by itself) gives Threadback.app. The artifact is named after the file.
-      # Artifact storage is limited per account: when it is full GitHub refuses every upload.
-      # That must not turn a good build red, so uploads may fail; the download check below
-      # then says it was skipped and why.
-      - name: "Upload the app for the owner: Threadback-for-Mac.zip"
-        id: upload_zip
+      # The download, checked as the owner gets it (quarantined, opened, expanded), before
+      # anything is published. A failure here stops the run: nothing broken is published.
+      - name: "The download, checked before publishing: disk image window, app, zip"
         if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ env.OUT }}/download/Threadback-for-Mac.zip
-          archive: false
-          retention-days: 14
-          if-no-files-found: error
-
-      # The main download: a disk image whose window shows the three install steps.
-      - name: "Upload the app for the owner: Threadback-for-Mac.dmg"
-        id: upload_dmg
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        uses: actions/upload-artifact@v7
-        with:
-          path: ${{ env.OUT }}/download/Threadback-for-Mac.dmg
-          archive: false
-          retention-days: 14
-          if-no-files-found: error
-
-      - name: "The owner's download, checked: browser path, real Archive Utility, the built app"
-        if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          UPLOADED: ${{ steps.upload_dmg.outcome == 'success' && steps.upload_zip.outcome == 'success' }}
         run: |
           set -o pipefail
-          if [ "$UPLOADED" != "true" ]; then
-            echo "== The owner's download: SKIPPED. GitHub refused the upload (artifact storage is full), so there is no download to check in this run; the disk image was built and verified with hdiutil." | tee "$RES/13-download.txt"
-            exit 0
+          chmod +x mac/scripts/*.sh
+          mac/scripts/ci-browser-download-check.sh --file "$OUT/download/Threadback-for-Mac.dmg" "$OUT/download/Threadback-for-Mac.zip" 2>&1 | tee "$RES/13-download.txt"
+
+      # Public downloads, no sign-in: the rolling pre-release "mac-preview" for the work
+      # branch, a new release marked latest for main. Only when every check above passed.
+      - name: "Publish to the Releases page"
+        id: release
+        if: ${{ success() && github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'claude/')) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          mac/scripts/ci-release.sh 2>&1 | tee "$RES/15-release.txt"
+
+      - name: "The download, checked again from the Releases page, as a browser gets it"
+        if: ${{ steps.release.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DMG_URL: ${{ steps.release.outputs.dmg_url }}
+          ZIP_URL: ${{ steps.release.outputs.zip_url }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -o pipefail
+          if ! mac/scripts/ci-browser-download-check.sh --url "$DMG_URL" "$ZIP_URL" 2>&1 | tee -a "$RES/15-release.txt"; then
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              echo "the published download does not open into a valid app: removing release $TAG" | tee -a "$RES/15-release.txt"
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            fi
+            exit 1
           fi
-          mac/scripts/ci-browser-download-check.sh 2>&1 | tee "$RES/13-download.txt"
 
       - name: "What macOS shows on the first open (Gatekeeper), photographed"
         if: ${{ !cancelled() }}

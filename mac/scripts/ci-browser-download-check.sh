@@ -1,85 +1,53 @@
 #!/bin/bash
-# CI only. Downloads this run's artifacts the way a browser does (the REST API's
-# archive_download_url, following the redirect, saving under the name the server gives),
-# marks them quarantined as Safari would, expands them with the real Archive Utility and with
-# ditto, and checks that what comes out is the Threadback.app that was built.
+# CI only. Checks the owner's download the way a person gets it: the file arrives in a
+# Downloads folder with Safari's quarantine mark, the disk image is opened as a double-click
+# opens it (its window must open by itself, with the app and an Applications shortcut) and the
+# zip is expanded by the real Archive Utility. Each Threadback.app must be exactly the app
+# that was built (signature valid, every file identical). Exits 1 otherwise.
 #
-#   ci-browser-download-check.sh            exits 1 if the owner's download does not give a
-#                                           working Threadback.app in one expansion
+#   ci-browser-download-check.sh --file DMG ZIP        the built files, before publishing
+#   ci-browser-download-check.sh --url DMG_URL ZIP_URL  the published release assets, as a
+#                                                       browser downloads them (no sign-in)
 #
-# Needs: GH_TOKEN (the job token, with actions: read), GITHUB_REPOSITORY, GITHUB_RUN_ID,
-#        WORK, OUT, SHOTS. Artifacts: "Threadback-for-Mac.zip" (uploaded with archive: false)
-#        and "diagnosis-nested-zip" (the same zip inside an artifact zip, the old way).
+# Needs: WORK, SHOTS, and the Release build in $WORK/release-dd. GH_TOKEN is used only to
+# tell a private repository apart from a broken link.
 set -uo pipefail
 
+MODE="$1"; DMG_SRC="$2"; ZIP_SRC="$3"
 REL="$WORK/release-dd/Build/Products/Release/Threadback.app"
-UPLOADED="$OUT/download/Threadback-for-Mac.zip"
-ROOT="$WORK/browser"
-API="https://api.github.com/repos/$GITHUB_REPOSITORY"
+ROOT="$WORK/browser-$(date +%s)"
 FAIL=0
-rm -rf "$ROOT"
-mkdir -p "$ROOT"
+mkdir -p "$ROOT/Downloads"
 
 say() { echo "$@"; }
-info() { echo "$@" >&2; }
 sha() { shasum -a 256 "$1" | cut -c1-64; }
 tree_hash() { (cd "$1" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256) | shasum -a 256 | cut -c1-64; }
+quarantine() { xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;$(uuidgen)" "$1"; }
+limit() { perl -e 'alarm shift; exec @ARGV' "$@"; }
 
-LIST="$ROOT/artifacts.json"
-curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-  "$API/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" > "$LIST"
-say "artifacts of this run (name, bytes):"
-python3 -c 'import json,sys
-for a in json.load(open(sys.argv[1]))["artifacts"]:
-    print("  %s  %s" % (a["name"], a["size_in_bytes"]))' "$LIST"
-
-url_for() {
-  python3 -c 'import json,sys
-for a in json.load(open(sys.argv[1]))["artifacts"]:
-    if a["name"] == sys.argv[2]:
-        print(a["archive_download_url"])' "$LIST" "$1"
-}
-
-# fetch NAME DIR: like a browser, follow the redirect and keep the server's file name.
-fetch() {
-  local name="$1" dir="$2" url
-  url="$(url_for "$name")"
-  mkdir -p "$dir"
-  if [ -z "$url" ]; then info "artifact $name not found"; return 1; fi
-  (cd "$dir" && curl -sSL -OJ -D "$ROOT/headers-$name.txt" -H "Authorization: Bearer $GH_TOKEN" "$url")
-  info "downloaded $name: content-type $(grep -i '^content-type' "$ROOT/headers-$name.txt" | tail -1 | tr -d '\r' | cut -d' ' -f2-);" \
-      "disposition $(grep -i '^content-disposition' "$ROOT/headers-$name.txt" | tail -1 | tr -d '\r' | cut -d' ' -f2- || true)"
-  local file
-  file="$(ls -t "$dir" | head -1)"
-  info "  saved as: $file ($(stat -f %z "$dir/$file") bytes)"
-  # What Safari or Chrome adds to a download.
-  xattr -w com.apple.quarantine "0083;$(printf %x "$(date +%s)");Safari;$(uuidgen)" "$dir/$file"
-  echo "$dir/$file"
-}
-
-# archive_utility FILE: expand with the real Archive Utility, default settings; wait for it.
-archive_utility() {
-  local file="$1" dir
-  dir="$(dirname "$file")"
-  open -a "Archive Utility" "$file"
-  for _ in $(seq 1 60); do
-    sleep 1
-    pgrep -x "Archive Utility" > /dev/null || break
-  done
-  if pgrep -x "Archive Utility" > /dev/null; then
-    say "  Archive Utility is still open after 60 s (an error dialog?); screenshot taken, then it was closed"
-    screencapture -x "$SHOTS/download-archive-utility-stuck.png" 2>/dev/null || true
-    killall "Archive Utility" 2>/dev/null || true
+# get SOURCE NAME: into Downloads, as a browser would, and quarantined. Prints the path.
+get() {
+  local src="$1" name="$2" dest="$ROOT/Downloads/$2"
+  if [ "$MODE" = "--url" ]; then
+    local code
+    code="$(curl -sSL -o "$dest" -w '%{http_code}' "$src")"
+    say "  GET $src -> HTTP $code, $(stat -f %z "$dest" 2>/dev/null || echo 0) bytes (no sign-in)" >&2
+    if [ "$code" != "200" ]; then
+      say "  the public link did not work (HTTP $code)" >&2
+      rm -f "$dest"
+      return 1
+    fi
+  else
+    cp "$src" "$dest"
   fi
-  say "  after Archive Utility, the folder holds:"
-  ls -la "$dir" | sed 's/^/    /'
+  quarantine "$dest"
+  echo "$dest"
 }
 
-# check_app APP LABEL: the app must be exactly the one that was built, and intact.
 check_app() {
   local app="$1" label="$2" ok=1
   if [ ! -d "$app" ]; then say "  $label: NO Threadback.app"; return 1; fi
-  if codesign --verify --deep --strict --verbose=2 "$app" > "$ROOT/codesign.txt" 2>&1; then
+  if codesign --verify --deep --strict "$app" > "$ROOT/codesign.txt" 2>&1; then
     say "  $label: codesign --verify --deep --strict: valid"
   else
     say "  $label: codesign FAILED: $(tr '\n' ' ' < "$ROOT/codesign.txt")"; ok=0
@@ -87,91 +55,58 @@ check_app() {
   if [ -x "$app/Contents/MacOS/Threadback" ]; then say "  $label: main executable is executable"; else say "  $label: main executable NOT executable"; ok=0; fi
   local a b
   a="$(tree_hash "$app")"; b="$(tree_hash "$REL")"
-  if [ "$a" = "$b" ]; then say "  $label: every file identical to the build (tree sha256 ${a:0:16})"; else say "  $label: files DIFFER from the build ($a vs $b)"; ok=0; fi
-  say "  $label: size $(du -sk "$app" | cut -f1) KB (build $(du -sk "$REL" | cut -f1) KB); quarantine: $(xattr -p com.apple.quarantine "$app" 2>/dev/null | cut -d';' -f1,3 || echo none)"
-  say "  $label: Gatekeeper (spctl, expected to reject an ad-hoc app): $(spctl -a -vv -t exec "$app" 2>&1 | head -2 | tr '\n' ' ')"
+  if [ "$a" = "$b" ]; then say "  $label: every file identical to the build (tree sha256 ${a:0:16})"; else say "  $label: files DIFFER from the build"; ok=0; fi
   [ "$ok" -eq 1 ]
 }
 
-say "== The owner's download (browser path)"
-say "Archive Utility settings: $(defaults read com.apple.archiveutility 2>&1 | tr '\n' ' ' | cut -c1-300)"
-say "uploaded file: Threadback-for-Mac.zip, $(stat -f %z "$UPLOADED") bytes, sha256 $(sha "$UPLOADED")"
+say "== The owner's download ($([ "$MODE" = "--url" ] && echo "from the release page, as a browser gets it" || echo "the built files, before publishing"))"
 
-say "-- artifact Threadback-for-Mac.zip (uploaded with archive: false): one file, the app zip itself"
-F="$(fetch "Threadback-for-Mac.zip" "$ROOT/one/Downloads" | tail -1)"
-if [ -f "$F" ]; then
-  say "  downloaded sha256 $(sha "$F"); same bytes as uploaded: $([ "$(sha "$F")" = "$(sha "$UPLOADED")" ] && echo yes || echo NO)"
-  archive_utility "$F"
-  APPS="$(find "$ROOT/one/Downloads" -maxdepth 3 -name 'Threadback.app' -type d)"
-  say "  Threadback.app found after ONE Archive Utility expansion: $(echo "$APPS" | grep -c . || true)"
-  if ! check_app "$(echo "$APPS" | head -1)" "Archive Utility"; then FAIL=1; fi
-  mkdir -p "$ROOT/one/ditto"
-  ditto -x -k "$F" "$ROOT/one/ditto"
-  check_app "$ROOT/one/ditto/Threadback.app" "ditto -x -k" || FAIL=1
-else
-  say "  DOWNLOAD FAILED"; FAIL=1
-fi
-
-say "-- artifact Threadback-for-Mac.dmg (uploaded with archive: false): the disk image with the install steps"
-D="$(fetch "Threadback-for-Mac.dmg" "$ROOT/dmg/Downloads" | tail -1)"
-if [ -f "$D" ]; then
-  say "  downloaded sha256 $(sha "$D"); same bytes as built: $([ "$(sha "$D")" = "$(sha "$OUT/download/Threadback-for-Mac.dmg")" ] && echo yes || echo NO)"
+say "-- Threadback-for-Mac.dmg"
+D="$(get "$DMG_SRC" "Threadback-for-Mac.dmg")"
+# A freshly replaced release asset can take a moment to reach the download servers.
+for attempt in 1 2 3 4 5; do
+  [ "$MODE" = "--url" ] && [ -f "$D" ] || break
+  [ "$(sha "$D")" = "$(sha "$WORK/out/download/Threadback-for-Mac.dmg")" ] && break
+  say "  the download is not this build's disk image yet (attempt $attempt); waiting"
+  sleep 20
+  rm -f "$D"
+  D="$(get "$DMG_SRC" "Threadback-for-Mac.dmg")"
+done
+if [ -n "$D" ] && [ -f "$D" ]; then
+  say "  sha256 $(sha "$D"); same bytes as built: $([ "$(sha "$D")" = "$(sha "$WORK/out/download/Threadback-for-Mac.dmg")" ] && echo yes || echo NO)"
   hdiutil detach "/Volumes/Threadback" > /dev/null 2>&1 || true
-  # What a double-click does: DiskImageMounter mounts it and Finder opens its window.
-  open "$D"
+  open "$D"   # what a double-click does
   for _ in $(seq 1 60); do [ -d "/Volumes/Threadback/Threadback.app" ] && break; sleep 1; done
   sleep 5
-  screencapture -x "$SHOTS/download-dmg-window.png" 2>/dev/null || true
-  WINDOWS="$(perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to get name of every window' 2>&1)"
+  [ "$MODE" = "--url" ] && screencapture -x "$SHOTS/download-dmg-window.png" 2>/dev/null
+  WINDOWS="$(limit 30 osascript -e 'tell application "Finder" to get name of every window' 2>&1)"
   say "  Finder windows after the double-click: $WINDOWS"
   if echo "$WINDOWS" | grep -q "Threadback"; then say "  the disk image window OPENED BY ITSELF"; else say "  the disk image window did NOT open by itself"; FAIL=1; fi
-  say "  window layout saved in the image: $(perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to tell disk "Threadback" to get {bounds of container window, current view of container window, icon size of icon view options of container window, position of item "Threadback.app", position of item "Applications"}' 2>&1)"
-  say "  contents: $(ls -A /Volumes/Threadback | tr '\n' ' ')"
   if [ "$(readlink /Volumes/Threadback/Applications)" = "/Applications" ]; then say "  Applications shortcut: -> /Applications"; else say "  Applications shortcut MISSING"; FAIL=1; fi
   check_app "/Volumes/Threadback/Threadback.app" "disk image" || FAIL=1
-  say "  background: $(ls /Volumes/Threadback/.background 2>/dev/null | tr '\n' ' ')"
-  perl -e 'alarm 30; exec @ARGV' osascript -e 'tell application "Finder" to close every window' > /dev/null 2>&1 || true
+  limit 30 osascript -e 'tell application "Finder" to close every window' > /dev/null 2>&1 || true
   hdiutil detach "/Volumes/Threadback" > /dev/null 2>&1 || hdiutil detach -force "/Volumes/Threadback" > /dev/null 2>&1 || true
 else
-  say "  DOWNLOAD FAILED"; FAIL=1
+  FAIL=1
 fi
 
-say "-- (the old nested-zip diagnosis was retired: it only used up artifact storage)"
-N=""
-if [ -f "$N" ]; then
-  say "  outer zip, the entry for the inner file (zipinfo -v):"
-  zipinfo -v "$N" 2>&1 | grep -E "Central directory entry|file system or operating system of origin|version of encoding software|minimum software version|compression method|file security status|extended local header|file last modified|32-bit CRC|compressed size|uncompressed size|length of filename|length of extra field|Zip64|There is no file comment|ZIP64|zip64" | sed 's/^/    /' | head -24
-  zipinfo "$N" 2>&1 | sed 's/^/    /' | head -6
-  mkdir -p "$ROOT/nested/ditto"
-  ditto -x -k "$N" "$ROOT/nested/ditto"
-  INNER="$ROOT/nested/ditto/Threadback-for-Mac.zip"
-  if [ -f "$INNER" ]; then
-    say "  inner file via ditto: $(stat -f %z "$INNER") bytes, sha256 $(sha "$INNER"); same as uploaded: $([ "$(sha "$INNER")" = "$(sha "$UPLOADED")" ] && echo yes || echo NO)"
-    say "  inner file type: $(file -b "$INNER")"
-  else
-    say "  ditto produced: $(ls "$ROOT/nested/ditto" | tr '\n' ' ')"
-  fi
-  archive_utility "$N"
-  for f in "$ROOT"/nested/Downloads/*; do
-    [ -f "$f" ] || continue
-    say "  file after Archive Utility: $(basename "$f"), $(stat -f %z "$f") bytes, sha256 $(sha "$f" | cut -c1-16), type: $(file -b "$f" | cut -c1-80)"
-  done
-  APPS="$(find "$ROOT/nested/Downloads" -maxdepth 4 -name 'Threadback.app' -type d)"
-  say "  Threadback.app after Archive Utility on the old artifact: $(echo "$APPS" | grep -c . || true)"
-  INNER_AU="$(find "$ROOT/nested/Downloads" -mindepth 1 -maxdepth 2 -name '*.zip' ! -path "$N" | head -1)"
-  if [ -n "$INNER_AU" ]; then
-    say "  Archive Utility left an inner zip: $(basename "$INNER_AU"); expanding that with Archive Utility too"
-    archive_utility "$INNER_AU"
-    APPS="$(find "$ROOT/nested/Downloads" -maxdepth 4 -name 'Threadback.app' -type d)"
-    say "  Threadback.app after the second expansion: $(echo "$APPS" | grep -c . || true)"
-  fi
-  [ -n "$APPS" ] && check_app "$(echo "$APPS" | head -1)" "old artifact via Archive Utility" || true
+say "-- Threadback-for-Mac.zip"
+Z="$(get "$ZIP_SRC" "Threadback-for-Mac.zip")"
+if [ -n "$Z" ] && [ -f "$Z" ]; then
+  mkdir -p "$ROOT/zip"
+  mv "$Z" "$ROOT/zip/"
+  Z="$ROOT/zip/Threadback-for-Mac.zip"
+  open -a "Archive Utility" "$Z"
+  for _ in $(seq 1 60); do sleep 1; pgrep -x "Archive Utility" > /dev/null || break; done
+  killall "Archive Utility" 2>/dev/null || true
+  say "  after one pass of Archive Utility: $(ls "$ROOT/zip" | tr '\n' ' ')"
+  check_app "$ROOT/zip/Threadback.app" "zip via Archive Utility" || FAIL=1
 else
-  say "  (the diagnosis artifact could not be downloaded)"
+  FAIL=1
 fi
 
 if [ "$FAIL" -eq 0 ]; then
-  say "DOWNLOAD CHECK PASSED: Threadback-for-Mac.dmg opens its window by itself with the exact app and an Applications shortcut; Threadback-for-Mac.zip expands with one Archive Utility pass into the exact app"
+  say "DOWNLOAD CHECK PASSED: the disk image opens its window by itself with the exact app and an Applications shortcut; the zip expands with one pass of Archive Utility into the exact app"
 else
   say "DOWNLOAD CHECK FAILED"
 fi
