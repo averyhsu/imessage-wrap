@@ -138,9 +138,8 @@ jobs:
             "$PY" -m wrapped stats "$chat" "${args[@]}" > "$EXPECTED/$id.json"
             echo "python: $id -> $(wc -c < "$EXPECTED/$id.json" | tr -d ' ') bytes"
           done < "$WORK/cases.txt"
-          # The Python helper's own dry-run preview of the same chat. The app sends no link while
-          # the story site is not live (MacConfig.storySiteIsLive), so its replies are compared
-          # with the helper run with --no-link; the link variant is compared separately.
+          # The Python helper's own dry-run preview of the same chat, with and without the link
+          # (the app's reply carries the link while MacConfig.storySiteIsLive is true).
           "$PY" -m wrapped.mac preview --db "$DB" --contacts "$AB" --me Amara --chat taco --year 2026 --no-link --out "$WORK/py-preview" | tee "$WORK/py-preview.txt"
           PYDIR="$(dirname "$(find "$WORK/py-preview" -name recap.txt | head -1)")"
           cp "$PYDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"
@@ -208,49 +207,56 @@ jobs:
       - name: "Proof 3: a reply without Terminal (dry run) vs the Python helper"
         if: ${{ !cancelled() }}
         run: |
+          set -o pipefail
           {
-            echo "== Proof 3: dry-run reply vs the Python helper for the same chat"
-            echo "-- as the app ships now (story site not live: image and text, no link) vs python -m wrapped.mac preview --no-link"
+            FAIL=0
+            PREFIX="https://averyhsu.github.io/imessage-wrap/#w1="
+            echo "== Proof 3: dry-run reply vs the Python helper for the same chat (the story site is live: card, text, link)"
             "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
               --chat taco --year 2026 --out "$WORK/swift-preview"
             SWDIR="$(dirname "$(find "$WORK/swift-preview" -name recap.txt | head -1)")"
             echo "files: $(ls "$SWDIR" | tr '\n' ' ')"
-            if cmp -s "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"; then echo "TEXT IDENTICAL to the Python helper's recap.txt (--no-link)"; else echo "TEXT DIFFERS"; diff "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt" || true; fi
-            if [ -z "$(tr -d '[:space:]' < "$SWDIR/link.txt")" ]; then echo "NO LINK in the reply (link.txt is empty)"; else echo "A LINK WAS PRODUCED although the story site is not live"; exit 1; fi
+            if cmp -s "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt"; then echo "TEXT IDENTICAL to the Python helper's recap.txt (with the link)"; else echo "TEXT DIFFERS"; diff "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt" || true; FAIL=1; fi
             echo "--- recap.txt (app) ---"; cat "$SWDIR/recap.txt"
-            echo "-- with the link switched on (--link), as when the site is live, vs the helper's default"
-            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
-              --chat taco --year 2026 --link --out "$WORK/swift-preview-link" > /dev/null
-            SWLDIR="$(dirname "$(find "$WORK/swift-preview-link" -name recap.txt | head -1)")"
-            if cmp -s "$SWLDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt"; then echo "TEXT WITH LINK IDENTICAL to the Python helper's recap.txt"; else echo "TEXT WITH LINK DIFFERS"; diff "$SWLDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt" || true; fi
-            SL="$(cat "$SWLDIR/link.txt")"; PL="$(cat "$EXPECTED/link-taco-2026.txt")"
-            echo "link lengths: app ${#SL}, python ${#PL}; same string: $([ "$SL" = "$PL" ] && echo yes || echo no)"
+            SL="$(cat "$SWDIR/link.txt")"; PL="$(cat "$EXPECTED/link-taco-2026.txt")"
+            case "$SL" in "$PREFIX"*) echo "LINK starts with $PREFIX";; *) echo "LINK DOES NOT START WITH $PREFIX"; FAIL=1;; esac
+            if [ "${#SL}" -le 4800 ]; then echo "LINK is ${#SL} characters (at most 4,800)"; else echo "LINK TOO LONG: ${#SL}"; FAIL=1; fi
+            echo "link lengths: app ${#SL}, python ${#PL}; same string: $([ "$SL" = "$PL" ] && echo yes || echo no) (the two engines deflate differently)"
             "$WORK/venv/bin/python" -c "import sys; from wrapped import payload; print(payload.canonical_json(payload.stats_from_url(sys.argv[1])))" "$SL" > "$WORK/link-app.json"
             "$WORK/venv/bin/python" -c "import sys; from wrapped import payload; print(payload.canonical_json(payload.stats_from_url(sys.argv[1])))" "$PL" > "$WORK/link-py.json"
-            if cmp -s "$WORK/link-app.json" "$WORK/link-py.json"; then echo "LINK PAYLOADS DECODE TO IDENTICAL STATS (decoded by Python)"; else echo "LINK PAYLOADS DIFFER"; fi
-            "$BIN" --tb-decode-link "$PL" > /dev/null
+            if cmp -s "$WORK/link-app.json" "$WORK/link-py.json"; then echo "LINK PAYLOADS DECODE TO IDENTICAL STATS (decoded by Python)"; else echo "LINK PAYLOADS DIFFER"; FAIL=1; fi
+            "$BIN" --tb-decode-link "$SL" > /dev/null || FAIL=1
             CARD="$(find "$SWDIR" -name '*.png' | head -1)"
             echo "card: $(basename "$CARD"), $(sips -g pixelWidth -g pixelHeight "$CARD" | tail -2 | tr -s ' ' | tr '\n' ' ')"
             cp "$CARD" "$SHOTS/card-taco-2026.png"
+            echo "-- without the link (--no-link) vs python -m wrapped.mac preview --no-link"
+            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --year 2026 --no-link --out "$WORK/swift-preview-nolink" > /dev/null
+            NLDIR="$(dirname "$(find "$WORK/swift-preview-nolink" -name recap.txt | head -1)")"
+            if cmp -s "$NLDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"; then echo "TEXT WITHOUT LINK IDENTICAL to the Python helper's (--no-link)"; else echo "TEXT WITHOUT LINK DIFFERS"; FAIL=1; fi
 
             echo "-- agent pass, as mac.yml does for the Python helper: start, a /wrapped 2026 arrives, answer once"
             for who in app py; do mkdir -p "$WORK/agent-$who"; cp "$FX"/mac/chat.db* "$WORK/agent-$who/"; done
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
-              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
+            run_app() {
+              "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+                --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
+            }
+            run_app
             "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$WORK/agent-app/chat.db" "/wrapped 2026"
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
-              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out" | tee "$WORK/agent-app/second.txt"
-            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
-              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
+            run_app | tee "$WORK/agent-app/second.txt"
+            run_app
             run_py() {
               "$WORK/venv/bin/python" -m wrapped.mac agent --db "$WORK/agent-py/chat.db" --contacts "$FX/mac/AddressBook" --me Amara \
-                --chat taco --dry-run --once --yes --no-link --out "$WORK/agent-py/out" --state "$WORK/agent-py/state.json" --no-log
+                --chat taco --dry-run --once --yes --out "$WORK/agent-py/out" --state "$WORK/agent-py/state.json" --no-log
             }
             run_py > /dev/null
             "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$WORK/agent-py/chat.db" "/wrapped 2026"
             run_py | tail -2
             A="$(find "$WORK/agent-app/out" -name recap.txt | head -1)"; P="$(find "$WORK/agent-py/out" -name recap.txt | head -1)"
-            if [ -n "$A" ] && cmp -s "$A" "$P"; then echo "AGENT TEXT IDENTICAL (app vs Python helper with --no-link, both answering the same typed /wrapped 2026)"; else echo "AGENT TEXT DIFFERS"; diff "$A" "$P" || true; fi
+            if [ -n "$A" ] && cmp -s "$A" "$P"; then echo "AGENT TEXT IDENTICAL (app vs Python helper, both answering the same typed /wrapped 2026, with the link)"; else echo "AGENT TEXT DIFFERS"; diff "$A" "$P" || true; FAIL=1; fi
+            AL="$(cat "$(dirname "$A")/link.txt")"
+            case "$AL" in "$PREFIX"*) echo "AGENT LINK starts with $PREFIX (${#AL} characters)";; *) echo "AGENT LINK MISSING OR WRONG"; FAIL=1;; esac
+            exit "$FAIL"
           } 2>&1 | tee "$RES/04-dry-run.txt"
 
       - name: "Commands: the app's /wrapped rule against wrapped/mac/triggers.py"
@@ -592,8 +598,10 @@ jobs:
           cat "$SHOTS/MAC-APP-RESULTS.txt"
           ls -la "$SHOTS"
 
+      # Screenshots are committed to the work branch only, never to main (main gets them
+      # through a merge, so the two never diverge).
       - name: Publish screenshots and results to the branch
-        if: ${{ !cancelled() && github.ref_type == 'branch' }}
+        if: ${{ !cancelled() && github.ref_type == 'branch' && startsWith(github.ref_name, 'claude/') }}
         env:
           BRANCH: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}

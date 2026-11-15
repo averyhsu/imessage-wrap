@@ -215,19 +215,34 @@ final class AgentTests: XCTestCase {
         Fixture.note("agent log: " + log.joined(separator: " || "))
     }
 
-    /// While the story site is not live, a reply is the image and the text, with no link
-    /// and no line pointing at one.
-    func testDefaultReplyHasNoLinkWhileTheSiteIsNotLive() throws {
-        XCTAssertFalse(MacConfig.storySiteIsLive)
+    /// A reply follows the story-site switch: with the site live it is the card, the text and
+    /// the link on its own (a link that starts with the site, within 4,800 characters, that
+    /// this app decodes); without it, the card and the text with no line about a link.
+    func testDefaultReplyFollowsTheStorySiteSwitch() throws {
         let sender = RecordingSender()
         let (agent, _) = try makeAgent(sender)
-        XCTAssertFalse(agent.config.link)
+        XCTAssertEqual(agent.config.link, MacConfig.storySiteIsLive)
         XCTAssertEqual(try agent.runOnce(), 0)
         try insert("/wrapped 2026", chat: Fixture.tacoIdentifier)
         XCTAssertEqual(try agent.runOnce(), 1)
-        XCTAssertEqual(sender.sent.map(\.kind), ["file", "text"])
-        XCTAssertFalse(sender.sent[1].payload.contains("https://"))
-        XCTAssertFalse(sender.sent[1].payload.contains("link below"))
+        if MacConfig.storySiteIsLive {
+            XCTAssertEqual(sender.sent.map(\.kind), ["file", "text", "text"])
+            XCTAssertTrue(sender.sent[1].payload.contains("link below"))
+            let link = sender.sent[2].payload
+            XCTAssertTrue(link.hasPrefix("https://averyhsu.github.io/imessage-wrap/#w1="))
+            XCTAssertLessThanOrEqual(link.count, 4800)
+            XCTAssertNil(Agent.linkProblem(link))
+        } else {
+            XCTAssertEqual(sender.sent.map(\.kind), ["file", "text"])
+            XCTAssertFalse(sender.sent[1].payload.contains("https://"))
+            XCTAssertFalse(sender.sent[1].payload.contains("link below"))
+        }
+    }
+
+    func testLinkGuard() {
+        XCTAssertNotNil(Agent.linkProblem("https://example.com/#w1=abc"), "another site")
+        XCTAssertNotNil(Agent.linkProblem("https://averyhsu.github.io/imessage-wrap/#w1=" + String(repeating: "A", count: 5000)), "too long")
+        XCTAssertNotNil(Agent.linkProblem("https://averyhsu.github.io/imessage-wrap/#w1=not-a-payload"), "undecodable")
     }
 
     /// "Copy test report" carries statuses, counts and error numbers, and nothing that

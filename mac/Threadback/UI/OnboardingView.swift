@@ -294,14 +294,17 @@ struct OnboardingView: View {
                         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
                         .background(RoundedRectangle(cornerRadius: 14).fill(Color(nsColor: MacPalette.rgb(0x2C2C2E))))
                         .accessibilityIdentifier("onboarding.text")
-                    if !MacConfig.storySiteIsLive {
-                        VStack(alignment: .leading, spacing: 6) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if MacConfig.storySiteIsLive {
+                            Text("Three messages: this picture, this text, and a link that opens the full tap-through story for everyone in the chat.")
+                                .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
+                        } else {
                             Text("Today: this picture and this text.").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white)
                             Text("Later: once the story website is online, also a link that opens the full tap-through story for everyone in the chat.")
                                 .font(.system(size: 12.5)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                         }
-                        .accessibilityIdentifier("onboarding.today")
                     }
+                    .accessibilityIdentifier("onboarding.today")
                     HStack(spacing: 10) {
                         PillButton(title: "\u{25B6} Play the story", color: Theme.blue, identifier: "onboarding.playStory") { model.playStory(chat) }
                         Text("Only you see it, on this Mac.").font(.system(size: 11.5)).foregroundStyle(Theme.muted)

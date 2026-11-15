@@ -17,7 +17,7 @@ struct AgentConfig {
     var cooldown: TimeInterval = 120
     var staleAfter: TimeInterval = 600
     var futureSkew: TimeInterval = 30
-    var link = MacConfig.storySiteIsLive  // no link while the story site is not live
+    var link = MacConfig.storySiteIsLive  // a link only while the story site is live
     var quotes = false
     var fullNames = false
     var dryRun = false
@@ -251,9 +251,10 @@ final class Agent {
             if config.link {
                 do {
                     link = try engine.buildLink(statsJSON: config.fullNames ? fullStats : stats, quotes: config.quotes)
-                    // Never send a link this app cannot read back with the shared Swift decoder.
-                    if let url = URL(string: link), RecapLink.recap(from: url) == nil {
-                        log("the link did not decode with RecapLink; sending the card and text only")
+                    // Never send a link this app cannot read back with the shared Swift decoder,
+                    // or one that does not point at the story site, or one over the budget.
+                    if let problem = Agent.linkProblem(link) {
+                        log("no link this time (\(problem)); sending the card and text only")
                         link = ""
                     }
                 } catch {
@@ -324,6 +325,17 @@ final class Agent {
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         return folder
+    }
+
+    /// Why a link must not be sent, or nil when it is fine: it must start with the story
+    /// site's address and "#w1=", stay within 4,800 characters, and decode with the shared
+    /// Swift code (RecapLink) into a recap.
+    static func linkProblem(_ link: String) -> String? {
+        let prefix = MacConfig.storyBaseURL + "#" + WrappedConfig.payloadKey + "="
+        guard link.hasPrefix(prefix) else { return "it does not start with \(prefix)" }
+        guard link.count <= WrappedConfig.maxLinkLength else { return "it is \(link.count) characters, over \(WrappedConfig.maxLinkLength)" }
+        guard let url = URL(string: link), RecapLink.recap(from: url) != nil else { return "this app cannot read it back" }
+        return nil
     }
 
     /// wrapped/mac/agent.py `slugify`: ASCII letters and digits, at most 40 characters.

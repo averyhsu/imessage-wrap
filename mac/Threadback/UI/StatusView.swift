@@ -23,7 +23,9 @@ struct StatusView: View {
                 if model.chatIsOn {
                     Text(model.paused ? "Paused." : "On.").font(Theme.display(44)).foregroundStyle(.white)
                         .accessibilityIdentifier("status.title")
-                    Text(model.paused ? "Nothing is answered until you click Resume." : "When anyone types /wrapped in one of these chats, this Mac replies while it is awake and you are logged in.")
+                    Text(model.paused ? "Nothing is answered until you click Resume." : (MacConfig.storySiteIsLive
+                        ? "When anyone types /wrapped in one of these chats, this Mac replies with a picture, a short text and a link to the full story, while it is awake and you are logged in."
+                        : "When anyone types /wrapped in one of these chats, this Mac replies with a picture and a short text, while it is awake and you are logged in."))
                         .font(.system(size: 14)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Off.").font(Theme.display(44)).foregroundStyle(.white).accessibilityIdentifier("status.title")
