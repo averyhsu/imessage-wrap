@@ -662,6 +662,7 @@ jobs:
           mkdir -p "$WORK/out/results" "$WORK/out/screenshots" "$WORK/out/download"
 
       - uses: actions/download-artifact@v5
+        continue-on-error: true
         with:
           name: mac-publish
           path: ${{ runner.temp }}/tb/out
