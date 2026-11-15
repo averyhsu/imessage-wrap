@@ -27,16 +27,19 @@ A tap-through story, in the style of Instagram or Spotify stories, built from on
 
 ## Try it
 
+The site is live: **https://averyhsu.github.io/imessage-wrap/**
+
 | | What | Needs |
 |---|------|-------|
-| **Watch the demo** | The full story with an invented chat. | A browser. |
-| **Make your own in the browser** | Drop in your Messages database (from a Mac, or from an iPhone backup on a Mac or PC), pick a chat, get a link to send. | A computer that has your messages. Nothing is installed or uploaded. |
-| **Mac helper** | Anyone in the chat types `/wrapped`; the recap card, a short summary and the link appear in the thread. | A Mac signed in to Messages. Today it is a Terminal tool ([guide](docs/MAC.md)); a double-clickable app with a few-click setup exists as a prototype ([what it would take](docs/MAC-APP.md)). |
-| **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight later. [Guide](ios/README.md) |
+| **[Watch the demo](https://averyhsu.github.io/imessage-wrap/?demo=1)** | The full story with an invented chat. | A browser. |
+| **[Get the Mac app](https://averyhsu.github.io/imessage-wrap/mac/)** | Turn it on for a group chat once; after that anyone in the chat types `/wrapped` and your Mac replies in the thread with a recap card, a short summary and the link to the story. Set up by clicking: no Terminal. | A Mac (macOS 14 or later) signed in to Messages. The app is not signed through Apple's paid program, so the first open takes one detour through System Settings; the page walks you through it. |
+| **[Make one in the browser](https://averyhsu.github.io/imessage-wrap/make/)** | Drop in your Messages database (from a Mac, or from an iPhone backup on a Mac or PC), pick a chat, get a link to send. | A computer that has your messages. Nothing is installed or uploaded. |
+| **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight would need Apple's paid developer program. [Guide](ios/README.md) |
 
-**The public site may not be switched on yet** (see [STATUS.md](STATUS.md)). If
-`https://averyhsu.github.io/imessage-wrap/` does not open, run the same pages on your own
-computer:
+There is also a command-line version of the Mac helper for people who prefer Terminal
+([guide](docs/MAC.md)).
+
+To run the pages on your own computer instead:
 
 ```sh
 git clone https://github.com/averyhsu/imessage-wrap
@@ -45,9 +48,6 @@ npm ci && npm run serve
 # demo story:     http://127.0.0.1:4173/?demo=1
 # make your own:  http://127.0.0.1:4173/make/   (has a "Try it with sample data" button)
 ```
-
-A link made on a local copy points at the public site, so other people can open it only
-once that site is on. "Open story" on the maker page plays it locally either way.
 
 Everyone *else* in the chat needs nothing at all: the link opens in any phone's browser,
 iPhone or Android. In a chat with green bubbles, or wherever Messages shows no preview, it

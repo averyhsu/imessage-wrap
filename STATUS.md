@@ -4,9 +4,11 @@ _Last updated: 2026-11-15._
 
 **In one paragraph.** The recap story, the browser maker, the command-line tool, the Mac
 helper and the iPhone app with its Messages extension are all built and pass their tests.
-The code is on `main`. Nobody outside this repository can use the web pages until the
-public site is switched on, which takes two clicks from the owner (see "Decisions"). A Mac
-app that answers `/wrapped` has since been built and proven on the owner's own Mac.
+The code is on `main` and the public site is live at
+https://averyhsu.github.io/imessage-wrap/ (since 2026-11-15; the demo, a recap link, the
+maker and the Mac page were driven there in a real browser the same day). A Mac app that
+answers `/wrapped` is the main way to use it: it has been proven on the owner's own Mac and
+is a public download on the Releases page.
 Everything else was built without a real iPhone or Mac, so the things only a device can
 prove are listed below as unproven, each with a short check you can run.
 
@@ -119,7 +121,8 @@ Nothing below has been done. Each needs your yes.
 
 | Decision | What happens if yes | Cost |
 |----------|--------------------|------|
-| **Turn on the public site** (GitHub Pages) | **Approved by the owner on 2026-11-15; one setting left, yours.** After the merge a workflow copies the site to a branch called `gh-pages`. Then: repo → Settings → Pages → Source: "Deploy from a branch" → Branch `gh-pages`, folder `/ (root)` → Save. The demo, the maker, the Mac guide and recap links then work at `https://averyhsu.github.io/imessage-wrap/`, and `/wrapped` replies can carry the link to the story. Keep this address: links already shared would stop working if the repo were renamed. | Free. The site is public. |
+| **Turn on the public site** (GitHub Pages) | **Done on 2026-11-15.** The site is published from the `gh-pages` branch, which a workflow refreshes whenever `web/` changes on `main`. Keep the address: links already shared would stop working if the repo were renamed. | Free. The site is public. |
+| **Merging follow-ups** | **Standing yes from the owner (2026-11-15):** changes are merged into `main` once their tests pass, without asking each time. | – |
 | **Merge into `main`** | **Done on 2026-11-15** at the owner's request. CI runs on `main`; the one-line installer and a plain `git clone` work. | Free |
 | **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
 | **Apple Developer Program** | **Declined for now (owner, 2026-11-12).** It would give TestFlight for the iPhone app and a Mac app that opens with one click. Without it the Mac app ships by the free route (see [MAC-APP.md](docs/MAC-APP.md)). | $99 a year |
@@ -129,7 +132,7 @@ Nothing below has been done. Each needs your yes.
 
 ## What's next
 
-1. The one Pages setting that publishes the site; then checks A, B and C, and the story link is switched on in the Mac app's replies.
+1. The story link in the Mac app's replies (the site is live, so it can be switched on), then an independent review of the Mac app.
 2. Check E. If the Shortcut reports senders in group chats, build the last link for an
    iPhone-only path: the app takes the Shortcut's output and makes the recap itself, so it
    can be sent from the Messages drawer without a browser.
