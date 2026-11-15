@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Config = require(path.join(WEB, 'js/config.js'));
@@ -528,6 +528,7 @@ await server.close();
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
+printNotes();
 console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');

@@ -21,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, waitForStory, showSettled } from '../lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, waitForStory, showSettled } from '../lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Engine = require(path.join(WEB, 'make/engine.js'));
@@ -2043,6 +2043,7 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
+printNotes();
 console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');

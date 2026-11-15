@@ -77,6 +77,12 @@ export function note(reason) {
   noted.add(reason);
   console.log(`  ~ [${BROWSER}] ${reason}`);
 }
+/** Every note of this run again, for the end of the output. */
+export function printNotes() {
+  if (!noted.size) return;
+  console.log(`\nChecked differently in ${BROWSER}:`);
+  for (const reason of noted) console.log(' ~ ' + reason);
+}
 
 export async function launch() {
   console.log(`Browser: ${BROWSER}`);

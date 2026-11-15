@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
 import { fixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -1202,6 +1202,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
 await browser.close();
 await server.close();
 
+printNotes();
 console.log(`\n${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
