@@ -4,6 +4,11 @@
 # experiments (Open panel instead of Full Disk Access, the Automation prompt, the login item).
 # Every result is written to docs/screenshots/mac/MAC-APP-RESULTS.txt on the branch.
 #
+# Two jobs. "app" builds, tests and runs the app with a read-only token (no credentials are
+# kept in .git/config). "publish" is the only one that may write: it downloads just the
+# built disk image, zip and screenshots, puts them on the Releases page, checks them there
+# as a browser gets them, and commits the screenshots to a claude/ branch.
+#
 # Nothing here sends a message: the app's sender refuses to run when CI is set, the dry runs
 # use a recording sender, and the AppleScript is compiled, never run.
 name: Mac app
@@ -36,10 +41,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  # contents: the step that commits docs/screenshots/mac/. actions: read, so the job can
-  # download its own artifacts the way a browser does (the download check).
-  contents: write
-  actions: read
+  contents: read
 
 jobs:
   app:
@@ -53,6 +55,8 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Folders
         run: |
@@ -92,16 +96,27 @@ jobs:
             echo "tccutil: $(tccutil 2>&1 | head -3 | tr '\n' ' ')"
           } 2>&1 | tee "$RES/01-runner.txt"
 
-      - name: Install XcodeGen and Pillow (for the Python helper's own preview)
+      # XcodeGen and Pillow are pinned by version and checksum. create-dmg comes from
+      # Homebrew (its bottles are checked by Homebrew); its version is printed.
+      - name: Install XcodeGen, create-dmg and Pillow (for the Python helper's own preview)
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
           HOMEBREW_NO_INSTALL_CLEANUP: "1"
           HOMEBREW_NO_ENV_HINTS: "1"
+          XCODEGEN_VERSION: "2.44.1"
+          XCODEGEN_SHA256: "a2e905fb68446e9bb4008cdfe2e13e3f176d0cbcca828b71770f8e53fca91b73"
         run: |
-          brew install xcodegen create-dmg
-          xcodegen --version
+          set -euo pipefail
+          curl -sSL -o "$WORK/xcodegen.zip" "https://github.com/yonaskolb/XcodeGen/releases/download/$XCODEGEN_VERSION/xcodegen.zip"
+          echo "$XCODEGEN_SHA256  $WORK/xcodegen.zip" | shasum -a 256 -c -
+          ditto -x -k "$WORK/xcodegen.zip" "$WORK/tools"
+          echo "$WORK/tools/xcodegen/bin" >> "$GITHUB_PATH"
+          "$WORK/tools/xcodegen/bin/xcodegen" --version
+          brew install create-dmg
+          echo "create-dmg $(create-dmg --version 2>&1 | head -1)"
           /usr/bin/python3 -m venv "$WORK/venv"
-          "$WORK/venv/bin/python" -m pip install --quiet "pillow>=10"
+          "$WORK/venv/bin/python" -m pip install --quiet --require-hashes -r mac/scripts/requirements-ci.txt
+          "$WORK/venv/bin/python" -c "import PIL; print('Pillow', PIL.__version__)"
 
       - name: Invented fixture and the Python outputs to compare with
         run: |
@@ -486,9 +501,13 @@ jobs:
             REL="$WORK/release-dd/Build/Products/Release/Threadback.app"
             echo "Release bundle: $(du -sh "$REL" | cut -f1); archs: $(lipo -archs "$REL/Contents/MacOS/Threadback")"
             count_in() { { find "$1" -type f \( -perm -u+x -o -name "*.dylib" \) -exec strings -a {} + | grep -c -F -- "$2"; } || true; }
-            for MARKER in "--tb-stats" "TBProbe"; do
-              echo "debug-only marker '$MARKER': Debug bundle $(count_in "$APP" "$MARKER"), Release bundle $(count_in "$REL" "$MARKER")"
+            MARKERS_FOUND=0
+            for MARKER in "--tb-stats" "--tb-agent-once" "TBProbe" "TBAutomationProbe" "simulateCrash" "WRAPPED_NOTE"; do
+              IN_REL="$(count_in "$REL" "$MARKER")"
+              echo "debug-only marker '$MARKER': Debug bundle $(count_in "$APP" "$MARKER"), Release bundle $IN_REL"
+              [ "${IN_REL:-0}" -eq 0 ] || MARKERS_FOUND=1
             done
+            if [ "$MARKERS_FOUND" -ne 0 ]; then echo "FAIL: debug-only code is in the Release build"; exit 1; fi
             echo "Release signature: $(codesign -dvv "$REL" 2>&1 | grep -E 'Signature|flags' | tr '\n' ' ')"
             echo "Release entitlements:"; codesign -d --entitlements - --xml "$REL" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | grep -E "<key>" || true
             echo "Gatekeeper on the Release app: $(spctl -a -vv -t exec "$REL" 2>&1 | tr '\n' ' ')"
@@ -501,6 +520,19 @@ jobs:
             echo "zipped for download: artifact Threadback-for-Mac -> Threadback-for-Mac.zip ($(du -h "$OUT/download/Threadback-for-Mac.zip" | cut -f1)); artifact Threadback-debug-with-probes ($(du -h "$OUT/download-debug/Threadback-debug-with-probes.zip" | cut -f1))"
           } 2>&1 | tee "$RES/12-release.txt"
 
+      # The unit tests again, compiled with the Release settings (what ships: optimised, no
+      # DEBUG code), on the same fixture.
+      - name: Unit tests against the Release configuration
+        if: ${{ !cancelled() }}
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_EXPECTED: ${{ env.EXPECTED }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/unit-release.log" test \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -configuration Release -destination "platform=macOS" \
+            -derivedDataPath "$WORK/release-test-dd" -only-testing:ThreadbackTests -resultBundlePath "$OUT/UnitRelease.xcresult" | tee "$RES/12b-unit-release.txt"
+
       # The owner's download: ONE file, the ditto zip of the app, not re-zipped by GitHub
       # (archive: false), so the browser saves Threadback-for-Mac.zip and one double-click
       # (or Safari by itself) gives Threadback.app. The artifact is named after the file.
@@ -512,34 +544,6 @@ jobs:
           set -o pipefail
           chmod +x mac/scripts/*.sh
           mac/scripts/ci-browser-download-check.sh --file "$OUT/download/Threadback-for-Mac.dmg" "$OUT/download/Threadback-for-Mac.zip" 2>&1 | tee "$RES/13-download.txt"
-
-      # Public downloads, no sign-in: the rolling pre-release "mac-preview" for the work
-      # branch, a new release marked latest for main. Only when every check above passed.
-      - name: "Publish to the Releases page"
-        id: release
-        if: ${{ success() && github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'claude/')) }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -o pipefail
-          mac/scripts/ci-release.sh 2>&1 | tee "$RES/15-release.txt"
-
-      - name: "The download, checked again from the Releases page, as a browser gets it"
-        if: ${{ steps.release.outcome == 'success' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          DMG_URL: ${{ steps.release.outputs.dmg_url }}
-          ZIP_URL: ${{ steps.release.outputs.zip_url }}
-          TAG: ${{ steps.release.outputs.tag }}
-        run: |
-          set -o pipefail
-          if ! mac/scripts/ci-browser-download-check.sh --url "$DMG_URL" "$ZIP_URL" 2>&1 | tee -a "$RES/15-release.txt"; then
-            if [ "$GITHUB_REF_NAME" = "main" ]; then
-              echo "the published download does not open into a valid app: removing release $TAG" | tee -a "$RES/15-release.txt"
-              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
-            fi
-            exit 1
-          fi
 
       - name: "What macOS shows on the first open (Gatekeeper), photographed"
         if: ${{ !cancelled() }}
@@ -598,14 +602,19 @@ jobs:
           cat "$SHOTS/MAC-APP-RESULTS.txt"
           ls -la "$SHOTS"
 
-      # Screenshots are committed to the work branch only, never to main (main gets them
-      # through a merge, so the two never diverge).
-      - name: Publish screenshots and results to the branch
-        if: ${{ !cancelled() && github.ref_type == 'branch' && startsWith(github.ref_name, 'claude/') }}
-        env:
-          BRANCH: ${{ github.ref_name }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: mac/scripts/ci-publish-screenshots.sh
+      # What the publish job gets: the built disk image and zip (when the build got that far)
+      # and the screenshots with the results. Nothing else leaves this job.
+      - name: Hand the built files to the publish job
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-publish
+          retention-days: 1
+          path: |
+            ${{ env.OUT }}/download/Threadback-for-Mac.dmg
+            ${{ env.OUT }}/download/Threadback-for-Mac.zip
+            ${{ env.SHOTS }}
+          if-no-files-found: warn
 
       - name: Upload logs and reports
         if: ${{ !cancelled() }}
@@ -619,3 +628,96 @@ jobs:
             ${{ env.REPORTS }}
             ${{ env.SHOTS }}
           if-no-files-found: warn
+
+  # The only job that may write. It runs no build tool and nothing from the app job but the
+  # files handed over: the disk image, the zip (whose app is the reference for the checks)
+  # and the screenshots.
+  publish:
+    name: Publish (Releases page, screenshots)
+    needs: app
+    if: ${{ !cancelled() && github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'claude/')) }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    # Every claude/ branch shares the one preview release: one publish at a time.
+    concurrency:
+      group: mac-publish-${{ github.ref_name == 'main' && 'main' || 'preview' }}
+      cancel-in-progress: false
+    steps:
+      - name: Check out (scripts only)
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: The built files
+        run: |
+          WORK="$RUNNER_TEMP/tb"
+          {
+            echo "WORK=$WORK"
+            echo "OUT=$WORK/out"
+            echo "RES=$WORK/out/results"
+            echo "SHOTS=$WORK/out/screenshots"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$WORK/out/results" "$WORK/out/screenshots" "$WORK/out/download"
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: mac-publish
+          path: ${{ runner.temp }}/tb/out
+
+      - name: Unpack the built app (the reference every download is compared with)
+        id: built
+        run: |
+          ls -la "$OUT" "$OUT/download" 2>&1 | head -20
+          if [ -s "$OUT/download/Threadback-for-Mac.dmg" ] && [ -s "$OUT/download/Threadback-for-Mac.zip" ]; then
+            mkdir -p "$WORK/release-dd/Build/Products/Release"
+            ditto -x -k "$OUT/download/Threadback-for-Mac.zip" "$WORK/release-dd/Build/Products/Release"
+            echo "built=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "the app job made no download; nothing to publish"
+            echo "built=no" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Public downloads, no sign-in: the rolling pre-release "mac-preview" for the work
+      # branch, a new release marked latest for main. Only when every check passed.
+      - name: "Publish to the Releases page"
+        id: release
+        if: ${{ needs.app.result == 'success' && steps.built.outputs.built == 'yes' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          chmod +x mac/scripts/*.sh
+          mac/scripts/ci-release.sh 2>&1 | tee "$RES/15-release.txt"
+
+      - name: "The download, checked again from the Releases page, as a browser gets it"
+        if: ${{ steps.release.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DMG_URL: ${{ steps.release.outputs.dmg_url }}
+          ZIP_URL: ${{ steps.release.outputs.zip_url }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -o pipefail
+          if ! mac/scripts/ci-browser-download-check.sh --url "$DMG_URL" "$ZIP_URL" 2>&1 | tee -a "$RES/15-release.txt"; then
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              echo "the published download does not open into a valid app: removing release $TAG" | tee -a "$RES/15-release.txt"
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            fi
+            exit 1
+          fi
+
+      # Screenshots are committed to the work branch only, never to main (main gets them
+      # through a merge, so the two never diverge).
+      - name: Publish screenshots and results to the branch
+        if: ${{ !cancelled() && github.ref_type == 'branch' && startsWith(github.ref_name, 'claude/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -f "$SHOTS/MAC-APP-RESULTS.txt" ] && [ -f "$RES/15-release.txt" ]; then
+            { echo ""; echo "== Publish job"; cat "$RES/15-release.txt"; } >> "$SHOTS/MAC-APP-RESULTS.txt"
+          fi
+          mac/scripts/ci-publish-screenshots.sh

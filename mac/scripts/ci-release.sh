@@ -2,8 +2,8 @@
 # CI only. Puts the built disk image and zip on the repository's Releases page, where anyone
 # can download them without signing in:
 #
-#   a push to claude/**  -> the rolling pre-release "mac-preview" (tag moved to this commit,
-#                           assets replaced). Link: .../releases/download/mac-preview/Threadback-for-Mac.dmg
+#   a push to claude/**  -> the rolling pre-release "mac-preview" (assets replaced first, then
+#                           the tag moved to this commit). Link: .../releases/download/mac-preview/Threadback-for-Mac.dmg
 #   a push to main       -> a new release "mac-v<version>-<run number>", marked latest.
 #                           Link: .../releases/latest/download/Threadback-for-Mac.dmg
 #
@@ -33,7 +33,11 @@ Threadback for Mac: your group chat's year in review, answered right in the chat
 2. Open Threadback from Applications. macOS says **"Threadback" Not Opened**, because it is not notarized by Apple: click **Done** (not Move to Trash).
 3. Open **System Settings > Privacy & Security**, scroll down to Security and click **Open Anyway**, then confirm with your password or Touch ID. Threadback opens; this happens only once.
 
-Threadback reads your Messages on this Mac only and never uploads them. It needs a Mac with macOS 14 or later, signed in to Messages.
+**What it sends.** Threadback reads your Messages on this Mac. When anyone in a chat you turned on types /wrapped, your Mac replies from your Apple ID with three messages: a picture, a short text and a link. The picture and the link show the chat's name, first names and counts (never message text), and anyone the link is forwarded to can open it. Messages also loads a preview of the link from the site. Nothing else leaves your Mac.
+
+**After each update**, macOS asks again for the Messages folder and whether Threadback may control Messages. Open Threadback once after updating, so the question does not first appear when a friend types /wrapped.
+
+It needs a Mac with macOS 14 or later, signed in to Messages.
 
 Version $VERSION, built from commit $SHORT on $DATE. Also available as Threadback-for-Mac.zip (the same app).
 EOF
@@ -44,23 +48,26 @@ EOF
 else
   TAG="mac-preview"
   cat > "$NOTES" <<EOF
-**Preview build of Threadback for Mac, for testing.** It is replaced by every new build of the work branch.
+**Rolling test build of Threadback for Mac.** Not a release: every push to a work branch replaces these files and moves this tag, so the download below can change at any time. For a stable version, use the latest release.
 
 - Commit: $SHORT ($GITHUB_REF_NAME)
 - Built: $DATE
 - Not notarized: the first time you open it, macOS says "Threadback" Not Opened. Click **Done**, then System Settings > Privacy & Security > **Open Anyway**.
 
 Download [Threadback-for-Mac.dmg]($REPO/releases/download/mac-preview/Threadback-for-Mac.dmg), double-click it and drag Threadback onto Applications.
+
+A reply is three messages from your Apple ID: a picture, a short text and a link. The link shows the chat's name, first names and counts (never message text), and anyone it is forwarded to can open it. Each new build makes macOS ask again for the Messages folder and whether Threadback may control Messages.
 EOF
   if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
-    # Move the tag to this commit, then replace the files and the text.
-    gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true > /dev/null
+    # Replace the files and the text first; move the tag to this commit only after that,
+    # so the tag never names a commit whose files are not there yet.
     gh release upload "$TAG" "$DMG" "$ZIP" --repo "$GITHUB_REPOSITORY" --clobber
-    gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Threadback for Mac (preview build)" \
+    gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Threadback for Mac (rolling test build)" \
       --notes-file "$NOTES" --prerelease
+    gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG" -f sha="$GITHUB_SHA" -F force=true > /dev/null
   else
     gh release create "$TAG" "$DMG" "$ZIP" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-      --title "Threadback for Mac (preview build)" --notes-file "$NOTES" --prerelease
+      --title "Threadback for Mac (rolling test build)" --notes-file "$NOTES" --prerelease
   fi
   DMG_URL="$REPO/releases/download/$TAG/Threadback-for-Mac.dmg"
   ZIP_URL="$REPO/releases/download/$TAG/Threadback-for-Mac.zip"

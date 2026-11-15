@@ -18,7 +18,9 @@ describe() {
     onboarding-1-welcome) echo "First run, screen 1 of 3: what Threadback does. One button: Continue." ;;
     onboarding-2-connect) echo "Screen 2 of 3: connect your messages. The button opens the Open panel already inside ~/Library/Messages." ;;
     onboarding-2b-connected) echo "Screen 2 after the folder grant (fixture data in this run): connected, with the optional Contacts step for first names." ;;
-    onboarding-3-choose-chat) echo "Screen 3 of 3: choose the chat. \"Turn on\" next to one chat; the consent text says replies come from your Apple ID." ;;
+    onboarding-3-choose-chat) echo "Screen 3 of 3: choose the chat. Every group chat, most recently active first, with a search field; \"Turn on\" next to each." ;;
+    onboarding-3a-consent) echo "Turn on, before anything is on: the whole statement of what a reply is (three messages from your Apple ID, who can trigger it, what the link shows and that anyone it is forwarded to can open it). Nothing is on until Turn on in this sheet." ;;
+    status-3-replies-changed) echo "A chat turned on when replies carried less: it is not answered until the owner clicks Keep on (or Turn off) in this sheet." ;;
     onboarding-3b-on) echo "Screen 3 after Turn on: the reply everyone in the chat would get (card and text), the login-item switch and Done." ;;
     onboarding-4-menu-bar) echo "The menu-bar item after onboarding (whole screen; best effort)." ;;
     access-1-open-panel-preset) echo "Proof 6b, real ~/Library/Messages on the runner: the Open panel as the app opens it (preset folder, \"Grant Access\")." ;;
@@ -114,6 +116,12 @@ main() {
 
   git config user.name "github-actions[bot]"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  # The checkout keeps no credentials (persist-credentials: false): the publish job's token
+  # is given to git here, for this push only.
+  if [ -n "${GH_TOKEN:-}" ]; then
+    git config --local "http.https://github.com/.extraheader" \
+      "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')"
+  fi
   local attempt
   for attempt in 1 2 3 4 5 6; do
     git fetch --quiet --depth 1 origin "$branch"
