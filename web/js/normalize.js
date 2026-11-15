@@ -118,12 +118,12 @@
   }
 
   // ── personality (docs/SCHEMA.md §3), used when the input has none ───────────
+  // Deliberately simple: the engines' trait rules need numbers an old link does not carry,
+  // so a recap without a personality gets the Quiet Ones or the one for its peak hour.
 
   var PERSONALITIES = {
     quiet_ones: ['The Quiet Ones', 'Few words. All of them count.'],
     night_owls: ['The Night Owls', 'Sleep is a suggestion.'],
-    weekend_warriors: ['The Weekend Warriors', 'Weekdays are for recovering.'],
-    always_on: ['The Always-On Group Chat', 'There is no off switch.'],
     early_birds: ['The Early Birds', 'Texting before coffee is a choice.'],
     morning_meeting: ['The Morning Meeting', 'This could not have been an email.'],
     lunch_break: ['The Lunch Break Legends', 'Eating with one hand, typing with the other.'],
@@ -132,14 +132,10 @@
     after_hours: ['The After-Hours Crew', 'The day ends. The chat begins.']
   };
 
-  function personalityId(byHour, byWeekday, total) {
-    var peak = F.argmax(byHour);
+  function personalityId(peak, total) {
     if (total < 50) return 'quiet_ones';
     if (peak < 0) return null;
-    var night = (byHour[0] + byHour[1] + byHour[2] + byHour[3] + byHour[4]) / total;
-    if (night >= 0.12 || peak <= 4) return 'night_owls';
-    if ((byWeekday[5] + byWeekday[6]) / total >= 0.42) return 'weekend_warriors';
-    if (byHour[peak] / total < 0.065) return 'always_on';
+    if (peak <= 4) return 'night_owls';
     if (peak <= 8) return 'early_birds';
     if (peak <= 11) return 'morning_meeting';
     if (peak <= 13) return 'lunch_break';
@@ -148,15 +144,20 @@
     return 'after_hours';
   }
 
-  function computePersonality(byHour, byWeekday, total) {
-    var id = personalityId(byHour, byWeekday, total);
-    if (!id) return null;
+  function computePersonality(byHour, total) {
     var peak = F.argmax(byHour);
+    var id = personalityId(peak, total);
+    if (!id) return null;
     var def = PERSONALITIES[id];
+    var reason = id === 'quiet_ones'
+      ? (total === 1 ? '1 message in total' : F.int(total) + ' messages in total')
+      : 'Peak hour: ' + F.hour(peak);
     return {
       id: id,
+      emoji: F.personaEmoji(id),
       title: def[0],
-      blurb: (peak >= 0 ? 'Peak hour: ' + F.hour(peak) + '. ' : '') + def[1],
+      reason: reason,
+      blurb: reason + '. ' + def[1],
       peak_hour: peak >= 0 ? peak : 0
     };
   }
@@ -281,18 +282,21 @@
     return { date: String(date).slice(0, 10), messages: i(messages) };
   }
 
-  function readPersonality(raw, byHour, byWeekday, total) {
+  function readPersonality(raw, byHour, total) {
     var p = raw.personality;
-    var computed = computePersonality(byHour, byWeekday, total);
+    var computed = computePersonality(byHour, total);
     if (typeof p === 'string' && str(p, 60)) p = { title: p };
     if (isObj(p) && str(p.title, 60)) {
       var peak = Number(p.peak_hour);
-      return {
-        id: str(p.id, 32) || (computed ? computed.id : 'custom'),
-        title: str(p.title, 60),
-        blurb: str(first(p.blurb, p.description, p.line), 200),
-        peak_hour: isFinite(peak) && peak >= 0 && peak <= 23 ? Math.round(peak) : (computed ? computed.peak_hour : 0)
-      };
+      var id = str(p.id, 32) || (computed ? computed.id : 'custom');
+      // Ids are open-ended (docs/SCHEMA.md §1): the recap's own emoji wins, then the one for
+      // a known id, then the neutral fallback. Never empty.
+      var out = { id: id, emoji: str(p.emoji, 12) || F.personaEmoji(id), title: str(p.title, 60) };
+      var reason = str(p.reason, 120);
+      if (reason) out.reason = reason;
+      out.blurb = str(first(p.blurb, p.description, p.line), 200);
+      out.peak_hour = isFinite(peak) && peak >= 0 && peak <= 23 ? Math.round(peak) : (computed ? computed.peak_hour : 0);
+      return out;
     }
     return computed;
   }
@@ -375,7 +379,7 @@
       by_weekday: byWeekday,
       by_month: byMonth,
       busiest_day: readBusiestDay(raw),
-      personality: readPersonality(raw, byHour, byWeekday, messages),
+      personality: readPersonality(raw, byHour, messages),
       late_night: readLateNight(raw, byHour, messages),
       senders: senders,
       most_reacted: readMostReacted(raw),

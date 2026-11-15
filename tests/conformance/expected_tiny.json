@@ -25,7 +25,25 @@
   " handle: same person once contacts are applied), like on J3 (removed 1 ns after it",
   " was added and stored in the opposite ROWID order), love on M7 (add row deleted),",
   " the stray removal on M4, the tapback on an unknown guid, and love on B2 (that",
-  " message is outside the period in Los Angeles, though not in UTC)."
+  " message is outside the period in Los Angeles, though not in UTC).",
+  "",
+  "Order of the day (section 2: time, then ROWID). First message of each day: Jan 1 Me,",
+  " Feb 14 Nora, Feb 15 Ezra, Mar 8 Me, Apr 10 Ezra, Jul 4 Me, Sep 15 Nora, Nov 1 Nora",
+  " (01:30 PDT comes before 01:30 PST): Me 3, Nora 3, Ezra 2. Last message: Jan 1 Ezra,",
+  " Feb 14 Nora, Feb 15 Ezra, Mar 8 Nora, Apr 10 Nora, Jul 4 Nora, Sep 15 Nora, Nov 1 Me:",
+  " Nora 5, Ezra 2, Me 1. Longest run by one person: 3 (Nora: J7, M12, Ma). One question",
+  " (M7 'Lunch?'), no links, one message between 5 and 8:59 AM (M12). Nobody has 20",
+  " messages, so there is no Novelist and no Minimalist.",
+  "Awards, 2026, contacts on: fresh winners Yapper Nora, Night Owl Me, Lurker Ezra; then",
+  " deferred in table order: Comedian Nora (3 laughs), Conversation Starter Nora (3 starts,",
+  " tied with Me, more messages), Hype Machine Me (4); Last Word and Crowd Favorite (Nora)",
+  " do not fit. Without contacts Nora is two people (...0011 by phone, nora.quill by",
+  " e-mail, 2 messages, not qualifying): Yapper Me; Last Word ...0011 (3 days: Feb 14,",
+  " Apr 10, Sep 15); then deferred Night Owl, Conversation Starter (3 starts, tied with",
+  " ...0011, more messages) and Hype Machine (4, tied with ...0011, more messages) for Me,",
+  " Crowd Favorite ...0011 (4, tied with ...0012 on messages, name first); the Lurker",
+  " (...0011, 6, before ...0012 by name) does not fit. ...0011 has 2 laughs: no Comedian.",
+  "Personality: under 50 messages, so the Quiet Ones, with the count as the reason."
  ],
  "now": 1794427200,
  "chat": "Book Club",
@@ -111,8 +129,10 @@
     },
     "personality": {
      "id": "quiet_ones",
+     "emoji": "🤫",
      "title": "The Quiet Ones",
-     "blurb": "Peak hour: 12 PM. Few words. All of them count.",
+     "reason": "21 messages in total",
+     "blurb": "21 messages in total. Few words. All of them count.",
      "peak_hour": 12
     },
     "late_night": {
@@ -213,18 +233,18 @@
       "detail": "8 messages. Nobody asked."
      },
      {
-      "id": "lurker",
-      "emoji": "👻",
-      "title": "The Lurker",
-      "winner": "…0012",
-      "detail": "6 messages. Reads everything, says little."
-     },
-     {
       "id": "night_owl",
       "emoji": "🦉",
       "title": "The Night Owl",
       "winner": "Me",
       "detail": "3 messages after midnight."
+     },
+     {
+      "id": "lurker",
+      "emoji": "👻",
+      "title": "The Lurker",
+      "winner": "…0012",
+      "detail": "6 messages. Reads everything, says little."
      },
      {
       "id": "comedian",
@@ -234,18 +254,18 @@
       "detail": "Made the chat laugh 3 times."
      },
      {
+      "id": "starter",
+      "emoji": "🚀",
+      "title": "The Conversation Starter",
+      "winner": "Nora Quill",
+      "detail": "Sent the first message of the day 3 times."
+     },
+     {
       "id": "hype",
       "emoji": "📣",
       "title": "The Hype Machine",
       "winner": "Me",
       "detail": "Handed out 4 tapbacks."
-     },
-     {
-      "id": "favorite",
-      "emoji": "⭐",
-      "title": "The Crowd Favorite",
-      "winner": "Nora Quill",
-      "detail": "5 tapbacks received."
      }
     ],
     "meta": {
@@ -362,8 +382,10 @@
     },
     "personality": {
      "id": "quiet_ones",
+     "emoji": "🤫",
      "title": "The Quiet Ones",
-     "blurb": "Peak hour: 6 PM. Few words. All of them count.",
+     "reason": "2 messages in total",
+     "blurb": "2 messages in total. Few words. All of them count.",
      "peak_hour": 18
     },
     "late_night": {
@@ -469,11 +491,11 @@
       "detail": "7 messages. Nobody asked."
      },
      {
-      "id": "lurker",
-      "emoji": "👻",
-      "title": "The Lurker",
+      "id": "closer",
+      "emoji": "🎬",
+      "title": "The Last Word",
       "winner": "…0011",
-      "detail": "6 messages. Reads everything, says little."
+      "detail": "Had the last word on 3 days."
      },
      {
       "id": "night_owl",
@@ -481,6 +503,13 @@
       "title": "The Night Owl",
       "winner": "Me",
       "detail": "3 messages after midnight."
+     },
+     {
+      "id": "starter",
+      "emoji": "🚀",
+      "title": "The Conversation Starter",
+      "winner": "Me",
+      "detail": "Sent the first message of the day 3 times."
      },
      {
       "id": "hype",

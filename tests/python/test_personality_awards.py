@@ -1,9 +1,17 @@
-"""Personality table (section 3) and award selection (section 4)."""
+"""Personality (section 3) and awards (section 4).
+
+Most cases live in tests/vectors/personality-awards-v1.json, which the
+JavaScript engine's tests run too (tests/engine-js/personality-awards.test.js),
+so both engines are held to the same hand-worked answers."""
 
 import calendar
+import json
+import os
+import time
 import unittest
 
-from support import msg, tap
+import support
+from support import msg, ns, tap
 
 from wrapped import stats as S
 from wrapped.stats import compute_stats
@@ -11,182 +19,240 @@ from wrapped.stats import compute_stats
 NOW = calendar.timegm((2026, 11, 11, 20, 0, 0))
 MONDAY = calendar.timegm((2026, 6, 1, 0, 0, 0))       # 2026-06-01 is a Monday
 
-
-def at(day, hour, n, sender="+15550100001"):
-    """n messages on MONDAY + day at the given UTC hour."""
-    return [msg(MONDAY + day * 86400 + hour * 3600 + i, sender, "x") for i in range(n)]
-
-
-def personality(rows):
-    return compute_stats(rows, tz="UTC", now=NOW)["personality"]
+with open(os.path.join(support.ROOT, "tests", "vectors", "personality-awards-v1.json"),
+          encoding="utf-8") as handle:
+    VECTORS = json.load(handle)
 
 
-def spread(per_hour, hours=range(24), day=0):
+def figures(changes):
+    f = dict(VECTORS["figures"]["base"])
+    f["H"] = list(f["H"])
+    for key, value in changes.items():
+        if key == "peak":
+            f["H"] = [0] * 24
+            if value is not None:
+                f["H"][value] = 1000
+        else:
+            f[key] = value
+    return f
+
+
+def people(spec):
+    """{name: counters}, padded with zeros to the engine's thirteen."""
+    return {name: list(values) + [0] * (S._COUNTERS - len(values)) for name, values in spec.items()}
+
+
+def triples(awards):
+    return [[a["id"], a["winner"], a["detail"]] for a in awards]
+
+
+def expand(entries):
+    """Rows from the vector file's compact form (see its rows.about)."""
     rows = []
-    for hour in hours:
-        rows += at(day, hour, per_hour)
+    for e in entries:
+        start = calendar.timegm(time.strptime(e["at"], "%Y-%m-%dT%H:%M:%S"))
+        every = e.get("every", 60)
+        made = 0
+        for day in e.get("days", [0]):
+            base = start + day * 86400
+            if "tap" in e:
+                for k, target in enumerate(e["on"]):
+                    rows.append(msg(base + k * every, e["from"], "Reacted",
+                                    associated_message_type=e["tap"],
+                                    associated_message_guid="p:0/" + target))
+                continue
+            for k in range(e.get("count", 1)):
+                text = e["text"][k % len(e["text"])] if isinstance(e["text"], list) else e["text"]
+                row = msg(base + k * every, e["from"], text)
+                row["date"] = ns(base + k * every, e.get("ns", 0))
+                if "rowid" in e:
+                    row["rowid"] = e["rowid"]
+                if e.get("att"):
+                    row["cache_has_attachments"] = 1
+                if "guid" in e:
+                    row["guid"] = "%s%d" % (e["guid"], made)
+                made += 1
+                rows.append(row)
     return rows
 
 
+def run_case(case):
+    options = dict(tz="UTC", now=NOW, contacts=VECTORS["rows"]["contacts"])
+    options.update(case.get("options", {}))
+    return compute_stats(expand(case["rows"]), **options)
+
+
 class Personality(unittest.TestCase):
-    def test_rule_1_quiet(self):
-        p = personality(at(0, 23, 49))
-        self.assertEqual(p, {"id": "quiet_ones", "title": "The Quiet Ones",
-                             "blurb": "Peak hour: 11 PM. Few words. All of them count.",
-                             "peak_hour": 23})
-        self.assertNotEqual(personality(at(0, 23, 50))["id"], "quiet_ones")
+    def test_figure_vectors(self):
+        cases = VECTORS["figures"]["cases"]
+        self.assertGreaterEqual(len(cases), 55)
+        for case in cases:
+            with self.subTest(case["name"]):
+                p = S.personality(figures(case["set"]))
+                self.assertEqual(p["id"], case["id"])
+                emoji, title, line = S.PERSONALITIES[case["id"]]
+                self.assertEqual((p["emoji"], p["title"]), (emoji, title))
+                if "reason" in case:
+                    self.assertEqual(p["reason"], case["reason"])
+                self.assertEqual(p["blurb"], p["reason"] + ". " + line)
+                self.assertEqual(p["peak_hour"], case.get("peak_hour", case["set"].get("peak", 19)))
+                self.assertEqual(list(p), ["id", "emoji", "title", "reason", "blurb", "peak_hour"])
 
-    def test_rule_2_night_share_or_night_peak(self):
-        # exactly 12% between midnight and 4:59, peak at noon
-        rows = at(0, 3, 12) + at(0, 12, 88)
-        self.assertEqual(personality(rows)["id"], "night_owls")
-        rows = at(0, 3, 11) + at(0, 12, 89)
-        self.assertNotEqual(personality(rows)["id"], "night_owls")
-        # peak hour inside 0..4 even though the share is small
-        rows = at(0, 4, 6) + spread(5, range(5, 24))
-        p = personality(rows)
-        self.assertEqual((p["id"], p["peak_hour"]), ("night_owls", 4))
-        self.assertEqual(p["blurb"], "Peak hour: 4 AM. Sleep is a suggestion.")
+    def test_every_trait_has_a_hit_and_a_miss(self):
+        names = [c["name"] for c in VECTORS["figures"]["cases"]]
+        for row, trait in enumerate(S._TRAITS, 1):
+            hits = [n for n in names if n.startswith("%d %s at the floor" % (row, trait[0]))]
+            misses = [n for n in names if n.startswith("%d %s just" % (row, trait[0]))]
+            self.assertEqual((len(hits), len(misses)), (1, 1), trait[0])
 
-    def test_rule_3_weekend(self):
-        weekday = at(0, 12, 58)
-        self.assertEqual(personality(weekday + at(5, 12, 21) + at(6, 12, 21))["id"],
-                         "weekend_warriors")                     # 42 of 100
-        self.assertNotEqual(personality(weekday + at(5, 12, 21) + at(6, 12, 20) + at(1, 12, 1))["id"],
-                            "weekend_warriors")                 # 41 of 100
-
-    def test_rule_4_always_on(self):
-        rows = spread(10, range(5, 24))                 # 19 hours x 10: peak share 5.3%
-        self.assertEqual(personality(rows)["id"], "always_on")
-        rows = at(0, 9, 13) + at(0, 12, 187)            # 6.5% is not below 6.5%
-        self.assertEqual(personality(at(0, 10, 13) + spread(11, range(5, 22)))["id"],
-                         "morning_meeting")
-
-    def test_rules_5_to_10_by_peak_hour(self):
-        expected = {
-            5: "early_birds", 8: "early_birds", 9: "morning_meeting", 11: "morning_meeting",
-            12: "lunch_break", 13: "lunch_break", 14: "afternoon_slackers",
-            17: "afternoon_slackers", 18: "dinner_table", 20: "dinner_table",
-            21: "after_hours", 23: "after_hours",
-        }
-        for hour, pid in expected.items():
-            p = personality(at(0, hour, 60))
-            self.assertEqual((p["id"], p["peak_hour"]), (pid, hour))
-            title, line = S.PERSONALITIES[pid]
-            self.assertEqual(p["title"], title)
-            self.assertTrue(p["blurb"].endswith(". " + line), p["blurb"])
-
-    def test_lowest_hour_wins_a_tie(self):
-        p = personality(at(0, 18, 30) + at(0, 9, 30))
-        self.assertEqual((p["id"], p["peak_hour"]), ("morning_meeting", 9))
-
-    def test_hour_labels(self):
-        labels = {0: "12 AM", 1: "1 AM", 11: "11 AM", 12: "12 PM", 13: "1 PM", 23: "11 PM"}
+    def test_by_peak_hour_when_no_trait_stands_out(self):
+        labels = VECTORS["figures"]["peak_labels"]
+        for hour, pid in VECTORS["figures"]["peak_hours"].items():
+            p = S.personality(figures({"peak": int(hour)}))
+            self.assertEqual((p["id"], p["peak_hour"]), (pid, int(hour)))
+            self.assertTrue(p["reason"].startswith("Peak hour: "), p)
+            if hour in labels:
+                self.assertEqual(p["reason"], "Peak hour: " + labels[hour])
         for hour, label in labels.items():
-            self.assertEqual(S._hour12(hour), label)
+            self.assertEqual(S._hour12(int(hour)), label)
 
-    def test_every_personality_is_reachable_and_titled(self):
-        self.assertEqual(len(S.PERSONALITIES), 10)
-        self.assertEqual(S.PERSONALITIES["always_on"],
+    def test_tables(self):
+        self.assertEqual([t[0] for t in S._TRAITS], [
+            "one_person_show", "dynamic_duo", "round_table", "night_owls", "weekend_warriors",
+            "weekday_regulars", "always_on", "daily_ritual", "flash_mob", "seasonal_special",
+            "firehose", "slow_burn", "photo_dump", "hype_squad", "comedy_club", "love_fest",
+            "essayists", "rapid_fire"])
+        self.assertEqual(len(S.PERSONALITIES), 25)
+        for pid, (emoji, title, line) in S.PERSONALITIES.items():
+            self.assertTrue(emoji and title.startswith("The ") and line.endswith("."), pid)
+        self.assertEqual(S.PERSONALITIES["always_on"][1:],
                          ("The Always-On Group Chat", "There is no off switch."))
-        self.assertEqual(S.PERSONALITIES["lunch_break"][1],
-                         "Eating with one hand, typing with the other.")
+        self.assertEqual(S.PERSONALITIES["morning_meeting"], ("\u2615", "The Morning Meeting",
+                                                              "This could not have been an email."))
 
+    def test_rounding_helpers(self):
+        self.assertEqual([S._pct(a, b) for a, b in ((1, 200), (1, 199), (2, 3), (1, 3), (0, 9), (9, 9))],
+                         ["1%", "1%", "67%", "33%", "0%", "100%"])
+        self.assertEqual([S._tenths(a, b) for a, b in ((57, 4), (1, 20), (1, 21), (855, 60))],
+                         ["14.3", "0.1", "0.0", "14.3"])
+        self.assertEqual([S._nearest(a, b) for a, b in ((5, 2), (7, 2), (1, 3), (2, 3))], [3, 4, 0, 1])
 
-def people(**counts):
-    """counters keyed by name: (messages, words, attachments, late, given, received, laughs)."""
-    return {name: list(values) for name, values in counts.items()}
+    def test_figures_from_rows(self):
+        def at(day, hour, n, sender, **extra):
+            return [msg(MONDAY + day * 86400 + hour * 3600 + i, sender, "one two", **extra)
+                    for i in range(n)]
+        rows = at(0, 23, 5, "+15550100001") + at(1, 0, 4, "+15550100002") + at(1, 1, 3, "+15550100003")
+        rows += at(5, 12, 2, "+15550100004", cache_has_attachments=1)      # a Saturday
+        rows += [msg(MONDAY + 38 * 86400 + 3600 + i, "+15550101%03d" % i, "x") for i in range(13)]
+        st = compute_stats(rows, tz="UTC", now=NOW, start="2026-06-01", end="2026-07-31")
+        f = S.personality_figures(st["totals"], st["by_hour"], st["by_weekday"], st["by_month"], 61,
+                                  st["busiest_day"]["messages"], st["reactions"]["by_kind"],
+                                  [5, 4, 3, 2] + [1] * 13)
+        self.assertEqual(len(st["senders"]), 12)
+        self.assertEqual((f["n"], f["top1"], f["top2"], f["low"]), (17, 5, 4, 1))
+        self.assertEqual((f["T"], f["night"], f["weekend"], f["best3"]), (27, 20, 2, 25))   # 11 PM to 1 AM
+        self.assertEqual((f["month1"], f["month1_index"], f["day1"], f["A"], f["Wd"]), (14, 5, 13, 2, 41))
 
+    def test_the_owners_chat_was_called_night_owls_before(self):
+        # the old rule: 12% or more between midnight and 5 AM made any chat the Night Owls
+        case = VECTORS["rows"]["cases"][0]
+        st = run_case(case)
+        self.assertGreaterEqual(st["late_night"]["share"], 0.12)
+        self.assertEqual(st["personality"]["peak_hour"], 11)
+        self.assertNotEqual(st["personality"]["id"], "night_owls")
 
-def ids(awards):
-    return [(a["id"], a["winner"]) for a in awards]
+    def test_no_name_in_the_reason(self):
+        for case in VECTORS["rows"]["cases"]:
+            st = run_case(case)
+            for person in st["senders"]:
+                for word in person["name"].split():
+                    self.assertNotIn(word, st["personality"]["reason"], case["name"])
 
 
 class Awards(unittest.TestCase):
+    def test_award_vectors(self):
+        for case in VECTORS["awards"]["cases"]:
+            with self.subTest(case["name"]):
+                self.assertEqual(triples(S._awards(people(case["people"]))), case["expect"])
+
     def test_needs_three_qualifying_senders(self):
-        self.assertEqual(S._awards(people(a=(50, 0, 0, 0, 0, 0, 0), b=(5, 0, 0, 0, 0, 0, 0),
-                                          c=(4, 0, 0, 0, 0, 0, 0))), [])
-        got = S._awards(people(a=(50, 0, 0, 0, 0, 0, 0), b=(5, 0, 0, 0, 0, 0, 0),
-                               c=(5, 0, 0, 0, 0, 0, 0), d=(1, 0, 0, 9, 9, 9, 9)))
+        self.assertEqual(S._awards(people({"a": [50], "b": [5], "c": [4]})), [])
+        got = S._awards(people({"a": [50], "b": [5], "c": [5], "d": [1, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}))
         # d does not qualify; the spec sets no minimum for words per message
-        self.assertEqual(ids(got), [("yapper", "a"), ("lurker", "b"), ("novelist", "a")])
+        self.assertEqual([a["id"] for a in got], ["yapper", "lurker", "novelist"])
 
-    def test_all_eight_candidates_and_the_cap_of_six(self):
-        got = S._awards(people(
-            yap=(900, 900, 0, 0, 0, 0, 0), lurk=(5, 5, 0, 0, 0, 0, 0),
-            owl=(100, 100, 0, 40, 0, 0, 0), funny=(100, 100, 0, 0, 0, 30, 30),
-            hype=(100, 100, 0, 0, 77, 0, 0), novel=(20, 2000, 0, 0, 0, 0, 0),
-            pap=(100, 100, 12, 0, 0, 0, 0), fav=(100, 100, 0, 0, 0, 55, 0)))
-        self.assertEqual(ids(got), [("yapper", "yap"), ("lurker", "lurk"), ("night_owl", "owl"),
-                                    ("comedian", "funny"), ("hype", "hype"), ("novelist", "novel")])
-        self.assertEqual(got[0], {"id": "yapper", "emoji": "\U0001F5E3\ufe0f", "title": "The Yapper",
-                                  "winner": "yap", "detail": "900 messages. Nobody asked."})
+    def test_table(self):
+        self.assertEqual([(a[0], a[1], a[2]) for a in S.AWARDS], [
+            ("yapper", "\U0001F5E3\ufe0f", "The Yapper"),
+            ("comedian", "\U0001F602", "The Comedian"),
+            ("night_owl", "\U0001F989", "The Night Owl"),
+            ("starter", "\U0001F680", "The Conversation Starter"),
+            ("paparazzi", "\U0001F4F8", "The Paparazzi"),
+            ("interrogator", "\u2753", "The Interrogator"),
+            ("hype", "\U0001F4E3", "The Hype Machine"),
+            ("early_bird", "\U0001F426", "The Early Bird"),
+            ("closer", "\U0001F3AC", "The Last Word"),
+            ("link_dropper", "\U0001F517", "The Link Dropper"),
+            ("favorite", "\u2b50", "The Crowd Favorite"),
+            ("double_texter", "\U0001F4F2", "The Double Texter"),
+            ("novelist", "\U0001F4DA", "The Novelist"),
+            ("minimalist", "\u2702\ufe0f", "The Minimalist"),
+            ("lurker", "\U0001F47B", "The Lurker"),
+        ])
 
-    def test_details(self):
-        got = {a["id"]: a for a in S._awards(people(
-            a=(12004, 61200, 3120, 1201, 2100, 1850, 1400), b=(2000, 1, 0, 0, 0, 0, 0),
-            c=(1000, 1, 0, 0, 0, 0, 0)))}
-        # one person wins everything: only the first award is not deferred
+    def test_details_use_thousands(self):
+        got = {a["id"]: a for a in S._awards(people({
+            "a": [12004, 61200, 3120, 1201, 2100, 1850, 1400, 1500, 1600, 1700, 1800, 1900, 2000],
+            "b": [2000, 1], "c": [1000, 1]}))}
         self.assertEqual(got["yapper"]["detail"], "12,004 messages. Nobody asked.")
-        self.assertEqual(got["lurker"]["detail"], "1,000 messages. Reads everything, says little.")
-        self.assertEqual(got["night_owl"]["detail"], "1,201 messages after midnight.")
         self.assertEqual(got["comedian"]["detail"], "Made the chat laugh 1,400 times.")
-        self.assertEqual(got["hype"]["detail"], "Handed out 2,100 tapbacks.")
-        self.assertEqual(got["novelist"]["detail"], "5.1 words per message. A paragraph person.")
+        self.assertEqual(got["night_owl"]["detail"], "1,201 messages after midnight.")
+        self.assertEqual(got["starter"]["detail"], "Sent the first message of the day 1,800 times.")
+        self.assertEqual((got["minimalist"]["winner"], got["minimalist"]["detail"]),
+                         ("b", "0.0 words per message. Straight to the point."))
         self.assertNotIn("paparazzi", got)                  # the list is full at six
-        self.assertEqual([got[k]["emoji"] for k in ("lurker", "night_owl", "comedian", "hype",
-                                                    "novelist")],
-                         ["\U0001F47B", "\U0001F989", "\U0001F602", "\U0001F4E3", "\U0001F4DA"])
-
-    def test_deferred_awards_fill_the_remaining_slots_in_table_order(self):
-        got = S._awards(people(star=(100, 100, 9, 9, 9, 9, 9), b=(50, 50, 0, 0, 0, 0, 0),
-                               c=(10, 10, 0, 0, 0, 0, 0)))
-        self.assertEqual(ids(got), [("yapper", "star"), ("lurker", "c"), ("night_owl", "star"),
-                                    ("comedian", "star"), ("hype", "star"), ("novelist", "star")])
-        # a novelist who holds nothing yet is taken before the deferred awards
-        got = S._awards(people(star=(100, 100, 9, 9, 9, 9, 9), b=(50, 400, 0, 0, 0, 0, 0),
-                               c=(10, 10, 0, 0, 0, 0, 0)))
-        self.assertEqual(ids(got), [("yapper", "star"), ("lurker", "c"), ("novelist", "b"),
-                                    ("night_owl", "star"), ("comedian", "star"), ("hype", "star")])
-
-    def test_thresholds(self):
-        base = dict(b=(50, 50, 0, 0, 0, 0, 0), c=(10, 10, 0, 0, 0, 0, 0))
-        got = dict(ids(S._awards(people(a=(19, 500, 2, 2, 2, 2, 2), **base))))
-        self.assertEqual(set(got), {"yapper", "lurker", "novelist"})   # b has 20+, a has 2 of each
-        self.assertEqual(got["novelist"], "b")
-        got = dict(ids(S._awards(people(a=(20, 500, 3, 3, 3, 3, 3), **base))))
-        self.assertEqual(set(got), {"yapper", "lurker", "night_owl", "comedian", "hype", "novelist",
-                                    "paparazzi", "favorite"} - {"paparazzi", "favorite"})
-        self.assertEqual(got["novelist"], "a")
-
-    def test_ties_go_to_more_messages_then_name(self):
-        got = dict(ids(S._awards(people(
-            zed=(30, 30, 0, 5, 0, 0, 0), amy=(30, 30, 0, 5, 0, 0, 0), bob=(40, 40, 0, 5, 0, 0, 0),
-            cat=(8, 8, 0, 0, 0, 0, 0), dan=(8, 8, 0, 0, 0, 0, 0)))))
-        self.assertEqual(got["yapper"], "bob")
-        self.assertEqual(got["lurker"], "cat")              # fewest, then name
-        self.assertEqual(got["night_owl"], "bob")           # 5 each: most messages wins
-        got = dict(ids(S._awards(people(
-            zed=(30, 30, 0, 5, 0, 0, 0), amy=(30, 30, 0, 5, 0, 0, 0), cat=(8, 8, 0, 0, 0, 0, 0)))))
-        self.assertEqual((got["yapper"], got["night_owl"]), ("amy", "amy"))
+        self.assertEqual(got["lurker"]["detail"], "1,000 messages. Reads everything, says little.")
 
     def test_novelist_ratio_is_exact_and_rounds_half_up(self):
-        base = dict(b=(50, 50, 0, 0, 0, 0, 0), c=(10, 10, 0, 0, 0, 0, 0))
         for words, messages, shown in ((45, 20, "2.3"), (49, 20, "2.5"), (41, 20, "2.1"),
-                                       (1, 20, "0.1"), (0, 20, "0.0"), (239, 20, "12.0"),
-                                       (25001, 20, "1250.1")):
-            got = {a["id"]: a for a in S._awards(people(a=(messages, words, 0, 0, 0, 0, 0), **base))}
-            if words >= 20:
-                self.assertEqual(got["novelist"]["winner"], "a")
-                self.assertEqual(got["novelist"]["detail"],
-                                 shown + " words per message. A paragraph person.")
-        # 1/3 against 333333/1000000: only exact arithmetic separates them
-        got = dict(ids(S._awards(people(a=(3000000, 1000000, 0, 0, 0, 0, 0),
-                                        b=(1000000, 333333, 0, 0, 0, 0, 0),
-                                        c=(30, 1, 0, 0, 0, 0, 0)))))
-        self.assertEqual(got["novelist"], "a")
+                                       (239, 20, "12.0"), (25001, 20, "1250.1")):
+            got = {a["id"]: a for a in S._awards(people({"a": [messages, words], "b": [50, 50],
+                                                         "c": [10, 10]}))}
+            self.assertEqual(got["novelist"]["winner"], "a")
+            self.assertEqual(got["novelist"]["detail"], shown + " words per message. A paragraph person.")
+        got = {a["id"]: a["winner"] for a in S._awards(people({
+            "a": [3000000, 1000000], "b": [1000000, 333333], "c": [30, 1]}))}
+        self.assertEqual(got["novelist"], "a")              # 1/3 against 333333/1000000
+        self.assertEqual(got["minimalist"], "c")
 
-    def test_awards_from_real_rows(self):
+
+class FromRows(unittest.TestCase):
+    def test_row_vectors(self):
+        for case in VECTORS["rows"]["cases"]:
+            with self.subTest(case["name"]):
+                st = run_case(case)
+                expect = case["expect"]
+                for key, value in expect.get("personality", {}).items():
+                    self.assertEqual(st["personality"][key], value, key)
+                if "late_share" in expect:
+                    self.assertEqual(st["late_night"]["share"], expect["late_share"])
+                if "senders" in expect:
+                    self.assertEqual(len(st["senders"]), expect["senders"])
+                awards = expect.get("awards")
+                got = triples(st["awards"])
+                if isinstance(awards, list):
+                    self.assertEqual(got, awards)
+                elif isinstance(awards, dict):
+                    ids = [a[0] for a in got]
+                    for aid in awards.get("has", []):
+                        self.assertIn(aid, ids)
+                    for aid in awards.get("lacks", []):
+                        self.assertNotIn(aid, ids)
+                for aid in ("double_texter",):
+                    if aid in expect:
+                        self.assertEqual([a[1:] for a in got if a[0] == aid], [expect[aid]])
+
+    def test_tapback_rows_feed_the_comedian(self):
         t = calendar.timegm((2026, 6, 1, 12, 0, 0))
         a, b, c = "+15550100001", "+15550100002", "+15550100003"
         na, nb, nc = "\u20260001", "\u20260002", "\u20260003"      # no contacts: masked
@@ -195,14 +261,14 @@ class Awards(unittest.TestCase):
         rows += [msg(t - 12 * 3600 + i, c, "night") for i in range(5)]          # midnight UTC
         rows += [tap(t + 500 + i, b, 2003, rows[i]) for i in range(4)]
         st = compute_stats(rows, tz="UTC", now=NOW)
-        self.assertEqual(ids(st["awards"]), [
-            ("yapper", na), ("lurker", nc), ("hype", nb),           # fresh winners first
-            ("night_owl", nc), ("comedian", na), ("novelist", na)]) # then deferred, in order
-        details = {x["id"]: x["detail"] for x in st["awards"]}
-        self.assertEqual(details["novelist"], "3.0 words per message. A paragraph person.")
-        self.assertEqual(details["hype"], "Handed out 4 tapbacks.")
-        self.assertEqual(details["comedian"], "Made the chat laugh 4 times.")
-        self.assertEqual(details["night_owl"], "5 messages after midnight.")
+        # fresh winners first, then the deferred ones in table order
+        self.assertEqual(triples(st["awards"]), [
+            ["yapper", na, "30 messages. Nobody asked."],
+            ["night_owl", nc, "5 messages after midnight."],
+            ["paparazzi", nb, "6 photos, videos and memes."],
+            ["comedian", na, "Made the chat laugh 4 times."],
+            ["hype", nb, "Handed out 4 tapbacks."],
+            ["favorite", na, "4 tapbacks received."]])
 
 
 if __name__ == "__main__":

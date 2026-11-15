@@ -13,21 +13,10 @@ from __future__ import annotations
 from typing import List
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, first_name, fmt_int, fmt_pct, hour12, peak_hour, safe_chat_name, short_date
+from .fmt import (PERSONALITY_EMOJI, clean, display_names, first_name, fmt_int, fmt_pct, hour12,  # noqa: F401
+                  peak_hour, personality_emoji, safe_chat_name, short_date)
 from .triggers import starts_with_trigger
 
-PERSONALITY_EMOJI = {
-    "quiet_ones": "🤫",
-    "night_owls": "🦉",
-    "weekend_warriors": "🎉",
-    "always_on": "🔋",
-    "early_birds": "🐦",
-    "morning_meeting": "☕",
-    "lunch_break": "🥪",
-    "afternoon_slackers": "😎",
-    "dinner_table": "🍽️",
-    "after_hours": "🌙",
-}
 MEDALS = ("🥇", "🥈", "🥉")
 
 
@@ -63,9 +52,13 @@ def recap_lines(stats: dict, with_link: bool = True) -> List[str]:
     title = clean(personality.get("title"), 40)
     peak = peak_hour(stats)
     if title:
-        emoji = PERSONALITY_EMOJI.get(str(personality.get("id")), "✨")
-        tail = f" — peak hour {hour12(peak)}" if peak is not None else ""
-        lines.append(f"{emoji} You are {title}{tail}")
+        # "{emoji} You are {title}. {reason}." Stats made before there was a reason get
+        # the peak hour as the reason.
+        reason = clean(personality.get("reason"), 80).rstrip(".")
+        if not reason and peak is not None:
+            reason = f"Peak hour: {hour12(peak)}"
+        line = f"{personality_emoji(personality)} You are {title}."
+        lines.append(f"{line} {reason}." if reason else line)
     elif peak is not None:
         lines.append(f"⏰ Peak hour: {hour12(peak)}")
 

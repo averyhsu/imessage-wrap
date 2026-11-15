@@ -61,7 +61,7 @@ phone (or use the browser's device toolbar), or on your phone, and record it.
 | Time | On screen | Taps | Caption |
 |------|-----------|------|---------|
 | 0:00–0:05 | Cover, then the big number counts up. | 1 (cover → total) | "What if your group chat got a year in review?" |
-| 0:05–0:10 | The 24-hour clock, then **The Night Owls**. | 2 | "It knows what kind of chat you are." |
+| 0:05–0:10 | The 24-hour clock, then **The Daily Ritual**. | 2 | "It knows what kind of chat you are." |
 | 0:10–0:16 | **Who carried the chat**: the crown lands on the top sender. | 4 (quick: after midnight, the week, the year flash by) | "Who carried." |
 | 0:16–0:21 | **Message of the year** with its tapbacks. | 1 | "The message of the year, by tapbacks." |
 | 0:21–0:26 | **And the winners are…** | 2 (tapbacks flashes by) | "And the awards nobody asked for." |

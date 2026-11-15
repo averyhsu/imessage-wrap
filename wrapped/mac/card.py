@@ -34,7 +34,8 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
 
 from . import PRODUCT_NAME
-from .fmt import clean, display_names, fmt_int, fmt_pct, hour12, is_emoji_base, peak_hour, safe_chat_name
+from .fmt import (clean, display_names, fmt_int, fmt_pct, hour12, is_emoji_base, peak_hour, personality_emoji,
+                  safe_chat_name)
 
 DESIGN_W, DESIGN_H = 1080, 1350
 EMOJI_SCALE = 0.92  # emoji height relative to the type size
@@ -901,11 +902,6 @@ def _book(emoji: Optional[bool]) -> FontBook:
 
 PAD = 72.0
 MARGIN = 70.0  # room around a tilted block for its tail, shadow and rotation
-PERSONA_EMOJI = {
-    "quiet_ones": "🤫", "night_owls": "🦉", "weekend_warriors": "🎉", "always_on": "🔋", "early_birds": "🐦",
-    "morning_meeting": "☕", "lunch_break": "🥪", "afternoon_slackers": "😎", "dinner_table": "🍽️",
-    "after_hours": "🌙",
-}
 
 
 def _tilted(c: Canvas, x: float, y: float, w: float, h: float, degrees: float, draw) -> None:
@@ -959,7 +955,6 @@ def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:
     label = clean(period.get("label"), 18)
     messages = max(0, _int(totals.get("messages")))
     title = clean(personality.get("title"), 48)
-    persona_id = str(personality.get("id") or "")
     peak = peak_hour(stats)
     top = _top_senders(stats)
     inner = W - 2 * PAD
@@ -1010,7 +1005,7 @@ def _paint(c: Canvas, stats: dict, W: float, H: float) -> None:
     blocks.append((306.0, total_block))
 
     if title:
-        emoji = PERSONA_EMOJI.get(persona_id, "💬")
+        emoji = personality_emoji(personality)          # its own, else the one for its id
         emoji_cl = clusters(emoji, c.book)
         has_emoji = bool(emoji_cl) and emoji_cl[0][0] == "emoji"
         text_x = 148.0 if has_emoji else 52.0

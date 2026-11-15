@@ -200,13 +200,21 @@
     return typeof key === 'string' && Object.prototype.hasOwnProperty.call(map, key) ? map[key] : fallback;
   }
 
+  // docs/SCHEMA.md §3. A recap carries its own `emoji`; this map is for links made before it did.
   var PERSONA_EMOJI = {
-    quiet_ones: '🤫', night_owls: '🦉', weekend_warriors: '🎉', always_on: '🔋', early_birds: '🐦',
-    morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️', after_hours: '🌙'
+    quiet_ones: '🤫', one_person_show: '🎤', dynamic_duo: '👯', round_table: '⚖️', night_owls: '🦉',
+    weekend_warriors: '🎉', weekday_regulars: '💼', always_on: '🔋', daily_ritual: '📆', flash_mob: '⚡',
+    seasonal_special: '🏖️', firehose: '🚿', slow_burn: '🕯️', photo_dump: '📸', hype_squad: '🙌',
+    comedy_club: '😂', love_fest: '💖', essayists: '📝', rapid_fire: '🏓',
+    early_birds: '🐦', morning_meeting: '☕', lunch_break: '🥪', afternoon_slackers: '😎', dinner_table: '🍽️',
+    after_hours: '🌙'
   };
 
-  /** The emoji that goes with a personality id; a speech balloon for ids we do not know. */
-  function personaEmoji(id) { return pick(PERSONA_EMOJI, id, '💬'); }
+  /** Shown for a personality or award id we do not know (ids are open-ended, docs/SCHEMA.md §1). */
+  var FALLBACK_EMOJI = '✨';
+
+  /** The emoji that goes with a personality id; the fallback for ids we do not know. */
+  function personaEmoji(id) { return pick(PERSONA_EMOJI, id, FALLBACK_EMOJI); }
 
   /** Index of the largest value (lowest index wins ties), or -1 for an empty/zero list. */
   function argmax(list) {
@@ -227,6 +235,7 @@
     MONTHS: MONTHS, MONTHS_SHORT: MONTHS_SHORT, MONTH_LETTERS: MONTH_LETTERS,
     WEEKDAYS: WEEKDAYS, WEEKDAYS_SHORT: WEEKDAYS_SHORT, WEEKDAY_LETTERS: WEEKDAY_LETTERS,
     MAX_INT: MAX_INT, int: int, compact: compact, pct: pct, pick: pick, personaEmoji: personaEmoji,
+    FALLBACK_EMOJI: FALLBACK_EMOJI,
     hour: hour, hourTick: hourTick, hourSpan: hourSpan,
     parseDate: parseDate, date: date, weekdayOf: weekdayOf, daysInclusive: daysInclusive, dateRange: dateRange,
     plural: plural, perDay: perDay, wordFact: wordFact,

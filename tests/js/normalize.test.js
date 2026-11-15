@@ -6,6 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const { normalize, computePersonality } = require('../../web/js/normalize.js');
+const Engine = require('../../web/make/engine.js');
 const vector = require('../vectors/payload-v1.json');
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
@@ -17,7 +18,13 @@ function loadDemo() {
 }
 
 test('v1 input passes through unchanged', () => {
-  assert.deepStrictEqual(normalize(vector.stats), vector.stats);
+  // The vector is a link made before personalities carried an emoji: normalize adds the one
+  // for its id, and nothing else changes.
+  const expected = clone(vector.stats);
+  expected.personality.emoji = '\u{1F989}';
+  assert.deepStrictEqual(normalize(vector.stats), expected);
+  const demo = loadDemo();
+  assert.deepStrictEqual(normalize(demo), demo);
 });
 
 test('normalize is idempotent and does not mutate its input', () => {
@@ -50,7 +57,23 @@ test('demo data is valid v1 and its sums are consistent', () => {
   for (const s of demo.senders) assert.equal(s.share, Math.round((s.messages / T) * 10000) / 10000, `share of ${s.name}`);
   for (const m of demo.most_reacted) assert.equal(sum(Object.values(m.kinds)), m.reactions, `kinds of "${m.text}"`);
   assert.equal(demo.chat.members, demo.senders.length);
-  assert.deepStrictEqual(computePersonality(demo.by_hour, demo.by_weekday, T), demo.personality, 'personality follows SCHEMA §3');
+  // The personality is what the engines' rule (SCHEMA §3) gives for the demo's own numbers.
+  const I = Engine._internals;
+  const days = (Date.parse(demo.period.end) - Date.parse(demo.period.start)) / 86400000 + 1;
+  assert.equal(days, 314);
+  const figures = I.personalityFigures(demo.totals, demo.by_hour, demo.by_weekday, demo.by_month, days,
+    demo.busiest_day.messages, demo.reactions.by_kind, demo.senders.map((s) => s.messages));
+  assert.deepStrictEqual(I.personality(figures), demo.personality, 'personality follows SCHEMA §3');
+  assert.ok(demo.awards.length <= 6);
+  const order = I.AWARDS.map((a) => a[0]);
+  for (const a of demo.awards) {
+    const row = I.AWARDS.find((x) => x[0] === a.id);
+    assert.ok(row, a.id + ' is an award of SCHEMA §4');
+    assert.deepStrictEqual([a.emoji, a.title], [row[1], row[2]], a.id);
+  }
+  assert.deepStrictEqual(demo.awards.map((a) => a.id), demo.awards.map((a) => a.id).sort((x, y) => order.indexOf(x) - order.indexOf(y)),
+    'awards in table order (every winner holds one award, so none were deferred)');
+  assert.equal(new Set(demo.awards.map((a) => a.winner)).size, demo.awards.length);
   assert.equal(demo.reactions.top_giver.count, Math.max(...demo.senders.map((s) => s.reactions_given)));
   assert.equal(demo.reactions.top_receiver.count, Math.max(...demo.senders.map((s) => s.reactions_received)));
   assert.equal(demo.late_night.top.messages, Math.max(...demo.senders.map((s) => s.late_night)));
@@ -83,8 +106,11 @@ test('legacy prototype shape is mapped onto v1', () => {
   assert.deepStrictEqual(s.senders.map((x) => [x.name, x.messages, x.share]), [['Robin', 400, 0.6667], ['Sky', 200, 0.3333]]);
   assert.deepStrictEqual(s.most_reacted, [{ sender: 'Robin', reactions: 5, date: '2025-07-04', text: 'legacy quote', kinds: {} }]);
   // Sections the prototype never had are derived or empty, never undefined.
-  assert.equal(s.personality.id, 'night_owls'); // 5 × 25 / 600 = 20.8% after midnight
-  assert.equal(s.personality.blurb, 'Peak hour: 12 AM. Sleep is a suggestion.');
+  // every hour ties, so the first (midnight) is the peak hour
+  assert.deepStrictEqual(s.personality, {
+    id: 'night_owls', emoji: '\u{1F989}', title: 'The Night Owls', reason: 'Peak hour: 12 AM',
+    blurb: 'Peak hour: 12 AM. Sleep is a suggestion.', peak_hour: 0
+  });
   assert.deepStrictEqual(s.late_night, { messages: 125, share: 0.2083, top: null });
   assert.equal(s.reactions, null);
   assert.deepStrictEqual(s.awards, []);
@@ -238,6 +264,7 @@ test('ids and kinds taken from a link cannot reach Object.prototype', () => {
     const s = normalize(input);
     assert.equal(s.personality.id, id, 'the id is kept as plain text');
     assert.equal(s.personality.title, 'The Night Owls');
+    assert.equal(s.personality.emoji, '\u2728', 'an unknown id gets the fallback emoji');
     assert.deepStrictEqual(s.most_reacted[0].kinds, { laugh: 1, emoji: 2 }, 'an unknown kind is counted as emoji');
     assert.deepStrictEqual(Object.keys(s.reactions.by_kind), ['love', 'like', 'dislike', 'laugh', 'emphasize', 'question', 'emoji']);
     assert.equal(s.reactions.by_kind.love, 3);
@@ -276,29 +303,72 @@ test('rejects things that are not recaps', () => {
   assert.doesNotThrow(() => normalize(JSON.stringify(vector.stats)), 'a JSON string is accepted');
 });
 
-test('personality rules (SCHEMA §3)', () => {
-  const hours = (peak, total, peakShare) => {
-    const h = new Array(24).fill(0);
-    const rest = Math.floor((total * (1 - peakShare)) / 12);
-    for (let k = 8; k < 20; k++) h[k] = rest;
-    h[peak] = total - rest * 12 + (peak >= 8 && peak < 20 ? rest : 0);
-    return h;
+test('fallback personality for recaps without one: quiet, else by peak hour (SCHEMA §3)', () => {
+  const at = (peak, total) => { const h = new Array(24).fill(1); h[peak] = total - 23; return h; };
+  assert.deepStrictEqual(computePersonality(new Array(24).fill(1), 24), {
+    id: 'quiet_ones', emoji: '\u{1F92B}', title: 'The Quiet Ones', reason: '24 messages in total',
+    blurb: '24 messages in total. Few words. All of them count.', peak_hour: 0
+  });
+  assert.equal(computePersonality(at(5, 30), 1).reason, '1 message in total');
+  assert.equal(computePersonality(at(5, 30), 49).id, 'quiet_ones');
+  const expected = {
+    0: 'night_owls', 4: 'night_owls', 5: 'early_birds', 8: 'early_birds', 9: 'morning_meeting', 11: 'morning_meeting',
+    12: 'lunch_break', 13: 'lunch_break', 14: 'afternoon_slackers', 17: 'afternoon_slackers', 18: 'dinner_table',
+    20: 'dinner_table', 21: 'after_hours', 23: 'after_hours'
   };
-  const flatWeek = (T) => { const d = Math.floor(T / 7); return [d, d, d, d, d, d, T - 6 * d]; };
-  const id = (h, w) => { const T = h.reduce((a, b) => a + b, 0); return computePersonality(h, w || flatWeek(T), T).id; };
+  for (const hour of Object.keys(expected)) {
+    const p = computePersonality(at(Number(hour), 1000), 1000);
+    assert.deepStrictEqual([p.id, p.peak_hour], [expected[hour], Number(hour)], hour);
+    assert.ok(p.reason.startsWith('Peak hour: ') && p.blurb.startsWith(p.reason + '. '), hour);
+    assert.ok(p.emoji);
+  }
+  assert.equal(computePersonality(at(22, 1000), 1000).blurb, 'Peak hour: 10 PM. The day ends. The chat begins.');
+  // The old rule called any chat with 12% after midnight the Night Owls: not any more.
+  const owner = new Array(24).fill(0);
+  owner[1] = 130; owner[11] = 500; owner[15] = 370;
+  assert.deepStrictEqual([computePersonality(owner, 1000).id, computePersonality(owner, 1000).reason],
+    ['morning_meeting', 'Peak hour: 11 AM']);
+  assert.equal(computePersonality(new Array(24).fill(0), 500), null, 'no hours, no personality');
+});
 
-  assert.equal(computePersonality(new Array(24).fill(1), [4, 4, 4, 3, 3, 3, 3], 24).id, 'quiet_ones');
-  assert.equal(computePersonality(new Array(24).fill(1), [4, 4, 4, 3, 3, 3, 3], 24).title, 'The Quiet Ones');
-  assert.equal(id(hours(2, 1000, 0.2)), 'night_owls');
-  assert.equal(id(hours(6, 1000, 0.2)), 'early_birds');
-  assert.equal(id(hours(10, 1000, 0.3)), 'morning_meeting');
-  assert.equal(id(hours(12, 1000, 0.3)), 'lunch_break');
-  assert.equal(id(hours(15, 1000, 0.3)), 'afternoon_slackers');
-  assert.equal(id(hours(19, 1000, 0.3)), 'dinner_table');
-  assert.equal(id(hours(22, 1000, 0.3)), 'after_hours');
-  assert.equal(id(hours(15, 1000, 0.3), [100, 100, 100, 100, 100, 250, 250]), 'weekend_warriors');
-  const flat = new Array(24).fill(0).map((_, k) => (k >= 5 ? 50 : 10)); // peak share 5%, night share 5%
-  assert.equal(id(flat), 'always_on');
-  assert.equal(computePersonality(hours(22, 1000, 0.3), flatWeek(1000), 1000).blurb, 'Peak hour: 10 PM. The day ends. The chat begins.');
-  assert.equal(computePersonality(new Array(24).fill(0), new Array(7).fill(0), 500), null, 'no hours → no personality');
+test('a personality keeps its emoji and reason, cleaned and capped', () => {
+  const input = clone(vector.stats);
+  input.personality = {
+    id: 'daily_ritual', emoji: '\u202E\u{1F4C6}\n', title: 'The Daily Ritual',
+    reason: 'Active on 301\u0000 of 314 days' + ' and more'.repeat(30), blurb: 'b', peak_hour: 23
+  };
+  const p = normalize(input).personality;
+  assert.equal(p.emoji, '\u{1F4C6}');
+  assert.equal(p.reason.slice(0, 25), 'Active on 301 of 314 days');
+  assert.equal(Array.from(p.reason).length, 120);
+  assert.deepStrictEqual(Object.keys(p), ['id', 'emoji', 'title', 'reason', 'blurb', 'peak_hour']);
+  input.personality.emoji = '\uFE0F';                 // nothing that paints: the id's own
+  assert.equal(normalize(input).personality.emoji, '\u{1F4C6}');
+  input.personality.emoji = '\u{1F9EA}'.repeat(20);    // capped like the award emoji
+  assert.equal(Array.from(normalize(input).personality.emoji).length, 12);
+  delete input.personality.reason;
+  assert.equal('reason' in normalize(input).personality, false, 'no reason is made up for a recap that carries none');
+  input.personality.id = 'a_brand_new_one';
+  delete input.personality.emoji;
+  assert.equal(normalize(input).personality.emoji, '\u2728');
+});
+
+test('the personality contract: id, emoji, title, blurb, peak_hour, and the reason when there was one', () => {
+  const rows = [];
+  for (let i = 0; i < 80; i++) rows.push({ date: String((1780000000 + i * 600 - 978307200) * 1e9), is_from_me: i % 3 === 0 ? 1 : 0, handle: '+1555010000' + (i % 4), text: 'a b c' });
+  const engine = Engine.computeStats(rows, { tz: 'UTC', now: 1795000000, all_time: true });
+  assert.deepStrictEqual(normalize(engine).personality, engine.personality, 'what the engines make passes through');
+  const inputs = [vector.stats, loadDemo(), engine, { chat_name: 'x', messages_by_hour: { '3': 70 } },
+    { chat_name: 'x', total_messages: 7, messages_by_hour: [7] }, { chat: { name: 'x' }, totals: { messages: 90 }, by_hour: [90], personality: 'The Custom Crew' },
+    { chat: { name: 'x' }, totals: { messages: 90 }, by_hour: [90], personality: { id: 'toString', title: 'T', emoji: 7, reason: {} } }];
+  for (const input of inputs) {
+    const p = normalize(input).personality;
+    assert.equal(typeof p.id, 'string');
+    assert.ok(typeof p.emoji === 'string' && p.emoji.length > 0, JSON.stringify(p));
+    assert.ok(typeof p.title === 'string' && p.title.length > 0);
+    assert.equal(typeof p.blurb, 'string');
+    assert.ok(Number.isInteger(p.peak_hour) && p.peak_hour >= 0 && p.peak_hour <= 23);
+    const had = input.personality && typeof input.personality === 'object' && typeof input.personality.reason === 'string';
+    if (had || !input.personality) assert.equal(typeof p.reason, 'string', JSON.stringify(input.personality));
+  }
 });
