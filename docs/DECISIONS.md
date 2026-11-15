@@ -354,3 +354,10 @@ one click or a few. Two research passes and a prototype answered it
 for now. So the app ships ad-hoc signed by the free route, and the two real-Mac tests in
 [`MAC-APP.md`](MAC-APP.md) come before finishing it.
 
+**Result of the owner's two tests, 2026-11-15 (macOS 26.7.1, unsigned build `9872b81`):**
+both passed. A direct read of the Messages database was refused before the folder pick and
+worked after it, so the pick does replace Full Disk Access on a real, protected Mac; and a
+`/wrapped` typed in a real group chat was answered with image and text, verified as
+delivered. The two risks D15 left open are therefore settled for this Mac. Still open:
+whether access survives a restart and an update, and how other macOS versions behave.
+

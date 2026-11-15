@@ -55,17 +55,29 @@ A prototype menu-bar app, built and driven on GitHub's Mac runners (macOS 26):
 
 All chats in these pictures are invented.
 
-## What is not proven
+## What a real Mac has confirmed
 
-1. **The folder pick on a real Mac.** GitHub's runners have macOS's file protection switched
-   off, so the test there could not fail and proves nothing either way. The claim rests on
-   Apple's statements and on other apps doing it.
-2. **Sending into a group chat.** On macOS 26, scripted sends to group chats sometimes
-   report success and deliver nothing, and no fix was found in later versions. The prototype
-   checks every send; if one does not arrive it would fall back to a notification that
-   opens a ready-to-send message for you to send by hand. On an affected Mac, `/wrapped`
-   would then need you at the keyboard.
-3. **Staying granted** across restarts and app updates.
+The owner ran both tests on 2026-11-15 on their own Mac (macOS 26.7.1, Apple silicon) with
+the unsigned test build (commit `9872b81`), and pasted the app's test report:
+
+- **The folder pick replaces Full Disk Access.** Before the pick, reading the Messages
+  database failed with "Operation not permitted", so macOS really was guarding it. After one
+  click on **Grant Access** the app read the database and its write-ahead log.
+- **A reply arrives in a real group chat.** `/wrapped` typed from a phone was answered with
+  the image and the text; both were confirmed in the database as delivered. So scripted
+  sending into a group works on macOS 26.7.1, at least on this Mac and with the
+  `any;+;` form of the chat's id.
+- The disk image, the "Open Anyway" detour and the "control Messages" prompt were all got
+  through by clicking.
+
+## What is still not proven
+
+1. **Staying connected** after quitting the app, restarting the Mac, or installing a newer
+   build. The report above came from the same launch as the grant.
+2. **Other Macs and versions.** One Mac on 26.7.1 is one data point. The send problem
+   reported for macOS 26 may be specific to some versions or accounts, so the send-by-hand
+   fallback stays.
+3. **Names.** Contacts access was declined in the test, so people showed as `…1234`.
 
 ## Two tests on your Mac (about two minutes each)
 
