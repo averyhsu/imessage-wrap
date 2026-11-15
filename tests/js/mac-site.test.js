@@ -49,7 +49,10 @@ test('mac/index.html names the product and the address in one block, in sync wit
   assert.ok((body.match(/data-brand/g) || []).length >= 6, 'the page has data-brand placeholders');
   assert.match(code('mac.js'), /Config\.PRODUCT_NAME/);
   for (const file of ['mac.js', 'mac-config.js', 'mac.css']) {
-    assert.ok(!code(file).includes(Config.PRODUCT_NAME), `${file} does not hard-code the product name`);
+    // The download's file name on the Releases page carries the name; that address is the
+    // one place outside config.js where it may appear.
+    const text = code(file).split(MacConfig.MAC_DOWNLOAD_URL || '\u0000').join('');
+    assert.ok(!text.includes(Config.PRODUCT_NAME), `${file} does not hard-code the product name`);
   }
 });
 
@@ -183,7 +186,7 @@ test('the page\'s scripts make no network calls, store nothing and build no HTML
   assert.match(css, /prefers-reduced-motion: reduce/, 'respects reduced motion');
 });
 
-test('mac-config.js: one download address, empty until it is public', () => {
+test('mac-config.js: one download address, https:// or relative, or empty', () => {
   assert.equal(typeof MacConfig.MAC_DOWNLOAD_URL, 'string');
   const url = MacConfig.MAC_DOWNLOAD_URL;
   assert.ok(url === '' || Guide.usableDownload(url) === url, `MAC_DOWNLOAD_URL is empty, https:// or relative (${url})`);

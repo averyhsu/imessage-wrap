@@ -250,7 +250,8 @@
 
 .mg-art__out {
   align-self: flex-end;
-  width: 84%;
+  /* The card is portrait (4:5): narrower than the bubbles, so the hero stays short. */
+  width: 66%;
   margin-top: 6px;
   border-radius: 20px;
   overflow: hidden;
@@ -865,6 +866,7 @@ html.mg-all .mg-step .mg-step__body { animation: none; }
 
 .mg-shot__pic > img { display: block; width: 100%; height: auto; border-radius: 14px; }
 .mg-shot--narrow .mg-shot__pic { width: min(100%, 210px); }
+.mg-shot--sheet .mg-shot__pic { width: min(100%, 280px); }
 
 /* Where to click, on the real screenshot. Positions are fractions of each picture. */
 .mg-ring {
@@ -879,7 +881,8 @@ html.mg-all .mg-step .mg-step__body { animation: none; }
 .mg-ring--connect { left: 3.6%; top: 68.5%; width: 30%; height: 17%; }
 .mg-ring--grant { left: 83.6%; top: 88.2%; width: 15.4%; height: 9.6%; border-radius: 10px; }
 .mg-ring--connected { left: 3.6%; top: 81.6%; width: 18.3%; height: 11.8%; }
-.mg-ring--turn-on { left: 77.4%; top: 41.8%; width: 16.6%; height: 10.2%; }
+.mg-ring--turn-on { left: 77.6%; top: 51.9%; width: 16.4%; height: 9.4%; }
+.mg-ring--consent { left: 49.6%; top: 80.4%; width: 37.6%; height: 10.2%; }
 .mg-ring--allow { left: 49.6%; top: 85.6%; width: 45.4%; height: 11.4%; }
 
 /* ── step 5: what happens now ── */

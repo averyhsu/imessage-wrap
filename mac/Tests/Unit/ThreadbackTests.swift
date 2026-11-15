@@ -215,19 +215,34 @@ final class AgentTests: XCTestCase {
         Fixture.note("agent log: " + log.joined(separator: " || "))
     }
 
-    /// While the story site is not live, a reply is the image and the text, with no link
-    /// and no line pointing at one.
-    func testDefaultReplyHasNoLinkWhileTheSiteIsNotLive() throws {
-        XCTAssertFalse(MacConfig.storySiteIsLive)
+    /// A reply follows the story-site switch: with the site live it is the card, the text and
+    /// the link on its own (a link that starts with the site, within 4,800 characters, that
+    /// this app decodes); without it, the card and the text with no line about a link.
+    func testDefaultReplyFollowsTheStorySiteSwitch() throws {
         let sender = RecordingSender()
         let (agent, _) = try makeAgent(sender)
-        XCTAssertFalse(agent.config.link)
+        XCTAssertEqual(agent.config.link, MacConfig.storySiteIsLive)
         XCTAssertEqual(try agent.runOnce(), 0)
         try insert("/wrapped 2026", chat: Fixture.tacoIdentifier)
         XCTAssertEqual(try agent.runOnce(), 1)
-        XCTAssertEqual(sender.sent.map(\.kind), ["file", "text"])
-        XCTAssertFalse(sender.sent[1].payload.contains("https://"))
-        XCTAssertFalse(sender.sent[1].payload.contains("link below"))
+        if MacConfig.storySiteIsLive {
+            XCTAssertEqual(sender.sent.map(\.kind), ["file", "text", "text"])
+            XCTAssertTrue(sender.sent[1].payload.contains("link below"))
+            let link = sender.sent[2].payload
+            XCTAssertTrue(link.hasPrefix("https://averyhsu.github.io/imessage-wrap/#w1="))
+            XCTAssertLessThanOrEqual(link.count, 4800)
+            XCTAssertNil(Agent.linkProblem(link))
+        } else {
+            XCTAssertEqual(sender.sent.map(\.kind), ["file", "text"])
+            XCTAssertFalse(sender.sent[1].payload.contains("https://"))
+            XCTAssertFalse(sender.sent[1].payload.contains("link below"))
+        }
+    }
+
+    func testLinkGuard() {
+        XCTAssertNotNil(Agent.linkProblem("https://example.com/#w1=abc"), "another site")
+        XCTAssertNotNil(Agent.linkProblem("https://averyhsu.github.io/imessage-wrap/#w1=" + String(repeating: "A", count: 5000)), "too long")
+        XCTAssertNotNil(Agent.linkProblem("https://averyhsu.github.io/imessage-wrap/#w1=not-a-payload"), "undecodable")
     }
 
     /// "Copy test report" carries statuses, counts and error numbers, and nothing that
@@ -288,7 +303,7 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(try agent1.runOnce(), 0)
         try insert("/wrapped", chat: Fixture.tacoIdentifier)
         XCTAssertEqual(try agent1.runOnce(), 1)
-        XCTAssertEqual(first.sent.count, 2)
+        XCTAssertEqual(first.sent.count, MacConfig.storySiteIsLive ? 3 : 2)
         // A relaunch whose cursor is behind the command (as after a crash before the save).
         var state = AgentState.load(statePath)
         XCTAssertNotNil(state.answered[Fixture.tacoIdentifier])
@@ -366,5 +381,311 @@ final class AgentTests: XCTestCase {
         XCTAssertTrue(files.contains("recap.txt"))
         XCTAssertTrue(files.contains("link.txt"))
         XCTAssertTrue(files.contains { $0.hasPrefix("threadback-taco-tuesday-crew-2026") && $0.hasSuffix(".png") })
+    }
+
+    // MARK: Review batch 1: pause, turn off, one copy, staged cards, consent
+
+    /// The owner's switches, as the app passes them to its agent.
+    private func controlled(_ agent: Agent, live: Bool = true) -> AgentControl {
+        let control = AgentControl()
+        control.liveKeys = live ? [Fixture.tacoIdentifier] : []
+        agent.control = control
+        return control
+    }
+
+    /// Test 1: while paused, a file event or the safety poll sends nothing; on Resume reading
+    /// starts from the newest message, so nothing typed during the pause is ever answered.
+    func testPausedSendsNothingAndResumeStartsFromNow() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let control = controlled(agent)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        control.paused = true
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "a watcher event while paused")
+        XCTAssertEqual(try agent.runOnce(), 0, "the safety poll while paused")
+        XCTAssertTrue(sender.sent.isEmpty, "nothing is sent while paused")
+        control.paused = false
+        try agent.skipToNow()
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "a command typed during the pause is not answered after Resume")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 1, "a command typed after Resume is answered")
+    }
+
+    /// Test 3: Turn off (or Pause) clicked while a reply is going out: nothing more is sent,
+    /// and turning the chat on again does not bring a second reply inside the cooldown.
+    func testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        agent.config.link = true
+        let control = controlled(agent)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        sender.afterSend = { _ in control.liveKeys = [] }      // Turn off, while the card goes out
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try agent.runOnce()
+        XCTAssertEqual(sender.sent.map(\.kind), ["file"], "nothing is sent after Turn off")
+        XCTAssertEqual(agent.lastOutcome?.error, Agent.stopped)
+        sender.afterSend = nil
+        control.liveKeys = [Fixture.tacoIdentifier]            // on again, at once
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "no second reply inside the cooldown")
+        XCTAssertEqual(sender.sent.count, 1)
+
+        // The same for Pause, in another agent on a fresh cooldown.
+        let second = RecordingSender()
+        let (other, _) = try makeAgent(second)
+        other.config.link = true
+        let switches = controlled(other)
+        XCTAssertEqual(try other.runOnce(), 0)
+        second.afterSend = { item in if item.kind == "text" { switches.paused = true } }
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try other.runOnce()
+        XCTAssertEqual(second.sent.map(\.kind), ["file", "text"], "the link is not sent after Pause")
+    }
+
+    /// Test 2 (the lock): only one copy holds it; a copy that hands over lets the next one in.
+    func testOnlyOneCopyHoldsTheInstanceLock() throws {
+        let path = folder.appendingPathComponent("instance.lock")
+        let first = InstanceLock(path: path)
+        let second = InstanceLock(path: path)
+        XCTAssertTrue(first.acquire())
+        XCTAssertFalse(second.acquire(retryFor: 0.3), "a second copy does not get the lock")
+        // Move to Applications: the old copy lets go a moment after the new one started.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { first.release() }
+        XCTAssertTrue(second.acquire(retryFor: 3), "the new copy gets it once the old one lets go")
+        XCTAssertFalse(first.acquire(), "and the old one cannot take it back")
+        second.release()
+    }
+
+    /// Test 5a: every send stages its own card under a new name, so two chats whose names make
+    /// the same slug never get each other's picture; at most 30 staged cards are kept.
+    func testCollidingSlugsNeverShareACard() throws {
+        let db = try SQLiteDB(path: dbPath, readOnly: false)
+        _ = try db.execute("UPDATE chat SET display_name = 'Taco Tuesday Crew!' WHERE chat_identifier = ?", [Fixture.bookClubIdentifier])
+        _ = try db.execute("UPDATE chat SET display_name = 'Taco Tuesday Crew?' WHERE chat_identifier = ?", [Fixture.tacoIdentifier])
+        XCTAssertEqual(Agent.slugify("Taco Tuesday Crew!"), Agent.slugify("Taco Tuesday Crew?"))
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let engine = try ThreadbackEngine()
+        let token = engine.open(try SQLiteDB(path: dbPath))
+        let both = try engine.listChats(token: token, me: "Amara", contacts: [])
+            .filter { [Fixture.tacoIdentifier, Fixture.bookClubIdentifier].contains($0.chatIdentifier) }
+        engine.close(token)
+        XCTAssertEqual(both.count, 2)
+        agent.approve(both.map(Agent.chatRef))
+        var cards: [String: (String, Data)] = [:]
+        sender.afterSend = { item in
+            if item.kind == "file", let data = FileManager.default.contents(atPath: item.payload) { cards[item.chatKey] = (item.payload, data) }
+        }
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        try insert("/wrapped", chat: Fixture.bookClubIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 2)
+        let taco = try XCTUnwrap(cards[Fixture.tacoIdentifier])
+        let club = try XCTUnwrap(cards[Fixture.bookClubIdentifier])
+        XCTAssertNotEqual(taco.0, club.0, "each reply has its own card file")
+        XCTAssertNotEqual(taco.1, club.1, "each chat gets its own picture")
+
+        let staging = folder.appendingPathComponent("staging", isDirectory: true)
+        let a = AppleScriptSender.stagedURL(in: staging, extension: "png")
+        let b = AppleScriptSender.stagedURL(in: staging, extension: "png")
+        XCTAssertNotEqual(a, b)
+        XCTAssertTrue(a.lastPathComponent.hasPrefix("threadback-card-"))
+        XCTAssertFalse(a.lastPathComponent.contains("taco"), "the staged name carries no chat name")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        var made: [URL] = []
+        for i in 0..<35 {
+            let url = AppleScriptSender.stagedURL(in: staging, extension: "png")
+            try Data([UInt8(i)]).write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: Double(i - 100))], ofItemAtPath: url.path)
+            made.append(url)
+        }
+        let mine = staging.appendingPathComponent("someone-elses-photo.png")
+        try Data([1]).write(to: mine)
+        AppleScriptSender.prune(staging, keep: AppleScriptSender.keepStaged)
+        let left = try FileManager.default.contentsOfDirectory(atPath: staging.path)
+        XCTAssertEqual(left.filter { $0.hasPrefix("threadback-card-") }.count, 30)
+        XCTAssertTrue(left.contains("someone-elses-photo.png"), "only Threadback's own cards are pruned")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: made[0].path), "the oldest go first")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: made[34].path))
+    }
+
+    /// Test 5b: what turning a chat on means is said in full, and a change in what a reply
+    /// carries asks again before anything is sent in that chat.
+    func testConsentAndAChangeInWhatARepliesCarriesAsksAgain() throws {
+        XCTAssertNotEqual(Consent.signature(link: true), Consent.signature(link: false))
+        XCTAssertTrue(Consent.needsConfirmation(stored: nil), "a chat turned on before signatures existed")
+        XCTAssertTrue(Consent.needsConfirmation(stored: Consent.signature(link: false), current: Consent.signature(link: true)))
+        XCTAssertFalse(Consent.needsConfirmation(stored: Consent.signature()))
+        let statement = Consent.statement(link: true)
+        for words in ["/wrapped", "Apple ID", "three messages", "a picture, a short text and a link", "Anyone in the chat",
+                      "once every 2 minutes", "first names", "no message text", "forwarded"] {
+            XCTAssertTrue(statement.contains(words), "the statement says \(words)")
+        }
+        XCTAssertTrue(Consent.changedStatement.contains("Nothing is sent in this chat until you choose"))
+        Fixture.note("consent: \(Consent.title(chat: "Taco Tuesday Crew")) | \(statement) | \(Consent.changedTitle(chat: "Taco Tuesday Crew")) | \(Consent.changedStatement)")
+
+        // Approved under the old signature: not live until the owner clicks Keep on.
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let control = controlled(agent, live: false)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "nothing is sent before the click")
+        control.liveKeys = [Fixture.tacoIdentifier]            // Keep on
+        try agent.skipToNow()
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "the command typed before the click is not answered later")
+    }
+
+    /// L4: a chat is looked up by its id only; an id that is gone is an error, never a name match.
+    func testStatsByIdNeverFallsBackToAName() throws {
+        let engine = try ThreadbackEngine()
+        let token = engine.open(try SQLiteDB(path: dbPath))
+        defer { engine.close(token) }
+        let taco = try XCTUnwrap(try engine.listChats(token: token, me: "Amara", contacts: []).first { $0.chatIdentifier == Fixture.tacoIdentifier })
+        let byId = try engine.statsJSON(token: token, chatID: taco.id, me: "Amara", tz: "America/Los_Angeles", period: "2026", contacts: [], shortNames: true)
+        let before = try engine.statsJSON(token: token, chat: String(taco.id), me: "Amara", tz: "America/Los_Angeles", period: "2026", contacts: [], shortNames: true)
+        XCTAssertEqual(byId, before)
+        XCTAssertThrowsError(try engine.statsJSON(token: token, chatID: 987_654, me: "Amara", tz: nil, period: nil, contacts: [], shortNames: true))
+    }
+
+    // MARK: Review batch 2: verification, flood control
+
+    /// Test 4 (M2): a send counts only when OUR message shows up: the exact text, or the card's
+    /// unique file name. The owner's own photo or text sent meanwhile never counts, and the
+    /// status says what Messages recorded (written, sent, delivered).
+    func testVerificationMatchesOnlyOurMessageAndReportsWhatMessagesRecorded() {
+        let decode: (String?, Data?) -> String = { text, _ in text ?? "" }
+        let chat: Set<Int> = [7]
+        typealias Row = MessagesDB.OutgoingRow
+        let ownPhoto = Row(rowid: 101, chatIDs: [7], error: 0, hasAttachment: true, text: "\u{FFFC}", attributedBody: nil,
+                           isSent: true, isDelivered: true, attachmentNames: ["IMG_0042.HEIC"])
+        let ownText = Row(rowid: 102, chatIDs: [7], error: 0, hasAttachment: false, text: "lol", attributedBody: nil, isSent: true, isDelivered: true)
+        let emptyText = Row(rowid: 103, chatIDs: [7], error: 0, hasAttachment: false, text: "", attributedBody: nil, isSent: true)
+        let card = "threadback-card-6F1C.png"
+        let ourCard = Row(rowid: 104, chatIDs: [7], error: 0, hasAttachment: true, text: nil, attributedBody: nil,
+                          isSent: true, isDelivered: false, attachmentNames: [card])
+        let reply = "\u{1F9F5} Taco Tuesday Crew \u{00B7} 2026\n2,869 messages"
+        let ourText = Row(rowid: 105, chatIDs: [7], error: 0, hasAttachment: false, text: reply, attributedBody: nil,
+                          isSent: false, isDelivered: false)
+
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ownText, emptyText], chatIDs: chat, text: "", fileName: card, decode: decode), .notFound,
+                       "the owner's own photo is not our card")
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ownText, emptyText], chatIDs: chat, text: reply, fileName: nil, decode: decode), .notFound,
+                       "the owner's own (or an empty) text is not our reply")
+        XCTAssertEqual(AppleScriptSender.judge([ownPhoto, ourCard], chatIDs: chat, text: "", fileName: card, decode: decode), .found(ourCard))
+        XCTAssertEqual(AppleScriptSender.judge([ownText, ourText], chatIDs: chat, text: reply, fileName: nil, decode: decode), .found(ourText))
+        XCTAssertEqual(AppleScriptSender.judge([ourCard], chatIDs: [8], text: "", fileName: card, decode: decode), .notFound, "another chat")
+
+        var orphan = ourCard
+        orphan.chatIDs = []
+        var unrelatedOrphan = ownPhoto
+        unrelatedOrphan.chatIDs = []
+        XCTAssertEqual(AppleScriptSender.judge([orphan], chatIDs: chat, text: "", fileName: card, decode: decode), .orphan)
+        XCTAssertEqual(AppleScriptSender.judge([unrelatedOrphan], chatIDs: chat, text: "", fileName: card, decode: decode), .notFound,
+                       "a chat-less row that is not ours is not our orphan")
+
+        XCTAssertEqual(AppleScriptSender.result(for: ownPhoto).status, .delivered)
+        XCTAssertEqual(AppleScriptSender.result(for: ourCard).status, .sent)
+        XCTAssertEqual(AppleScriptSender.result(for: ourText).status, .written)
+        let failed = Row(rowid: 106, chatIDs: [7], error: 22, hasAttachment: false, text: reply, attributedBody: nil, isSent: true)
+        XCTAssertEqual(AppleScriptSender.result(for: failed).status, .failed)
+        XCTAssertEqual(ReplyRecord.word(.written), "written, not yet sent")
+        XCTAssertEqual(ReplyRecord.word(.sent), "sent")
+    }
+
+    /// The fixture's chat.db as the sender reads it: is_sent, is_delivered and attachment names.
+    func testOutgoingRowsCarrySentDeliveredAndAttachmentNames() throws {
+        let db = try SQLiteDB(path: dbPath, readOnly: false)
+        let before = try MessagesDB.maxMessageRowid(db)
+        let chat = try XCTUnwrap(try db.query("SELECT ROWID FROM chat WHERE chat_identifier = ? ORDER BY ROWID LIMIT 1", [Fixture.tacoIdentifier]).rows.first?.first?.int)
+        let cols = try MessagesDB.messageColumns(db)
+        guard cols.contains("is_sent"), cols.contains("is_delivered") else { throw XCTSkip("the fixture has no is_sent / is_delivered") }
+        let rowid = Int(try db.execute("INSERT INTO message (guid, text, handle_id, date, is_from_me, is_sent, is_delivered) VALUES (?, 'x', 0, 0, 1, 1, 0)",
+                                       ["TEST-\(UUID().uuidString)"]))
+        _ = try db.execute("INSERT INTO chat_message_join (chat_id, message_id) VALUES (?, ?)", [chat, rowid])
+        if let attachment = try? db.execute("INSERT INTO attachment (guid, filename, transfer_name) VALUES (?, ?, ?)",
+                                            ["ATT-\(UUID().uuidString)", "~/Library/Messages/Attachments/ab/11/X/threadback-card-1.png", "threadback-card-1.png"]) {
+            _ = try db.execute("INSERT INTO message_attachment_join (message_id, attachment_id) VALUES (?, ?)", [rowid, Int(attachment)])
+        }
+        let rows = try MessagesDB.outgoingRows(db, after: before)
+        let row = try XCTUnwrap(rows.first { $0.rowid == rowid })
+        XCTAssertTrue(row.isSent)
+        XCTAssertFalse(row.isDelivered)
+        XCTAssertEqual(row.chatIDs, [chat])
+        XCTAssertTrue(row.attachmentNames.contains("threadback-card-1.png"), "\(row.attachmentNames)")
+        Fixture.note("outgoing row: sent \(row.isSent), delivered \(row.isDelivered), attachment names \(row.attachmentNames)")
+    }
+
+    /// M3: at most `dailyCap` replies per chat in 24 hours (the owner is told once), a longer
+    /// cooldown once a chat is busy, and a timeout that may have sent counts for the cooldown.
+    func testDailyCapLongerCooldownAndTimeouts() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        agent.config.link = false
+        agent.config.cooldown = 0
+        agent.config.longCooldown = 0
+        agent.config.dailyCap = 3
+        var limits: [String] = []
+        agent.onLimit = { limits.append($0.key) }
+        XCTAssertEqual(try agent.runOnce(), 0)
+        for _ in 0..<3 {
+            try insert("/wrapped", chat: Fixture.tacoIdentifier)
+            XCTAssertEqual(try agent.runOnce(), 1)
+        }
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "the daily cap")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertEqual(limits, [Fixture.tacoIdentifier], "the owner is told once")
+        XCTAssertEqual(sender.sent.count, 6)
+
+        // Busy: after `repeatCount` replies within the hour the cooldown is the long one.
+        let second = RecordingSender()
+        let (busy, _) = try makeAgent(second)
+        busy.config.link = false
+        busy.config.cooldown = 0
+        busy.config.repeatCount = 2
+        busy.config.longCooldown = 600
+        XCTAssertEqual(try busy.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 1)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 1)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try busy.runOnce(), 0, "the longer cooldown")
+
+        // A timeout (-1712) may have sent: no second try right after it.
+        let timeouts = TimeoutSender()
+        let engine = try ThreadbackEngine()
+        let path = dbPath!
+        let slow = Agent(engine: engine, sender: timeouts, config: busy.config, openDatabase: { try SQLiteDB(path: path) }, statePath: nil)
+        slow.approve(Array(busy.approved.values))
+        slow.config.longCooldown = 0
+        slow.config.cooldown = 120
+        XCTAssertEqual(try slow.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try slow.runOnce()
+        XCTAssertEqual(timeouts.calls, 1)
+        XCTAssertNotNil(slow.lastOutcome?.card, "the card is kept for send by hand")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try slow.runOnce()
+        XCTAssertEqual(timeouts.calls, 1, "no retry inside the cooldown after a timeout")
+    }
+}
+
+/// Messages answered "timed out" (-1712): it may or may not have sent.
+final class TimeoutSender: MessageSender {
+    private(set) var calls = 0
+    func sendFile(_ url: URL, to chat: ChatRef) -> SendResult { timeout() }
+    func sendText(_ text: String, to chat: ChatRef) -> SendResult { timeout() }
+    private func timeout() -> SendResult {
+        calls += 1
+        var result = SendResult(status: .failed, reason: AppleScriptSender.explain(-1712, ""))
+        result.errorNumber = -1712
+        return result
     }
 }

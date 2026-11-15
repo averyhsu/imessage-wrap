@@ -8,6 +8,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Only the app's own files: no network, no frames, nothing else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file: 'unsafe-inline'; style-src 'self' file: 'unsafe-inline'; font-src 'self' file: data:; img-src 'self' file: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
 <link rel="stylesheet" href="css/base.css">
 <style>html, body { margin: 0; background: #07070c; }</style>
 </head>
@@ -21,13 +23,36 @@
 <script>
 (function () {
   'use strict';
-  // The card's footer names the site and says "made on device". On the Mac the app says
-  // where it was made instead, and names no site while the story site is not live. The
-  // card itself is unchanged: its two footer strings are swapped as they are drawn.
+  // The card's footer names the site and says "made on device". On the Mac it says
+  // "made on this Mac" instead, and names no site while the story site is not live. The
+  // card itself is unchanged: its footer strings are swapped as they are drawn.
+  //
+  // Each footer text's box is recorded at its natural width. footerProblem() says whether
+  // any two of them touch (CI checks every card with it); if one would, the site name is
+  // narrowed to the room that is left, so a card that is sent never overprints.
   var swaps = {};
+  var footer = [];
+  var GAP = 20;
   var draw = CanvasRenderingContext2D.prototype.fillText;
   CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
     if (Object.prototype.hasOwnProperty.call(swaps, text)) text = swaps[text];
+    var canvas = this.canvas;
+    if (canvas && canvas.id === 'card' && y > canvas.height - 80 && text) {
+      var width = this.measureText(text).width;
+      var align = this.textAlign;
+      var left = (align === 'right' || align === 'end') ? x - width : (align === 'center' ? x - width / 2 : x);
+      var box = { left: left, right: left + width, y: y, align: (align === 'right' || align === 'end') ? 'right' : 'left' };
+      var before = footer.filter(function (b) { return Math.abs(b.y - y) < 8; });
+      footer.push(box);
+      if (align === 'right' || align === 'end') {
+        var edge = before.reduce(function (m, b) { return Math.max(m, b.right); }, -Infinity);
+        if (edge + GAP > left) {
+          var room = x - edge - GAP;
+          if (room < 60) return;
+          maxWidth = maxWidth === undefined ? room : Math.min(maxWidth, room);
+        }
+      }
+    }
     return maxWidth === undefined ? draw.call(this, text, x, y) : draw.call(this, text, x, y, maxWidth);
   };
   var site = WrappedConfig.BASE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -35,13 +60,34 @@
   window.ThreadbackCard = {
     /** stats JSON (short names) -> "data:image/png;base64,..." (1080 x 1350). */
     render: function (statsJSON, siteIsLive) {
-      swaps = { '  ·  made on device': '  ·  made on this Mac, nothing uploaded' };
+      swaps = { '  ·  made on device': '  ·  made on this Mac' };
       if (!siteIsLive) swaps[site] = '';
+      footer = [];
       return WrappedCard.ready().then(function () {
         var stats = WrappedData.normalize(JSON.parse(statsJSON));
         var canvas = WrappedCard.render(stats, { canvas: document.getElementById('card') });
         return canvas.toDataURL('image/png');
       });
+    },
+
+    /** "" when the footer texts of the last card keep apart and stay on the card. */
+    footerProblem: function () {
+      var width = document.getElementById('card').width;
+      var problems = [];
+      if (footer.length < 2) problems.push('only ' + footer.length + ' footer text(s) drawn');
+      footer.forEach(function (a, i) {
+        if (a.left < 0 || a.right > width) problems.push('footer text ' + i + ' runs off the card');
+        footer.forEach(function (b, j) {
+          if (j <= i || Math.abs(a.y - b.y) >= 8) return;
+          // Texts drawn one after the other on the same side may touch; the two sides keep GAP apart.
+          var gap = a.align === b.align ? -1 : GAP;
+          if (a.left < b.right + gap && b.left < a.right + gap) {
+            problems.push('footer texts ' + i + ' and ' + j + ' overlap (' + Math.round(a.left) + '-' + Math.round(a.right) +
+                          ' and ' + Math.round(b.left) + '-' + Math.round(b.right) + ')');
+          }
+        });
+      });
+      return problems.join('; ');
     }
   };
 })();

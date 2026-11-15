@@ -216,6 +216,20 @@
       return;
     }
     showLanding();
+    showAnchor();
+  }
+
+  /**
+   * #get and the other section anchors of the landing page. Arriving from a story the landing
+   * page was hidden when the browser tried to scroll to the anchor, so scroll here, once it
+   * shows. Only ids of the landing page's own elements; anything else is left alone.
+   */
+  function showAnchor() {
+    var id = String(root.location.hash || '').replace(/^#/, '');
+    if (!/^[a-z][a-z0-9-]*$/i.test(id)) return;
+    var target = document.getElementById(id);
+    if (!target || !landing || !landing.contains(target) || target === landing) return;
+    try { target.scrollIntoView({ block: 'start' }); } catch (e) { target.scrollIntoView(); }
   }
 
   /** Native → web: play a recap object (or its JSON) directly. */

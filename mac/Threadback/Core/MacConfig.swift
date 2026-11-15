@@ -9,7 +9,11 @@ enum MacConfig {
     /// yet, so a link would be a 404 in the friends' chat: while this is false, replies are
     /// the image and the text only, the text uses its no-link wording, and every preview
     /// shows exactly that. Set it to true once `storyBaseURL` serves the story.
-    static let storySiteIsLive = false
+    static let storySiteIsLive = true
+
+    /// Where a newer Threadback for Mac can be downloaded. "Check for updates" opens it in
+    /// the browser; the app makes no network requests of its own, ever.
+    static let downloadPage = URL(string: storyBaseURL + "mac/")!
 
     /// The commit the app was built from (CI passes THREADBACK_COMMIT to xcodebuild).
     static var commit: String {

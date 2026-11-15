@@ -4,7 +4,7 @@
 //   node tests/e2e/run.mjs --only=embed,matrix
 //   npm run shots                    refresh the committed screenshots (see below)
 //
-// Sections: play, links, share, embed, file, matrix, landing, brand, shots.
+// Sections: play, links, share, embed, file, matrix, landing, get, brand, shots.
 //
 // A test run never touches tracked files: screenshots go to test-results/web-screenshots/
 // (git-ignored; CI uploads that folder). Only --update-screenshots writes them to
@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch, waitForStory, showSettled, findOverflow } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
 import { fixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +22,8 @@ const Data = require(path.join(WEB, 'js/normalize.js'));
 const vector = require(path.join(ROOT, 'tests/vectors/payload-v1.json'));
 
 const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SCREENSHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = UPDATE_SCREENSHOTS ? path.join(ROOT, 'docs/screenshots/web') : path.join(ROOT, 'test-results/web-screenshots');
 const ALL_SLIDES = ['cover', 'total', 'clock', 'persona', 'late', 'week', 'year', 'senders', 'moty', 'taps', 'awards', 'sum'];
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
@@ -60,7 +62,7 @@ const origin = new URL(server.url).origin;
 /** A context that records console errors, page errors and every request that leaves the origin. */
 async function open(opts = {}) {
   const vp = opts.viewport || viewports['phone-390x844'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!vp.mobile,
@@ -69,7 +71,7 @@ async function open(opts = {}) {
     acceptDownloads: true,
     bypassCSP: !!opts.wideFont,
     ...(opts.context || {}),
-  });
+  }));
   const problems = [];
   const foreign = [];
   const requests = [];
@@ -80,6 +82,7 @@ async function open(opts = {}) {
     const allowed = opts.fileOrigin ? url.startsWith('file://') : url.startsWith(origin + '/');
     if (!allowed) foreign.push(url);
   });
+  await context.addInitScript(COVER_TEXT);
   if (opts.init) await context.addInitScript(opts.init);
   if (opts.wideFont) {
     // Stand-in for devices whose system font is wider than SF/Inter (needs bypassCSP).
@@ -95,9 +98,18 @@ async function open(opts = {}) {
     });
   }
   const page = await context.newPage();
-  page.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(page, m.text())) problems.push('console: ' + m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
-  page.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
+  page.on('requestfailed', (r) => {
+    const why = r.failure() ? r.failure().errorText : '';
+    // Firefox fetches the site's icons itself (Chromium headless does not) and drops that
+    // fetch when the test navigates on at once. That is the browser's request, not the page's.
+    if (!IS_CHROMIUM && ABORTED.test(why) && /\/assets\/(favicon[^/]*|apple-touch-icon\.png)$/.test(r.url())) {
+      note('the browser\'s own icon fetch, cut short by the next navigation, is not counted as a failed request');
+      return;
+    }
+    problems.push('requestfailed: ' + r.url() + ' ' + why);
+  });
   return { context, page, problems, foreign, requests, close: () => context.close() };
 }
 
@@ -105,6 +117,23 @@ const link = (stats, prefix = '') => server.url + prefix + '#w1=' + Codec.encode
 const state = (page) => page.evaluate(() => ({ index: WrappedStory.index, total: WrappedStory.total, time: WrappedStory.time, paused: WrappedStory.isPaused(), ids: WrappedStory.slideIds }));
 const wait = (page, ms) => page.waitForTimeout(ms);
 const visibleText = (page) => page.evaluate(() => document.body.innerText);
+
+/**
+ * The chat name as the cover shows it: its innerText. The name is set as one inline-block
+ * per word, and where such a line wraps WebKit's innerText leaves out the space between the
+ * two words (Chromium and Firefox keep it). There, and only when the rendered words are the
+ * same, the name is read from the element's text instead.
+ */
+const COVER_TEXT = `window.__coverText = (el) => {
+  const inner = el.innerText, text = el.textContent.replace(/\\s+/g, ' ').trim();
+  if (${JSON.stringify(BROWSER)} !== 'webkit' || inner === text || inner.replace(/\\s+/g, '') !== text.replace(/\\s+/g, '')) return inner;
+  return text;
+};`;
+async function coverName(page) {
+  const [inner, shown] = await page.locator('.slide.is-active .cover__name').evaluate((el) => [el.innerText, window.__coverText(el)]);
+  if (inner !== shown) note("WebKit's innerText drops the space between inline-block words where a line wraps; the cover name is read from its text (same rendered words)");
+  return shown;
+}
 
 // ── 1. the demo plays through ──────────────────────────────────────────────────────────
 await section('play', 'Demo plays through every slide at 390×844', async () => {
@@ -200,21 +229,34 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   await waitForStory(kb.page);
   await kb.page.evaluate(() => { WrappedStory.goTo(2); WrappedStory.pause(); });
   const stops = [];
+  let stayed = false;   // Tab after the last stop left the focus where it was (Firefox under Playwright)
   for (let i = 0; i < 6; i++) {
-    await kb.page.keyboard.press('Tab');
+    await kb.page.keyboard.press(tabKey());
     const stop = await kb.page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body || !el.closest('#story')) return null;
+      if (window.__lastStop === el) return 'same';
+      window.__lastStop = el;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
       return { label: el.getAttribute('aria-label') || el.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), shown: cs.visibility === 'visible' && cs.display !== 'none' && Number(cs.opacity) > 0.5 };
     });
+    if (stop === 'same') { stayed = true; break; }
     if (!stop) break;
     stops.push(stop);
   }
   eq(stops.map((x) => x.label), ['Pause', 'Close', 'Previous slide', 'Next slide'], 'tab order on a slide: the visible controls first, then Previous / Next');
   ok(stops.every((x) => x.shown && x.w >= 30 && x.h >= 30), `every focus stop is visible and a reasonable size when focused (${JSON.stringify(stops)})`);
-  await kb.page.keyboard.press('Shift+Tab');
+  if (stayed) {
+    // Nothing to leave the page for: the focus is still on the last stop, so one Shift+Tab
+    // goes back to the one before it, and Tab returns.
+    note('Tab after the last control leaves the focus on it (no browser UI to move to); Shift+Tab is checked from there');
+    await kb.page.keyboard.press(tabKey(true));
+    eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Previous slide', 'Shift+Tab walks back through the same stops');
+    await kb.page.keyboard.press(tabKey());
+  } else {
+    await kb.page.keyboard.press(tabKey(true));
+  }
   eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Next slide', 'Shift+Tab walks back through the same stops');
   await kb.page.keyboard.press('Enter');
   eq((await state(kb.page)).index, 3, 'the focusable "Next slide" button works from the keyboard');
@@ -254,7 +296,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   // The cross-language vector, exactly as another component would send it.
   await page.goto(server.url + '#w1=' + vector.payload);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), vector.stats.chat.name, 'vector link renders the chat name on the cover');
+  eq(await coverName(page), vector.stats.chat.name, 'vector link renders the chat name on the cover');
   ok((await page.locator('.head__name').innerText()).includes('Dinner Club'), 'chat name in the header');
   ok((await page.locator('.slide.is-active .cover__label').innerText()).includes('2026 in review'), 'cover says "<label> in review"');
   ok((await page.title()).includes('Dinner Club'), 'document title carries the chat name');
@@ -264,7 +306,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await page.goto(link(custom));
   await page.reload();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), custom.chat.name, 'fragment link renders its own chat name');
+  eq(await coverName(page), custom.chat.name, 'fragment link renders its own chat name');
 
   // Changing the part after the # on an open page (a second link pasted into the same tab)
   // plays the new recap, and starts it once: the browser reports that change twice.
@@ -276,7 +318,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + vector.payload);
   await page.waitForFunction((name) => {
     const el = document.querySelector('.slide.is-active .cover__name');
-    return el && el.innerText === name;
+    return el && window.__coverText(el) === name;
   }, vector.stats.chat.name);
   await page.waitForTimeout(300);
   eq(await page.evaluate(() => window.__starts), 1, 'a new recap in the address starts the story once');
@@ -287,15 +329,15 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   const sentBefore = s.requests.filter((u) => u.includes('w1=')).length;
   await page.goto(server.url + '?utm=x&w1=' + duoPayload);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'query-string link renders the chat name');
+  eq(await coverName(page), 'me & u', 'query-string link renders the chat name');
   ok(!(await state(page)).ids.includes('awards'), 'a slide without data is skipped (no awards for two people)');
   const moved = await page.evaluate(() => ({ search: location.search, hash: location.hash }));
   eq(moved, { search: '?utm=x', hash: '#w1=' + duoPayload }, 'a ?w1= recap is moved into the #fragment (other parameters stay)');
   await page.reload();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'the story survives a reload from the fragment');
+  eq(await coverName(page), 'me & u', 'the story survives a reload from the fragment');
   eq(s.requests.filter((u) => u.includes('w1=')).length - sentBefore, 1, 'only the first request ever carried the recap; the reload did not');
-  await s.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grant(s.context, ['clipboard-read', 'clipboard-write']);
   await page.evaluate(() => WrappedStory.goTo(WrappedStory.total - 1));
   await page.locator('.slide.is-active [data-action="copy"]').click();
   await page.waitForSelector('.toast.is-on');
@@ -306,11 +348,11 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
 
   // Pasting another link into the same tab swaps the story.
   await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + Codec.encode(fixtures.tiny));
-  await page.waitForFunction((name) => { const el = document.querySelector('.slide.is-active .cover__name'); return el && el.innerText === name; }, fixtures.tiny.chat.name);
+  await page.waitForFunction((name) => { const el = document.querySelector('.slide.is-active .cover__name'); return el && window.__coverText(el) === name; }, fixtures.tiny.chat.name);
   ok(true, 'changing the fragment loads the new recap');
 
   // Copy link gives back a link that decodes to the same stats.
-  await s.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grant(s.context, ['clipboard-read', 'clipboard-write']);
   await page.goto(server.url + '#w1=' + vector.payload);
   await page.reload();
   await waitForStory(page);
@@ -344,7 +386,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   ok(await page.locator('#play-recap').isVisible(), 'after closing a recap the landing page offers to play it again');
   await page.locator('#play-recap').click();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), vector.stats.chat.name, '"Play your recap again" restarts it');
+  eq(await coverName(page), vector.stats.chat.name, '"Play your recap again" restarts it');
 
   eq(s.problems, [], 'no console errors with valid links');
   eq(s.foreign, [], 'zero foreign requests with valid links');
@@ -413,10 +455,18 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
 
 // ── 3. share card ──────────────────────────────────────────────────────────────────────
 await section('share', 'Share card: 1080×1350 PNG, download fallback, Web Share', async () => {
-  const s = await open();
+  // The download fallback is for a browser without Web Share. Desktop Chromium on Linux has
+  // none; WebKit on macOS has it (as Safari does), so there it is taken away for this part.
+  const s = await open(IS_CHROMIUM ? {} : { init: () => {
+    window.__hadShare = typeof navigator.share === 'function';
+    delete Navigator.prototype.share;
+    delete Navigator.prototype.canShare;
+  } });
   const { page } = s;
   await page.goto(server.url + '?demo=1');
   await waitForStory(page);
+  if (await page.evaluate(() => window.__hadShare)) note('this engine has Web Share (as Safari does); the download fallback is checked with navigator.share taken away');
+  eq(await page.evaluate(() => typeof navigator.share), 'undefined', 'this part runs without Web Share');
 
   const direct = await page.evaluate(async () => {
     const stats = WrappedData.normalize(WRAPPED_DEMO);
@@ -567,7 +617,7 @@ await section('embed', 'Embed mode (?embed=ios) talks to the native bridge', asy
   ok(await page.locator('.landing').isHidden(), 'and still shows no landing page');
   await page.evaluate((stats) => WrappedApp.load(stats), fixtures.duo);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'WrappedApp.load(stats) plays a recap handed over by native');
+  eq(await coverName(page), 'me & u', 'WrappedApp.load(stats) plays a recap handed over by native');
   eq((await messages())[0].type, 'ready', 'and announces ready');
 
   // A damaged payload inside the app reports an error instead of a blank screen.
@@ -684,7 +734,7 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
       await waitForStory(page);
       const st = await state(page);
       const normal = Data.normalize(stats);
-      eq(await page.locator('.slide.is-active .cover__name').innerText(), normal.chat.name, `[${vpName}] ${name}: cover shows the chat name`);
+      eq(await coverName(page), normal.chat.name, `[${vpName}] ${name}: cover shows the chat name`);
       if (wideFont && name === 'demo') {
         const family = await page.evaluate(() => getComputedStyle(document.querySelector('.total__facts .bubble')).fontFamily);
         ok(/^"?DejaVu Sans/.test(family), `[${vpName}] the wide font override is in effect (${family})`);
@@ -914,13 +964,15 @@ await section('landing', 'Landing page', async () => {
     ok(await page.locator('#story').isHidden(), `[${vpName}] no story without a payload`);
     eq(await page.locator('.l-brand__name').innerText(), Config.PRODUCT_NAME, `[${vpName}] brand comes from the config constant`);
     eq(await page.locator('#play-demo').getAttribute('href'), '?demo=1', `[${vpName}] "Play the demo" links to ?demo=1`);
-    ok(await page.locator('a[href="make/"]').first().isVisible() || vp.width <= 420, `[${vpName}] "Make your own" links to make/`);
-    ok((await page.locator('.l-cta a[href="make/"]').innerText()).includes('Make your own'), `[${vpName}] make link label`);
+    eq(await page.locator('.l-hero .l-cta a').nth(0).getAttribute('id'), 'play-demo', `[${vpName}] "Play the demo" is the first button`);
+    eq(await page.getAttribute('#get-it', 'href'), '#get', `[${vpName}] the second button leads to the "get it" section`);
+    eq(await page.getAttribute('#get-mac', 'href'), 'mac/', `[${vpName}] the main way: "Get the Mac app" links to mac/`);
+    ok((await page.locator('#get-make').innerText()).includes('Make one in the browser') && await page.getAttribute('#get-make', 'href') === 'make/', `[${vpName}] the alternative: "Make one in the browser" links to make/`);
     const text = await visibleText(page);
     ok(/never send that part/i.test(text) && /no server/i.test(text) && /on your own device/i.test(text), `[${vpName}] explains the privacy model`);
     // Display type set tight: a line's descenders must clear the next line's tall letters.
     // Measured on the font's real ink (canvas metrics at a large size), not on the CSS number.
-    const leading = await page.evaluate(() => [...document.querySelectorAll('.l-h1, .l-h2, .l-step h3, .l-facts h3')].map((el) => {
+    const leading = await page.evaluate(() => [...document.querySelectorAll('.l-h1, .l-h2, .l-how h3, .l-alt h3, .l-facts h3')].map((el) => {
       const cs = getComputedStyle(el);
       const ctx = document.createElement('canvas').getContext('2d');
       ctx.font = `${cs.fontWeight} 200px ${cs.fontFamily}`;
@@ -939,7 +991,7 @@ await section('landing', 'Landing page', async () => {
       fs.mkdirSync(SHOTS, { recursive: true });
       // Freeze the floating hero pieces so the committed screenshot does not change run to run.
       await page.evaluate(() => { document.getAnimations().forEach((a) => { a.pause(); a.currentTime = 0; }); });
-      await page.screenshot({ path: path.join(SHOTS, vpName.startsWith('desktop') ? 'landing-desktop.png' : 'landing-mobile.png'), fullPage: true });
+      await shoot(page, () => page.screenshot({ path: path.join(SHOTS, vpName.startsWith('desktop') ? 'landing-desktop.png' : 'landing-mobile.png'), fullPage: true }));
     }
     // "Play the demo" starts the story in place, and Back returns.
     await page.locator('#play-demo').click();
@@ -951,6 +1003,103 @@ await section('landing', 'Landing page', async () => {
     ok(await page.locator('.landing').isVisible(), `[${vpName}] Back returns to the landing page`);
     eq(s.problems, [], `[${vpName}] no console errors on the landing page`);
     eq(s.foreign, [], `[${vpName}] zero foreign requests on the landing page`);
+    await s.close();
+  }
+});
+
+// ── 7b. "get it for your chat": the Mac app first, the browser second ────────────────
+await section('get', 'Landing: the "get it for your chat" section, the top bar, and the last slide\'s link to it', async () => {
+  const sizes = [['phone-360', { width: 360, height: 740, mobile: true }], ['phone-390x844', viewports['phone-390x844']], ['tablet-768x1024', viewports['tablet-768x1024']], ['desktop-1440x900', viewports['desktop-1440x900']]];
+  for (const [vpName, vp] of sizes) {
+    const s = await open({ viewport: vp, reducedMotion: 'reduce' });
+    const { page } = s;
+    await page.goto(server.url);
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));
+    await page.evaluate(() => document.fonts.ready);
+    // The section's pictures load lazily: bring them into view, then check they arrived.
+    await page.locator('#get').scrollIntoViewIfNeeded();
+    await page.evaluate(async () => {
+      for (const i of document.querySelectorAll('#get img')) {
+        if (i.getClientRects().length) { i.scrollIntoView(); await new Promise((r) => setTimeout(r, 50)); }
+      }
+    });
+    await page.waitForFunction(() => [...document.querySelectorAll('#get img')].filter((i) => i.getClientRects().length > 0).every((i) => i.complete), null, { timeout: 10000 });
+    const imgs = await page.$$eval('#get img', (list) => list.map((i) => ({ src: i.currentSrc || i.src, w: i.naturalWidth, shown: i.getClientRects().length > 0 })));
+    const card = imgs.find((i) => /reply-card/.test(i.src));
+    ok(card && card.w > 0 && card.src.startsWith(server.url), `[${vpName}] the reply card loads, from this site (${card && card.src})`);
+    ok(imgs.filter((i) => i.shown).every((i) => i.w > 0), `[${vpName}] every picture shown in the section loads`);
+    const thread = await page.evaluate(() => document.querySelector('.l-thread__text').textContent);
+    ok(/Dinner Club/.test(thread) && /48,213 messages/.test(thread), `[${vpName}] the reply text is the invented demo chat's`);
+    // The top bar: one link to the section on a phone, the two pages on wider screens.
+    const top = await page.$$eval('.l-top__nav a', (list) => list.filter((a) => a.getClientRects().length > 0).map((a) => a.getAttribute('href')));
+    eq(top, vp.width <= 560 ? ['#get'] : ['mac/', 'make/'], `[${vpName}] the top bar's links`);
+    // Nothing sticks out sideways.
+    const wide = await page.evaluate(() => {
+      const vw = document.documentElement.clientWidth;
+      const out = [];
+      if (document.documentElement.scrollWidth > vw + 1) out.push('page scrolls sideways: ' + document.documentElement.scrollWidth);
+      for (const el of document.querySelectorAll('#landing *')) {
+        if (el.closest('.l-sky, .sr-only, svg, .l-hero__art')) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const r = el.getBoundingClientRect();
+        if ((r.width || r.height) && (r.right > vw + 1 || r.left < -1)) out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} [${Math.round(r.left)}, ${Math.round(r.right)}]`);
+      }
+      return out.slice(0, 5);
+    });
+    eq(wide, [], `[${vpName}] nothing sticks out sideways`);
+    // Reduced motion: nothing on the landing page moves.
+    const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length);
+    eq(moving, 0, `[${vpName}] with reduced motion nothing on the landing page animates`);
+    if (vpName === 'phone-390x844') {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      // Before this section existed the phone page was 3,009 px tall: at most one more screen.
+      ok(height <= 3009 + 844 + 100, `[${vpName}] the page stays short: ${height} px tall`);
+    }
+    // The hero's second button goes to the section.
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.click('#get-it');
+    await page.waitForFunction(() => location.hash === '#get');
+    await page.waitForTimeout(200);
+    const at = await page.evaluate(() => Math.round(document.getElementById('get').getBoundingClientRect().top));
+    ok(at >= -2 && at < 60, `[${vpName}] "Get it for your chat" scrolls to the section (top at ${at} px)`);
+    ok(await page.locator('#landing').isVisible() && await page.locator('#story').isHidden(), `[${vpName}] and stays on the landing page`);
+    eq(s.problems, [], `[${vpName}] no console errors, failed requests or CSP violations`);
+    eq(s.foreign, [], `[${vpName}] no request left this origin`);
+    await s.close();
+  }
+
+  // The story's last slide: "Get one for your chat" leads to that section and leaves the story.
+  for (const [label, url] of [['a recap link (same page, new #)', link(fixtures.legacy)], ['the demo (?demo=1, a new page)', server.url + '?demo=1']]) {
+    const s = await open({ viewport: viewports['phone-390x844'] });
+    const { page } = s;
+    await page.goto(url);
+    await waitForStory(page);
+    const total = (await state(page)).total;
+    await showSettled(page, total - 1);
+    const a = page.locator('.slide.is-active .sum__make');
+    eq(await a.getAttribute('href'), Config.GET_PATH, `${label}: the last slide links to ${Config.GET_PATH}`);
+    ok(/Get one for your chat/.test(await a.innerText()), `${label}: and says what it is for`);
+    await a.click();
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-landing') && location.hash === '#get', null, { timeout: 10000 });
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => ({
+      story: !!(window.WrappedStory && window.WrappedStory.isActive()),
+      storyHidden: document.getElementById('story').hidden || getComputedStyle(document.getElementById('story')).display === 'none',
+      landing: getComputedStyle(document.getElementById('landing')).display !== 'none',
+      overflow: getComputedStyle(document.body).overflow,
+      title: document.title,
+      top: Math.round(document.getElementById('get').getBoundingClientRect().top),
+      path: location.pathname + location.search,
+    }));
+    ok(!after.story && after.storyHidden && after.landing, `${label}: the story is gone and the landing page shows (${JSON.stringify(after)})`);
+    ok(after.overflow !== 'hidden', `${label}: the page scrolls again`);
+    ok(!after.title.includes('—'), `${label}: the title is the site's again, not the recap's (${after.title})`);
+    ok(after.top >= -2 && after.top < 80, `${label}: the "get it" section is in view (top at ${after.top} px)`);
+    ok(!/demo=|w1=/.test(after.path), `${label}: no recap or demo left in the address (${after.path})`);
+    eq(s.problems, [], `${label}: no console errors`);
+    eq(s.foreign, [], `${label}: no request left this origin`);
     await s.close();
   }
 });
@@ -975,7 +1124,7 @@ await section('brand', 'Copy: product name comes from one constant; no borrowed 
     }
   }
   const all = texts.join('\n');
-  ok(!/wrapped/i.test(all), 'no user-visible copy says "Wrapped"');
+  ok(!/wrapped/i.test(all.replace(/\/wrapped\b/g, '')), 'no user-visible copy says "Wrapped", except the command /wrapped');
   const imessage = all.match(/[^.\n]*imessage[^.\n]*/gi) || [];
   ok(imessage.every((line) => /works with imessage|trademark of apple/i.test(line)), `"iMessage" appears only as a compatibility note (${JSON.stringify(imessage)})`);
   ok(landingText.includes(Config.PRODUCT_NAME), 'the landing page shows the product name');
@@ -997,7 +1146,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   for (let i = 0; i < ids.length; i++) {
     await showSettled(page, i);
     const file = path.join(SHOTS, `${String(i + 1).padStart(2, '0')}-${ids[i]}.png`);
-    await page.screenshot({ path: file });
+    await shoot(page, () => page.screenshot({ path: file }));
     files.push(file);
     eq(pngSize(fs.readFileSync(file)), { width: 780, height: 1688 }, `${path.basename(file)} is 780×1688 (390×844 @2x)`);
   }
@@ -1006,7 +1155,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   // Suspense frames: the typing indicator before the cover and the personality reveal.
   for (const [i, ms, name] of [[0, 900, 'typing-cover'], [3, 1500, 'typing-personality']]) {
     await page.evaluate(([index, t]) => { WrappedStory.goTo(index); WrappedStory.seek(t); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }, [i, ms]);
-    await page.screenshot({ path: path.join(SHOTS, `moment-${name}.png`) });
+    await shoot(page, () => page.screenshot({ path: path.join(SHOTS, `moment-${name}.png`) }));
     ok(await page.locator('.slide.is-active .typing').first().isVisible(), `${name}: the typing indicator is on screen at ${ms} ms`);
   }
   await page.evaluate(() => WrappedStory.resume());
@@ -1018,7 +1167,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   await e.page.goto(link(vector.stats, '?embed=ios'));
   await waitForStory(e.page);
   await showSettled(e.page, 11);
-  await e.page.screenshot({ path: path.join(SHOTS, 'embed-12-sum.png') });
+  await shoot(e.page, () => e.page.screenshot({ path: path.join(SHOTS, 'embed-12-sum.png') }));
   await e.close();
 
   // Desktop: the phone-sized stage on its backdrop.
@@ -1030,7 +1179,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   await d.page.goto(server.url + '?demo=1');
   await waitForStory(d.page);
   await showSettled(d.page, 3); // (showSettled switches the colour transitions off, so the backdrop is already there)
-  await d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') });
+  await shoot(d.page, () => d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') }));
   const stage = await d.page.locator('.stage').boundingBox();
   eq([stage.width, stage.height, stage.x, stage.y], [392, 700, 524, 30], 'desktop shows a centred phone-sized stage on whole pixels');
   ok(await d.page.locator('.story__arrow--next').isVisible(), 'desktop has arrow buttons');
@@ -1047,7 +1196,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   const strip = [];
   for (const [id, file] of [['senders', 'default-08-senders.png'], ['moty', 'default-09-moty.png'], ['sum', null]]) {
     await showSettled(dflt.page, dIds.indexOf(id));
-    const png = await dflt.page.screenshot(file ? { path: path.join(SHOTS, file) } : {});
+    const png = await shoot(dflt.page, () => dflt.page.screenshot(file ? { path: path.join(SHOTS, file) } : {}));
     eq(pngSize(png), { width: 780, height: 1688 }, `default recap: ${id} slide captured`);
     strip.push(png);
   }
@@ -1075,7 +1224,8 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
 await browser.close();
 await server.close();
 
-console.log(`\n${checks} checks, ${failures.length} failed`);
+printNotes();
+console.log(`\n${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);

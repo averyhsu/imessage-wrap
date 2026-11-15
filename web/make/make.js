@@ -25,7 +25,7 @@
 
   var doc = root.document;
 
-  // Opened inside our own preview frame (the story's "Make one for your chat" link was
+  // Opened inside our own preview frame (an older story's "Make one for your chat" link was
   // tapped there): stay inert. The outer page puts the story back.
   try {
     if (root.parent !== root && root.parent.WrappedMake) return;
@@ -1856,7 +1856,9 @@
       // Without it the recap would call the owner "Me", which means someone else to
       // everyone who opens it. Staying "Me" is allowed, but only as a choice.
       meProblem(true);
-      $('me-name').focus();
+      // One scroll, ours: focus() scrolls on its own too, and in WebKit the two could
+      // leave the field out of view.
+      try { $('me-name').focus({ preventScroll: true }); } catch (error) { $('me-name').focus(); }
       keepInView($('me-field'));
       say('Type your first name: it is the first thing asked in this step.');
       return;
@@ -1992,11 +1994,12 @@
     }
   }
 
-  /** The story's own "Make one for your chat" link was followed inside the frame. */
+  /** The story's own "Get one for your chat" link (or an older link here) was followed inside the frame. */
   function onPreviewLoad() {
     var frame = $('preview');
     try {
-      if (S.previewUrl && /\/make\/(index\.html)?$/.test(frame.contentWindow.location.pathname)) {
+      var inner = frame.contentWindow.location;
+      if (S.previewUrl && (/\/make\/(index\.html)?$/.test(inner.pathname) || inner.hash === '#get')) {
         frame.src = S.previewUrl;
       }
     } catch (error) { /* not ours to look at */ }

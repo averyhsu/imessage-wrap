@@ -2,6 +2,8 @@
 # Messages databases built at test time, compared with the Python command-line tool.
 # Checks: chat.db + -wal, iPhone backups (also encrypted), pasted exports, the sample chat,
 # quotes opt-in, renaming, error messages, keyboard use, four viewports, zero foreign requests.
+# The Chromium job is the reference; the "Other engines" jobs run the same suite in WebKit
+# (Safari's engine) and Firefox.
 name: Make page
 
 on:
@@ -91,5 +93,64 @@ jobs:
         with:
           retention-days: 3
           name: make-screenshots
+          path: test-results/make-screenshots/
+          if-no-files-found: warn
+
+  engines:
+    name: End-to-end in ${{ matrix.browser }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { browser: webkit, os: ubuntu-latest }
+          - { browser: firefox, os: ubuntu-latest }
+          # The closest a runner gets to Safari: WebKit on macOS.
+          - { browser: webkit, os: macos-latest }
+    env:
+      BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ${{ matrix.browser }}
+        timeout-minutes: 12
+        run: |
+          npx playwright install --with-deps ${{ matrix.browser }}
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            timeout 120 sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji \
+              || echo "::warning::extra fonts unavailable; layout checks use fallback fonts"
+          fi
+
+      - name: End-to-end tests
+        run: npm run test:make
+
+      - name: The test run left the repository as it found it
+        if: always()
+        run: |
+          dirty="$(git status --porcelain)"
+          if [ -n "$dirty" ]; then echo "$dirty"; echo "::error::the tests changed tracked files or left new ones behind"; exit 1; fi
+          leftovers="$(git status --porcelain --untracked-files=all --ignored | grep -E '\.(db|sqlite|sqlite3|db-wal|db-shm)$' || true)"
+          if [ -n "$leftovers" ]; then echo "$leftovers"; echo "::error::test databases were written inside the repository"; exit 1; fi
+
+      - name: Upload screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 3
+          name: make-screenshots-${{ matrix.browser }}-${{ matrix.os }}
           path: test-results/make-screenshots/
           if-no-files-found: warn

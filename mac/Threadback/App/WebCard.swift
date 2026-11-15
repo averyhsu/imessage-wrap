@@ -8,14 +8,24 @@ import WebKit
 /// WebKit lives on the main thread. `png(statsJSON:)` may be called from any thread: off the
 /// main thread it waits for the main thread; on it, it runs the run loop until the card is
 /// ready.
+///
+/// It recovers by itself: if macOS ends the web view's process, or the page does not load
+/// within `loadTimeout`, the view is thrown away and the next card loads a fresh one.
+/// `cardOrNative(statsJSON:)` falls back to the small native card when the page fails.
 final class WebCard: NSObject, WKNavigationDelegate {
     static let shared = WebCard()
 
     static let size = CGSize(width: 1080, height: 1350)
+    var loadTimeout: TimeInterval = 10
     private var webView: WKWebView?
     private var loaded = false
+    private var loadGeneration = 0
     private var waiting: [() -> Void] = []
+    /// How many times the page was thrown away and loaded again (for the test report).
+    private(set) var reloads = 0
     private(set) var lastMilliseconds = 0
+    /// "" when the footer texts of the last card kept apart (CI fails a card otherwise).
+    private(set) var lastFooterProblem = ""
 
     struct Failure: Error, CustomStringConvertible {
         let description: String
@@ -25,8 +35,25 @@ final class WebCard: NSObject, WKNavigationDelegate {
         Bundle.main.url(forResource: "mac-card", withExtension: "html", subdirectory: "web")
     }
 
+    /// The site's card, or the native card when the page cannot draw it right now (a WebKit
+    /// crash, a page that does not load): a reply always has a picture.
+    func cardOrNative(statsJSON: String) throws -> Data {
+        do {
+            return try png(statsJSON: statsJSON)
+        } catch {
+            usedNative += 1
+            guard let png = MacCardRenderer.pngData(for: try RecapSummary.decode(json: Data(statsJSON.utf8))) else {
+                throw Failure(description: "neither card could be drawn (\(error))")
+            }
+            return png
+        }
+    }
+
+    /// How many cards fell back to the native renderer (for the test report).
+    private(set) var usedNative = 0
+
     /// PNG bytes of the card for these (short-name) stats.
-    func png(statsJSON: String, timeout: TimeInterval = 20) throws -> Data {
+    func png(statsJSON: String, timeout: TimeInterval = 15) throws -> Data {
         var result: Result<Data, Error> = .failure(Failure(description: "the card did not finish in \(Int(timeout)) s"))
         var finished = false
         let start = Date()
@@ -66,13 +93,15 @@ final class WebCard: NSObject, WKNavigationDelegate {
                 return
             }
             webView.callAsyncJavaScript(
-                "return await window.ThreadbackCard.render(stats, live);",
+                "const url = await window.ThreadbackCard.render(stats, live); return [url, window.ThreadbackCard.footerProblem()];",
                 arguments: ["stats": statsJSON, "live": MacConfig.storySiteIsLive],
                 in: nil, in: .page
             ) { result in
                 switch result {
                 case .success(let value):
-                    guard let url = value as? String, let comma = url.firstIndex(of: ","),
+                    let pair = value as? [Any]
+                    self.lastFooterProblem = pair?.count == 2 ? (pair?[1] as? String ?? "") : "the card page gave no footer check"
+                    guard let url = pair?.first as? String, let comma = url.firstIndex(of: ","),
                           let data = Data(base64Encoded: String(url[url.index(after: comma)...])),
                           !data.isEmpty else {
                         done(.failure(Failure(description: "the card page returned no image")))
@@ -86,15 +115,16 @@ final class WebCard: NSObject, WKNavigationDelegate {
         }
     }
 
+    /// Runs `then` once the page is loaded, or at once with no view when it cannot load (the
+    /// caller then fails, and the next card tries a fresh view).
     private func prepare(_ then: @escaping () -> Void) {
-        if loaded {
+        if loaded && webView != nil {
             then()
             return
         }
         waiting.append(then)
         if webView != nil { return }
         guard let page = WebCard.pageURL else {
-            loaded = true
             flush()
             return
         }
@@ -103,7 +133,14 @@ final class WebCard: NSObject, WKNavigationDelegate {
         let view = WKWebView(frame: CGRect(origin: .zero, size: WebCard.size), configuration: configuration)
         view.navigationDelegate = self
         webView = view
+        loaded = false
+        loadGeneration += 1
+        let generation = loadGeneration
         view.loadFileURL(page, allowingReadAccessTo: page.deletingLastPathComponent())
+        DispatchQueue.main.asyncAfter(deadline: .now() + loadTimeout) { [weak self] in
+            guard let self, self.loadGeneration == generation, !self.loaded else { return }
+            self.discard()   // the page did not load in time
+        }
     }
 
     private func flush() {
@@ -112,22 +149,44 @@ final class WebCard: NSObject, WKNavigationDelegate {
         queued.forEach { $0() }
     }
 
+    /// Throws the view away; whoever waits gets a failure, and the next card loads a new one.
+    private func discard() {
+        webView?.navigationDelegate = nil
+        webView = nil
+        loaded = false
+        reloads += 1
+        flush()
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webView === self.webView else { return }
         loaded = true
         flush()
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        self.webView = nil
-        loaded = true
-        flush()
+        guard webView === self.webView else { return }
+        discard()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        self.webView = nil
-        loaded = true
-        flush()
+        guard webView === self.webView else { return }
+        discard()
     }
+
+    /// macOS ended the web view's process (memory pressure, a crash): start again next time.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        guard webView === self.webView else { return }
+        discard()
+    }
+
+    #if DEBUG
+    /// CI: ends the web content process, as macOS may, to check that the next card recovers.
+    func simulateCrash() {
+        guard let webView else { return }
+        webViewWebContentProcessDidTerminate(webView)
+    }
+    #endif
 
     /// Only the card page itself may load; nothing else, ever.
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

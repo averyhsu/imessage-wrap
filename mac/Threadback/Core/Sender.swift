@@ -13,9 +13,11 @@ struct ChatRef: Codable, Equatable {
     var key: String { identifier.isEmpty ? guid : identifier }
 }
 
-/// How one send ended (wrapped/mac/send.py): delivered, unverified, failed, or dry-run.
+/// How one send ended, from what Messages recorded in chat.db for the exact message:
+/// delivered (is_delivered), sent (is_sent, not yet delivered), written (in the chat, not yet
+/// sent), unverified (no such message appeared), failed, or dry-run.
 struct SendResult: Equatable {
-    enum Status: String { case delivered, unverified, failed, dryRun = "dry-run" }
+    enum Status: String { case delivered, sent, written, unverified, failed, dryRun = "dry-run" }
 
     var status: Status
     var reason: String = ""
@@ -46,14 +48,20 @@ final class RecordingSender: MessageSender {
     }
 
     private(set) var sent: [Sent] = []
+    /// Called after each recorded send (tests use it to change things mid-reply).
+    var afterSend: ((Sent) -> Void)?
 
     func sendFile(_ url: URL, to chat: ChatRef) -> SendResult {
-        sent.append(Sent(kind: "file", chatKey: chat.key, payload: url.path))
+        let item = Sent(kind: "file", chatKey: chat.key, payload: url.path)
+        sent.append(item)
+        afterSend?(item)
         return SendResult(status: .dryRun)
     }
 
     func sendText(_ text: String, to chat: ChatRef) -> SendResult {
-        sent.append(Sent(kind: "text", chatKey: chat.key, payload: text))
+        let item = Sent(kind: "text", chatKey: chat.key, payload: text)
+        sent.append(item)
+        afterSend?(item)
         return SendResult(status: .dryRun)
     }
 }
@@ -107,17 +115,41 @@ final class AppleScriptSender: MessageSender {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/Threadback", isDirectory: true)
     }
 
+    /// Each send stages its own copy under a new name, so two chats can never pick up each
+    /// other's card. It is deleted once the send is confirmed; at most `keepStaged` are kept.
     func sendFile(_ url: URL, to chat: ChatRef) -> SendResult {
         let folder = AppleScriptSender.stagingFolder
-        let staged = folder.appendingPathComponent(url.lastPathComponent)
+        let staged = AppleScriptSender.stagedURL(in: folder, extension: url.pathExtension)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: staged)
             try FileManager.default.copyItem(at: url, to: staged)
         } catch {
             return SendResult(status: .failed, reason: "could not stage the image in ~/Pictures: \(error.localizedDescription)")
         }
-        return send(chat, text: "", filePath: staged.path, isFile: true)
+        let result = send(chat, text: "", filePath: staged.path, isFile: true)
+        // Messages has its own copy once the message is sent.
+        if result.status == .delivered || result.status == .sent { try? FileManager.default.removeItem(at: staged) }
+        AppleScriptSender.prune(folder, keep: AppleScriptSender.keepStaged)
+        return result
+    }
+
+    static let keepStaged = 30
+
+    /// A new, unique file name for one send: threadback-card-<UUID>.png.
+    static func stagedURL(in folder: URL, extension ext: String) -> URL {
+        return folder.appendingPathComponent("threadback-card-\(UUID().uuidString).\(ext.isEmpty ? "png" : ext)")
+    }
+
+    /// Keeps the newest `keep` staged cards (our own threadback-card-* files only).
+    static func prune(_ folder: URL, keep: Int) {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { return }
+        let ours = names.filter { $0.hasPrefix("threadback-card-") }.map { folder.appendingPathComponent($0) }
+        let dated = ours.map { url -> (URL, Date) in
+            let date = ((try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? .distantPast
+            return (url, date)
+        }.sorted { $0.1 > $1.1 }
+        for (url, _) in dated.dropFirst(max(0, keep)) { try? fm.removeItem(at: url) }
     }
 
     func sendText(_ text: String, to chat: ChatRef) -> SendResult {
@@ -160,9 +192,9 @@ final class AppleScriptSender: MessageSender {
             failed.idForm = AppleScriptSender.idForm(guid)
             return failed
         }
-        var verdict = verify(chat, before: before, text: text, isFile: isFile)
+        var verdict = verify(chat, before: before, text: text, fileName: isFile ? (filePath as NSString).lastPathComponent : nil)
         verdict.idForm = AppleScriptSender.idForm(guid)
-        if verdict.status == .delivered { workingGuid[chat.key] = guid }
+        if [.delivered, .sent, .written].contains(verdict.status) { workingGuid[chat.key] = guid }
         return verdict
     }
 
@@ -224,39 +256,76 @@ final class AppleScriptSender: MessageSender {
         }
     }
 
-    /// Polls chat.db for a new outgoing row joined to this chat.
-    private func verify(_ chat: ChatRef, before: Int, text: String, isFile: Bool) -> SendResult {
+    /// Polls chat.db for OUR message: an outgoing row in this chat created after the send,
+    /// with exactly this text, or (for the card) an attachment with the unique staged file
+    /// name. Anything else the owner sends meanwhile, from this Mac or a phone, never counts.
+    private func verify(_ chat: ChatRef, before: Int, text: String, fileName: String?) -> SendResult {
         let deadline = Date().addingTimeInterval(verifyTimeout)
-        var orphan = false
+        var last = AppleScriptSender.Judgement.notFound
         while true {
-            orphan = false
             if let db = try? openDatabase(),
                let ids = try? MessagesDB.chatRowids(db, guids: [chat.guid, AppleScriptSender.swapGuidForm(chat.guid)], identifier: chat.identifier),
                let rows = try? MessagesDB.outgoingRows(db, after: before) {
-                for row in rows {
-                    if row.chatIDs.isEmpty { orphan = true; continue }
-                    guard row.chatIDs.contains(where: ids.contains) else { continue }
-                    guard looksLikeOurs(row, text: text, isFile: isFile) else { continue }
-                    if row.error != 0 {
-                        return SendResult(status: .failed, reason: "Messages recorded error \(row.error); not delivered", rowid: row.rowid)
-                    }
-                    return SendResult(status: .delivered, rowid: row.rowid)
+                last = AppleScriptSender.judge(rows, chatIDs: ids, text: text, fileName: fileName, decode: decode)
+                switch last {
+                case .found(let row) where row.error != 0 || row.isSent || row.isDelivered:
+                    return AppleScriptSender.result(for: row)
+                default: break
                 }
             }
             if Date() >= deadline { break }
             Thread.sleep(forTimeInterval: verifyInterval)
         }
-        if orphan {
-            return SendResult(status: .unverified, reason: "the new outgoing row is attached to no chat (the known macOS 26 group-send problem); treat it as NOT delivered", orphan: true)
+        switch last {
+        case .found(let row):
+            return AppleScriptSender.result(for: row)
+        case .orphan:
+            return SendResult(status: .unverified, reason: "our message was written but is attached to no chat (the known macOS 26 group-send problem); treat it as NOT delivered", orphan: true)
+        case .notFound:
+            return SendResult(status: .unverified, reason: "Messages said yes but our message did not appear in this chat within \(Int(verifyTimeout)) s")
         }
-        return SendResult(status: .unverified, reason: "Messages said yes but no outgoing message appeared in this chat within \(Int(verifyTimeout)) s")
     }
 
-    private func looksLikeOurs(_ row: MessagesDB.OutgoingRow, text: String, isFile: Bool) -> Bool {
-        let stored = AppleScriptSender.squash(decode(row.text, row.attributedBody))
-        if isFile { return row.hasAttachment || stored.isEmpty }
+    enum Judgement: Equatable {
+        case notFound
+        case orphan
+        case found(MessagesDB.OutgoingRow)
+
+        static func == (a: Judgement, b: Judgement) -> Bool {
+            switch (a, b) {
+            case (.notFound, .notFound), (.orphan, .orphan): return true
+            case (.found(let x), .found(let y)): return x.rowid == y.rowid
+            default: return false
+            }
+        }
+    }
+
+    /// Our message among the new outgoing rows: in this chat (or in no chat at all, the
+    /// orphan case), and exactly ours.
+    static func judge(_ rows: [MessagesDB.OutgoingRow], chatIDs: Set<Int>, text: String, fileName: String?,
+                      decode: (String?, Data?) -> String) -> Judgement {
+        var orphan = false
+        for row in rows where isOurs(row, text: text, fileName: fileName, decode: decode) {
+            if row.chatIDs.isEmpty { orphan = true; continue }
+            if row.chatIDs.contains(where: chatIDs.contains) { return .found(row) }
+        }
+        return orphan ? .orphan : .notFound
+    }
+
+    static func isOurs(_ row: MessagesDB.OutgoingRow, text: String, fileName: String?, decode: (String?, Data?) -> String) -> Bool {
+        if let fileName { return row.attachmentNames.contains(fileName) }
         if row.hasAttachment { return false }
-        return stored.isEmpty || stored == AppleScriptSender.squash(text)
+        let wanted = squash(text)
+        return !wanted.isEmpty && squash(decode(row.text, row.attributedBody)) == wanted
+    }
+
+    static func result(for row: MessagesDB.OutgoingRow) -> SendResult {
+        if row.error != 0 {
+            return SendResult(status: .failed, reason: "Messages recorded error \(row.error); not sent", rowid: row.rowid)
+        }
+        if row.isDelivered { return SendResult(status: .delivered, rowid: row.rowid) }
+        if row.isSent { return SendResult(status: .sent, reason: "sent; not yet marked delivered", rowid: row.rowid) }
+        return SendResult(status: .written, reason: "written in the chat; Messages has not marked it sent yet", rowid: row.rowid)
     }
 
     static func squash(_ text: String) -> String {

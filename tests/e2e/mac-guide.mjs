@@ -1,4 +1,5 @@
-// End-to-end checks for the Mac app's download page (web/mac/), in headless Chromium.
+// End-to-end checks for the Mac app's download page (web/mac/), in headless Chromium (or
+// BROWSER=webkit / BROWSER=firefox).
 //
 //   npm run test:mac-guide                     everything; exits non-zero on any failure
 //   node tests/e2e/mac-guide.mjs --only=walk,keyboard
@@ -16,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Config = require(path.join(WEB, 'js/config.js'));
@@ -24,6 +25,8 @@ const MacConfig = require(path.join(WEB, 'mac/mac-config.js'));
 const Guide = require(path.join(WEB, 'mac/mac.js'));
 
 const UPDATE_SHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = path.join(ROOT, UPDATE_SHOTS ? 'docs/screenshots/web' : 'test-results/mac-guide-screenshots');
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const wants = (name) => only.length === 0 || only.includes(name);
@@ -87,7 +90,7 @@ function configWith(url) {
 /** A page that records console errors, failed requests, CSP violations and foreign requests. */
 async function open(opts = {}) {
   const vp = opts.viewport || VIEWPORTS['desktop-1440'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!(vp.mobile || opts.touch),
@@ -96,7 +99,7 @@ async function open(opts = {}) {
     locale: 'en-US',
     reducedMotion: opts.reducedMotion || 'reduce',
     javaScriptEnabled: opts.js !== false,
-  });
+  }));
   const problems = [];
   const foreign = [];
   context.on('request', (req) => {
@@ -115,11 +118,12 @@ async function open(opts = {}) {
     await context.route('**/mac/mac-config.js', (route) => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body }));
   }
   const page = await context.newPage();
-  context.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
+  context.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(m.page(), m.text())) problems.push('console: ' + m.text()); });
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
   context.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
   await page.goto(PAGE);
-  await page.evaluate(() => document.fonts.ready);
+  // (Playwright's Firefox may not answer an evaluate in a page with JavaScript off: see nojs.)
+  if (opts.js !== false || IS_CHROMIUM) await page.evaluate(() => document.fonts.ready);
   return {
     context, page, problems, foreign,
     clean(label) {
@@ -195,7 +199,7 @@ await section('walk', 'One step at a time: "I did this" opens the next step and 
   const s = await open();
   const { page } = s;
   let v = await snap(page);
-  eq(v.state, { current: 1, all: false, device: 'mac', download: '' }, 'starts at step 1 on a Mac, with no download configured');
+  eq(v.state, { current: 1, all: false, device: 'mac', download: MacConfig.MAC_DOWNLOAD_URL }, 'starts at step 1 on a Mac, with the committed download');
   eq(v.open, [true, false, false, false, false], 'only step 1 is open');
   eq(v.classes, ['is-active', 'is-locked', 'is-locked', 'is-locked', 'is-locked'], 'the others are locked');
   eq(v.label, 'Step 1 of 5', 'the progress label says where you are');
@@ -239,7 +243,7 @@ await section('walk', 'One step at a time: "I did this" opens the next step and 
   eq(v.label, 'All 5 steps', 'the progress label says so');
   await page.click('#show-all');
   v = await snap(page);
-  eq([v.state, v.open], [{ current: 2, all: false, device: 'mac', download: '' }, [false, true, false, false, false]], 'back to one step, where you were');
+  eq([v.state, v.open], [{ current: 2, all: false, device: 'mac', download: MacConfig.MAC_DOWNLOAD_URL }, [false, true, false, false, false]], 'back to one step, where you were');
 
   // The progress bar jumps to a step too.
   await page.locator('#rail > li:nth-child(4) button').click();
@@ -276,7 +280,7 @@ await section('keyboard', 'Keyboard only: Tab to "I did this", Enter or Space, f
   });
   for (let n = 1; n < STEPS; n++) {
     let presses = 0;
-    while (!(await focused()).startsWith(`step-${n} mg-btn`) && presses < 60) { await page.keyboard.press('Tab'); presses++; }
+    while (!(await focused()).startsWith(`step-${n} mg-btn`) && presses < 60) { await page.keyboard.press(tabKey()); presses++; }
     ok(presses < 60, `step ${n}: "I did this" is reachable with Tab (${presses} presses)`);
     await page.keyboard.press(n % 2 ? 'Enter' : 'Space');
     await page.waitForFunction((i) => window.WrappedMacGuide.state().current === i, n + 1);
@@ -285,7 +289,7 @@ await section('keyboard', 'Keyboard only: Tab to "I did this", Enter or Space, f
     ok(visible, `step ${n + 1}: the focused heading is on screen`);
   }
   // The first Tab from the heading reaches something inside the step, not the next step.
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tabKey());
   ok((await focused()).startsWith('step-5'), `Tab from the heading stays inside the open step (${await focused()})`);
   // "Show all steps" with the keyboard.
   await page.focus('#show-all');
@@ -319,8 +323,14 @@ await section('deeplink', 'The Privacy & Security button links straight to that 
 
 // ── 4. download: not public yet, and configured ───────────────────────────────────────
 await section('download', 'Download: "not public yet" while the address is empty; a button once it is set', async () => {
-  eq(MacConfig.MAC_DOWNLOAD_URL, '', 'the committed config has no download yet');
+  eq(MacConfig.MAC_DOWNLOAD_URL, 'https://github.com/averyhsu/imessage-wrap/releases/latest/download/Threadback-for-Mac.dmg',
+    'the committed config points at the newest release on GitHub');
   let s = await open();
+  ok(await s.page.locator('#download').isVisible(), 'as committed: the Download button is shown');
+  eq(await s.page.getAttribute('#download', 'href'), MacConfig.MAC_DOWNLOAD_URL, 'as committed: it points at that release');
+  s.clean('download (as committed)');
+  await s.close();
+  s = await open({ download: '' });
   let page = s.page;
   ok(await page.locator('#download').isHidden(), 'empty address: no Download button');
   ok(await page.locator('#download-none').isVisible(), 'empty address: the honest line is shown');
@@ -387,6 +397,14 @@ await section('devices', 'iPhone, iPad, Android, Windows, Linux: "This part need
 await section('nojs', 'Without JavaScript every step is shown, with macOS\'s words and no dead buttons', async () => {
   const s = await open({ js: false });
   const { page } = s;
+  if (!IS_CHROMIUM) {
+    const answers = await Promise.race([page.evaluate(() => true).catch(() => false), new Promise((resolve) => setTimeout(() => resolve(false), 10000))]);
+    if (!answers) {
+      note('Playwright gets no answer from a script run in this page with JavaScript turned off (10 s); the no-JavaScript page is checked in the other engines');
+      await s.close();
+      return;
+    }
+  }
   const v = await page.evaluate(() => {
     const shown = (el) => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
     return {
@@ -445,7 +463,15 @@ await section('motion', 'Reduced motion: nothing moves, and the jump to the next
   await page.locator('#step-1 .mg-next').click();
   const right = await page.evaluate(() => scrollY);
   await page.waitForTimeout(700);
-  eq(await page.evaluate(() => scrollY), right, 'the page is already where it ends up (no smooth scroll)');
+  const later = await page.evaluate(() => scrollY);
+  if (IS_CHROMIUM || later === right) {
+    eq(later, right, 'the page is already where it ends up (no smooth scroll)');
+  } else {
+    // Firefox moved one more pixel after the instant jump (819 → 820 on CI): a scroll
+    // position settling onto whole pixels, not a smooth scroll, which travels hundreds.
+    note('a scroll position may settle by 1 px after an instant jump; more than that would be a smooth scroll');
+    ok(Math.abs(later - right) <= 1, `the page is already where it ends up (no smooth scroll): ${right} → ${later}`);
+  }
   eq(await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').map((a) => a.animationName || a.constructor.name)), [], 'no animation runs');
   s.clean('reduced motion');
   await s.close();
@@ -472,7 +498,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     const clip = selector
       ? await page.locator(selector).evaluate((el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top + scrollY, width: r.width, height: r.height }; })
       : undefined;
-    await page.screenshot({ path: file, fullPage: true, clip, animations: 'disabled' });
+    await shoot(page, () => page.screenshot({ path: file, fullPage: true, clip, animations: 'disabled' }));
   };
   const slugs = ['1-applications', '2-first-open', '3-open-anyway', '4-setup', '5-done'];
   for (const [size, viewport] of [['desktop', VIEWPORTS['desktop-1440']], ['phone', VIEWPORTS['phone-390']]]) {
@@ -510,7 +536,8 @@ await server.close();
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
-console.log(`${checks} checks, ${failures.length} failed`);
+printNotes();
+console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);

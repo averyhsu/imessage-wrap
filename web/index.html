@@ -73,8 +73,9 @@
       <span class="l-brand__name" data-brand></span>
     </a>
     <nav class="l-top__nav">
-      <a class="l-top__link l-top__link--quiet" href="mac/">Get the Mac app</a>
-      <a class="l-top__link" href="make/">Make your own</a>
+      <a class="l-top__link l-top__link--wide" href="mac/">Get the Mac app</a>
+      <a class="l-top__link l-top__link--quiet l-top__link--wide" href="make/">Make your own</a>
+      <a class="l-top__link l-top__link--narrow" href="#get">Get it for your chat</a>
     </nav>
   </header>
 
@@ -82,13 +83,13 @@
     <div class="l-hero__copy">
       <p class="l-eyebrow" data-descriptor></p>
       <h1 class="l-h1">The group chat had <span class="l-h1__pop">a year.</span></h1>
-      <p class="l-lede">Who carried it. Who was up at 3&nbsp;AM. The message that got every tapback. One link, and the whole chat taps through the same story.</p>
+      <p class="l-lede">Who carried it. Who was up at 3&nbsp;AM. The message that got every tapback. Someone types <span class="l-cmd">/wrapped</span> in the group chat, and the whole chat taps through the same story.</p>
       <div class="l-cta">
         <a class="l-btn l-btn--primary" id="play-demo" href="?demo=1"><span class="l-btn__play" aria-hidden="true"></span>Play the demo</a>
         <a class="l-btn" id="play-recap" href="#" hidden><span class="l-btn__play" aria-hidden="true"></span>Play your recap again</a>
-        <a class="l-btn" href="make/">Make your own</a>
+        <a class="l-btn" id="get-it" href="#get">Get it for your chat</a>
       </div>
-      <p class="l-note">No sign-up, no upload, nothing to install. Works with iMessage group chats.</p>
+      <p class="l-note">Free. No sign-up, nothing uploaded. Works with iMessage group chats.</p>
     </div>
 
     <a class="l-hero__art" id="hero-art" href="?demo=1" aria-label="Play the demo">
@@ -101,25 +102,44 @@
     </a>
   </section>
 
-  <section class="l-section" aria-labelledby="how">
-    <h2 class="l-h2" id="how">How it works</h2>
-    <ol class="l-steps">
-      <li class="l-step l-step--blue">
-        <span class="l-step__n">1</span>
-        <h3>Pick the chat</h3>
-        <p>Open the maker and point it at your Messages history. It lists your group chats; you choose one.</p>
-      </li>
-      <li class="l-step l-step--green">
-        <span class="l-step__n">2</span>
-        <h3>It counts, on your device</h3>
-        <p>Messages per person, busiest hours, tapbacks, streaks. The numbers are worked out in your browser, not on a server.</p>
-      </li>
-      <li class="l-step l-step--grey">
-        <span class="l-step__n">3</span>
-        <h3>Send one link</h3>
-        <p>The whole recap is packed into the link itself. Drop it in the chat and everyone taps through, on any phone.</p>
-      </li>
-    </ol>
+  <!-- ── how to get it for your chat: the Mac app first, the browser second ──────────── -->
+  <section class="l-section l-get" id="get" aria-labelledby="get-title">
+    <div class="l-get__grid">
+      <div class="l-get__head">
+        <p class="l-eyebrow">Get it for your group chat</p>
+        <h2 class="l-h2" id="get-title">Type <span class="l-cmd">/wrapped</span>. <span class="l-h1__pop">A Mac answers.</span></h2>
+      </div>
+
+      <!-- What everyone in the chat gets back (invented chat; the card is the Mac app's own). -->
+      <figure class="l-thread" aria-labelledby="thread-cap">
+        <p class="l-thread__who" aria-hidden="true">Maya</p>
+        <p class="l-thread__in"><span class="sr-only">Maya types: </span>/wrapped</p>
+        <img class="l-thread__card" src="assets/reply-card.webp" alt="The recap card: Dinner Club, 2026 in review, 48,213 messages, the personality The Night Owls, top senders Maya, Dev and Priya, peak hour 11 PM." width="540" height="675" loading="lazy">
+        <p class="l-thread__text"><span>🧵 Dinner Club 🍝 — 2026 in review</span><span>💬 48,213 messages · 301 active days · 87-day streak</span><span>🦉 You are The Night Owls — peak hour 11 PM</span><span>🥇 Maya 25% · 🥈 Dev 20% · 🥉 Priya 17%</span></p>
+        <span class="l-thread__link" aria-hidden="true"><img src="assets/og-thumb.webp" alt="" width="480" height="252" loading="lazy"><b>Your group chat, in review</b><span>Tap to play the story</span></span>
+        <figcaption class="l-thread__cap" id="thread-cap">A few seconds later, from the Mac (an invented chat).</figcaption>
+      </figure>
+
+      <div class="l-get__body">
+        <ol class="l-how" aria-label="How it works">
+          <li><span class="l-how__n">1</span><h3>Turn it on, once</h3><p>One person installs the free Mac app and switches it on for the chat. A few clicks, no typing.</p></li>
+          <li><span class="l-how__n">2</span><h3>Anyone types <span class="l-cmd">/wrapped</span></h3><p>From any phone in the chat. The counting happens on the Mac.</p></li>
+          <li><span class="l-how__n">3</span><h3>Everyone taps through</h3><p>The reply is a card, a short summary and a link to the full story, which opens on any phone.</p></li>
+        </ol>
+        <div class="l-cta">
+          <a class="l-btn l-btn--primary" id="get-mac" href="mac/">Get the Mac app</a>
+        </div>
+        <p class="l-note">Needs one person with a Mac (macOS 14 or later) signed in to Messages. The app is free and not signed through Apple’s paid developer program, so macOS asks you to confirm it once, the first time it opens. The Mac page walks you through that.</p>
+      </div>
+    </div>
+
+    <div class="l-alt">
+      <div class="l-alt__copy">
+        <h3>No Mac, or rather not install anything?</h3>
+        <p>Make a recap in the browser: add your Messages history from a Mac or an iPhone backup, pick the chat, and send the link it gives you. Nothing is installed or uploaded.</p>
+      </div>
+      <a class="l-btn" id="get-make" href="make/">Make one in the browser</a>
+    </div>
   </section>
 
   <section class="l-section l-privacy" aria-labelledby="privacy">
@@ -136,6 +156,10 @@
       <li>
         <h3>What a link contains</h3>
         <p>Counts and the names in your chat. The text of up to three most-reacted messages is included only if the person making the recap switches that on. Anyone holding the link can read it, so share it like a screenshot.</p>
+      </li>
+      <li>
+        <h3>The Mac app</h3>
+        <p>It reads and counts on your Mac and uploads nothing. Replies come from your own Apple ID, only in the chat you turned on, and the app itself never contacts a server.</p>
       </li>
       <li>
         <h3>No tracking</h3>

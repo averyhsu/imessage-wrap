@@ -10,9 +10,12 @@ struct ChatInfo: Codable, Equatable, Identifiable {
     let name: String
     let members: Int
     let messages: Int
+    /// When the chat last had a message (Unix seconds), for "most recently active first".
+    var lastUnix: Double?
 
     enum CodingKeys: String, CodingKey {
         case id, guid, name, members, messages
+        case lastUnix = "last_unix"
         case chatIDs = "chat_ids"
         case chatIdentifier = "chat_identifier"
     }
@@ -193,6 +196,17 @@ final class ThreadbackEngine {
         opts["contacts"] = contacts
         if let tz { opts["tz"] = tz }
         return try checked(call("ThreadbackBridge", "stats", [token, NSNull(), chat, ThreadbackEngine.json(opts), shortNames]))
+    }
+
+    /// Canonical stats JSON for the group chat that has this chat.ROWID among its rows. Never
+    /// a name match: if the chat is gone, this throws (no_chat).
+    func statsJSON(token: Int, chatID: Int, me: String, tz: String?, period: String?,
+                   contacts: [[String]], shortNames: Bool) throws -> String {
+        var opts = ThreadbackEngine.periodOptions(period)
+        opts["me"] = me
+        opts["contacts"] = contacts
+        if let tz { opts["tz"] = tz }
+        return try checked(call("ThreadbackBridge", "statsById", [token, NSNull(), chatID, ThreadbackEngine.json(opts), shortNames]))
     }
 
     func shortNames(statsJSON: String, me: String) throws -> String {

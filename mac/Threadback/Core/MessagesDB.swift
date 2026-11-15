@@ -34,6 +34,11 @@ enum MessagesDB {
         let hasAttachment: Bool
         let text: String?
         let attributedBody: Data?
+        /// message.is_sent and message.is_delivered, as Messages sets them later.
+        var isSent = false
+        var isDelivered = false
+        /// The file names of its attachments (attachment.transfer_name and filename's last part).
+        var attachmentNames: [String] = []
     }
 
     /// `message.date` to Unix seconds (nanoseconds since 2001 when large, else seconds).
@@ -110,7 +115,9 @@ enum MessagesDB {
         let err = cols.contains("error") ? "m.error" : "0"
         let att = cols.contains("cache_has_attachments") ? "m.cache_has_attachments" : "0"
         let body = cols.contains("attributedBody") ? "m.attributedBody" : "NULL"
-        let sql = "SELECT m.ROWID, \(err), \(att), m.text, \(body), j.chat_id FROM message m "
+        let sent = cols.contains("is_sent") ? "m.is_sent" : "0"
+        let delivered = cols.contains("is_delivered") ? "m.is_delivered" : "0"
+        let sql = "SELECT m.ROWID, \(err), \(att), m.text, \(body), j.chat_id, \(sent), \(delivered) FROM message m "
             + "LEFT JOIN chat_message_join j ON j.message_id = m.ROWID WHERE m.ROWID > ? AND m.is_from_me = 1 ORDER BY m.ROWID"
         var order: [Int] = []
         var byID: [Int: OutgoingRow] = [:]
@@ -120,10 +127,22 @@ enum MessagesDB {
                 var text: String?
                 if case .text(let s) = r[3] { text = s }
                 byID[id] = OutgoingRow(rowid: id, chatIDs: [], error: r[1].int ?? 0, hasAttachment: (r[2].int ?? 0) != 0,
-                                       text: text, attributedBody: r[4].data)
+                                       text: text, attributedBody: r[4].data,
+                                       isSent: (r[6].int ?? 0) != 0, isDelivered: (r[7].int ?? 0) != 0)
                 order.append(id)
             }
-            if let chat = r[5].int { byID[id]?.chatIDs.append(chat) }
+            if let chat = r[5].int, byID[id]?.chatIDs.contains(chat) == false { byID[id]?.chatIDs.append(chat) }
+        }
+        // Attachment names (the card is matched by its unique staged file name).
+        let names = "SELECT j.message_id, a.transfer_name, a.filename FROM message_attachment_join j "
+            + "JOIN attachment a ON a.ROWID = j.attachment_id WHERE j.message_id > ?"
+        if let rows = try? db.query(names, [rowid]).rows {
+            for r in rows {
+                guard let id = r[0].int, byID[id] != nil else { continue }
+                for value in [r[1].string, r[2].string] {
+                    if let value, !value.isEmpty { byID[id]?.attachmentNames.append((value as NSString).lastPathComponent) }
+                }
+            }
         }
         return order.compactMap { byID[$0] }
     }

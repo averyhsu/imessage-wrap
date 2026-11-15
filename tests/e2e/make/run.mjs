@@ -1,4 +1,5 @@
-// End-to-end checks for the "Make your own" page (web/make/), in headless Chromium.
+// End-to-end checks for the "Make your own" page (web/make/), in headless Chromium (or
+// BROWSER=webkit / BROWSER=firefox).
 //
 //   npm run test:make                       everything; exits non-zero on any failure
 //   node tests/e2e/make/run.mjs --only=mac,paste
@@ -20,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch, waitForStory, showSettled } from '../lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, waitForStory, showSettled } from '../lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Engine = require(path.join(WEB, 'make/engine.js'));
@@ -33,6 +34,8 @@ Engine.useCodec(require(path.join(WEB, 'js/vendor/fflate.min.js')));
 const PYTHON = process.env.PYTHON || 'python3';
 const LA = 'America/Los_Angeles';
 const UPDATE_SHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = path.join(ROOT, UPDATE_SHOTS ? 'docs/screenshots/web' : 'test-results/make-screenshots');
 const VIEWPORTS = {
   'phone-360': { width: 360, height: 740, mobile: true },
@@ -126,7 +129,7 @@ const MAKE = server.url + 'make/';
 /** A page that records console errors, failed requests, CSP violations and foreign requests. */
 async function open(opts = {}) {
   const vp = opts.viewport || VIEWPORTS['desktop-1440'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!vp.mobile,
@@ -136,7 +139,7 @@ async function open(opts = {}) {
     reducedMotion: opts.still ? 'reduce' : (opts.reducedMotion || 'no-preference'),
     permissions: opts.permissions || [],
     bypassCSP: !!(opts.still || opts.bypassCSP),
-  });
+  }));
   const problems = [];
   const foreign = [];
   const requests = [];
@@ -170,7 +173,7 @@ async function open(opts = {}) {
     });
   }
   const page = await context.newPage();
-  context.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
+  context.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(m.page(), m.text())) problems.push('console: ' + m.text()); });
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
   context.on('requestfailed', (r) => {
     const why = r.failure() ? r.failure().errorText : '';
@@ -178,7 +181,7 @@ async function open(opts = {}) {
     // somewhere else (a test does that on purpose) is not a failure of the page.
     let inPreview = false;
     try { inPreview = r.frame() !== page.mainFrame(); } catch { inPreview = false; }
-    if (why === 'net::ERR_ABORTED' && inPreview) return;
+    if (ABORTED.test(why) && inPreview) return;
     problems.push('requestfailed: ' + r.url() + ' ' + why);
   });
   if (opts.goto !== false) {
@@ -426,8 +429,8 @@ async function shot(page, name, selector) {
   if (!page.viewportSize() || page.viewportSize().width > 800) await page.mouse.move(2, 2);
   await page.waitForTimeout(500);
   const file = path.join(SHOTS, `make-${name}.png`);
-  if (selector) await page.locator(selector).screenshot({ path: file, animations: 'disabled' });
-  else await page.screenshot({ path: file, fullPage: true, animations: 'disabled' });
+  if (selector) await shoot(page, () => page.locator(selector).screenshot({ path: file, animations: 'disabled' }));
+  else await shoot(page, () => page.screenshot({ path: file, fullPage: true, animations: 'disabled' }));
 }
 /** Hold the preview on the cover so screenshots do not depend on timing. */
 async function freezePreview(page) {
@@ -463,6 +466,7 @@ await section('mac', 'Mac: chat.db + chat.db-wal against the command-line tool',
     setInterval(() => { const now = performance.now(); window.__stall = Math.max(window.__stall, now - last); last = now; }, 10);
   });
   await addMac(page, [CHAT_DB, CHAT_WAL]);
+  eq((await snap(page)).runner, 'worker', 'the files are read in a worker, not on the page');
   const plain = cliChats(['--db', CHAT_DB, '--no-contacts']);
   eq(await listed(page), plain.chats.map(brief), 'chat list matches `wrapped chats` (no contacts)');
   const said = await page.evaluate(() => window.__said);
@@ -671,7 +675,7 @@ await section('progress', 'While files are read: progress sits by the drop zone,
  * prototypes, and says what it found. What the worker saw is only a hint: the proof is the
  * second server's own log of what arrived.
  */
-async function reach({ target, tag, modules }) {
+async function reach({ target, tag, modules, only }) {
   const chain = [];
   for (let o = self; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) chain.push(o);
   const find = (name) => {
@@ -687,6 +691,7 @@ async function reach({ target, tag, modules }) {
   const note = (event) => out.refused.push(event.effectiveDirective || event.violatedDirective);
   self.addEventListener('securitypolicyviolation', note);
   const attempt = async (name, fn) => {
+    if (only && !only.includes(name)) return;
     try { out.saw[name] = await fn(find(name)); } catch (error) { out.saw[name] = 'failed: ' + ((error && error.name) || 'error'); }
   };
   const gone = () => { throw new ReferenceError('not there'); };
@@ -745,24 +750,62 @@ await section('contain', 'The reader cannot talk to anyone: bound by the page\'s
     // SQLite's WebAssembly file is the reader's last legitimate download; it removes its
     // own network functions right after. Holding it back leaves time to look inside first.
     await s.context.route('**/make/vendor/sql-wasm.wasm', async (route) => { await gate; await route.continue(); });
-    await s.page.goto(MAKE);
+    await s.page.goto((opts && opts.at) || MAKE);
     await s.page.setInputFiles('#input-mac', [CHAT_DB, CHAT_WAL]);
     await s.page.waitForFunction(() => /database reader/.test(document.getElementById('work-source').textContent));
-    return { ...s, release, worker: s.page.workers()[0] };
+    const worker = s.page.workers()[0];
+    if (!IS_CHROMIUM && worker) {
+      const t0 = Date.now();
+      worker.on('close', () => console.log(`  ~ [${BROWSER}] the reader's worker closed ${Date.now() - t0} ms after the files were added`));
+    }
+    return { ...s, release, worker };
+  }
+  /** worker.evaluate(reach), saying what the page was doing if the worker went away. */
+  async function probe(h, args) {
+    try {
+      return await h.worker.evaluate(reach, args);
+    } catch (error) {
+      const why = await h.page.evaluate(() => ({ snapshot: window.WrappedMake.snapshot(), source: document.getElementById('work-source').textContent, status: document.getElementById('status').textContent })).catch((e) => String(e));
+      console.log(`  ~ [${BROWSER}] probe (${args.tag}) failed; workers now ${h.page.workers().length}; page: ${JSON.stringify(why).slice(0, 600)}; problems: ${JSON.stringify(h.problems).slice(0, 600)}`);
+      throw error;
+    }
+  }
+
+  // Playwright's Firefox can lose the whole tab ("Target crashed") during the probe. There,
+  // first find out which attempt does that, one fresh page per attempt, and leave those
+  // out of the probe below. (Whatever they did, nothing may have arrived from them.)
+  let only;
+  if (BROWSER === 'firefox') {
+    const crashes = [];
+    for (const way of [...WAYS, 'import()']) {
+      const h = await held();
+      const tag = 'alone-' + way.replace(/\W/g, '');
+      try {
+        const one = await h.worker.evaluate(reach, { target: other.url, tag, modules: way === 'import()', only: [way] });
+        ok(String(one.saw[way]).startsWith('failed'), `${way} on its own fails (${one.saw[way]})`);
+      } catch (error) {
+        crashes.push(way);
+      }
+      eq(arrived(tag), [], `${way} on its own: nothing arrives at the other origin`);
+      await h.close().catch(() => {});
+    }
+    if (crashes.length) note(`the tab crashes when the worker under the policy tries ${crashes.join(', ')}; ${crashes.length > 1 ? 'those are' : 'that is'} left out of the probe (nothing arrived)`);
+    ok(crashes.length < WAYS.length, `most ways can be probed in Firefox (crashed: ${crashes.join(', ') || 'none'})`);
+    only = [...WAYS, 'import()'].filter((way) => !crashes.includes(way));
   }
 
   // 1. The page as it ships.
   const s = await held();
   eq(s.page.workers().length, 1, 'the page runs one worker');
   ok(s.worker.url().startsWith('blob:' + origin + '/'), `started from a blob: address, so the page's policy binds it (${s.worker.url().slice(0, 40)}…)`);
-  const before = await s.worker.evaluate(reach, { target: other.url, tag: 'before', modules: true });
+  const before = await probe(s, { target: other.url, tag: 'before', modules: true, only });
   eq(before.found.filter((name) => WAYS.includes(name)), WAYS, 'before it cuts itself off the worker still has its network functions');
   ok(Object.values(before.saw).every((saw) => saw.startsWith('failed')), `yet every attempt to reach another origin fails: ${JSON.stringify(before.saw)}`);
   eq(arrived('before'), [], 'and nothing arrives at the other origin (fetch, XMLHttpRequest, importScripts, WebSocket, EventSource, import())');
   s.release();
   await s.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
   eq((await listed(s.page)).length, cliChats(['--db', CHAT_DB, '--no-contacts']).chats.length, 'the reader itself still works: the chats are listed');
-  const after = await s.worker.evaluate(reach, { target: other.url, tag: 'after', modules: true });
+  const after = await probe(s, { target: other.url, tag: 'after', modules: true, only });
   eq(after.found, [], 'after that the functions are gone, from the global object and from every prototype behind it');
   ok(Object.values(after.saw).every((saw) => saw.startsWith('failed')), `every attempt fails: ${JSON.stringify(after.saw)}`);
   eq(arrived('after'), [], 'and nothing arrives at the other origin');
@@ -781,21 +824,42 @@ await section('contain', 'The reader cannot talk to anyone: bound by the page\'s
   // (The browser's own request log is no use here: it lists a request the moment one is
   // asked for, including those the policy then refuses. The other origin's log is the proof.)
   const by = [...new Set(before.refused)].sort();
-  ok(by.includes('connect-src') && by.some((d) => d.startsWith('script-src')), `the refusals come from the page's policy (${by.join(', ')})`);
+  if (BROWSER === 'webkit' && by.length === 0) {
+    note('WebKit fires no securitypolicyviolation event inside a worker; the control below (the same page without its policy) shows the policy is what refuses');
+  } else {
+    ok(by.includes('connect-src') && by.some((d) => d.startsWith('script-src')), `the refusals come from the page's policy (${by.join(', ')})`);
+  }
   await s.close();
 
   // 2. Is the probe able to tell? The same worker with the page's policy switched off by
   // the test browser: now the attempts do arrive, until the worker cuts itself off.
-  const c = await held({ bypassCSP: true });
-  const open1 = await c.worker.evaluate(reach, { target: other.url, tag: 'control', modules: false });
+  // (Chromium's bypassCSP reaches the blob: worker; WebKit's and Firefox's do not, so there
+  // the page is served without its policy tag instead.)
+  // (A second server, so that the page still comes from 127.0.0.1 over HTTP: a page a test
+  // fulfils itself counts as public in Chromium, which then refuses loopback requests.)
+  let bare = null;
+  if (!IS_CHROMIUM) {
+    note('bypassCSP does not reach a blob: worker here; the control serves make/ without its policy tag instead');
+    const page = path.join(WEB, 'make/index.html');
+    bare = await startServer(WEB, { rewrite: (file, body) => {
+      if (file !== page) return body;
+      const html = body.toString('utf8');
+      const out = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, '');
+      if (out === html) throw new Error('no policy tag to take out of make/index.html');
+      return out;
+    } });
+  }
+  const c = await held(IS_CHROMIUM ? { bypassCSP: true } : { at: bare.url + 'make/' });
+  const open1 = await probe(c, { target: other.url, tag: 'control', modules: false });
   ok(['fetch', 'xhr', 'script'].every((way) => arrived('control-' + way).length > 0),
     `without the policy the same attempts do arrive, so the check above can tell: ${JSON.stringify(arrived('control'))} ${JSON.stringify(open1.saw)}`);
   c.release();
   await c.page.waitForSelector('#step-chat.is-active', { timeout: 60000 });
-  const stripped = await c.worker.evaluate(reach, { target: other.url, tag: 'stripped', modules: false });
+  const stripped = await probe(c, { target: other.url, tag: 'stripped', modules: false });
   eq(stripped.found, [], 'even without the policy, the worker has removed the functions by the time it holds a file');
   eq(arrived('stripped'), [], 'and nothing arrives');
   await c.close();
+  if (bare) await bare.close();
   await other.close();
 
   // 3. A browser that will not start a worker from a blob: the reader runs on the page
@@ -1220,6 +1284,18 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   ok(/\/make\/$/.test((await page.evaluate(() => window.__frameLoads))[0]), 'the maker did open inside the preview frame');
   ok(true, 'and was replaced by the story again');
   eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workersBefore, 'it never started working in there');
+  // Today's last slide links to the landing page's "get it" section (./#get) instead: the
+  // frame goes back to the story from there too.
+  await page.evaluate(() => {
+    window.__frameLoads = [];
+    document.getElementById('preview').contentWindow.location.href = new URL('../#get', location.href).href;
+  });
+  await page.waitForFunction(() => {
+    const inner = document.getElementById('preview').contentWindow;
+    return window.__frameLoads.length >= 2 && /index\.html$/.test(inner.location.pathname) && inner.WrappedStory && inner.WrappedStory.isActive();
+  }, null, { timeout: 20000 });
+  ok(/\/$/.test((await page.evaluate(() => window.__frameLoads))[0]), 'the landing page did open inside the preview frame');
+  ok(true, 'and was replaced by the story again');
   await (await previewFrame(page)).evaluate(() => window.WrappedStory.goTo(3));
   await page.locator('#replay').click();
   ok(await (await previewFrame(page)).evaluate(() => window.WrappedStory.index === 0), '"Play again" restarts the story from the cover');
@@ -1370,9 +1446,12 @@ await section('name', 'Your name: asked first, needed for a recap, "Me" only by 
   ok((await page.getAttribute('#me-name', 'aria-describedby')).split(' ').includes('me-error'), 'with the message tied to it');
   ok(/first name/i.test(await text(page, '#status')), 'and the live region says so');
   await page.waitForTimeout(500);
+  // A smooth scroll can take longer than that (WebKit on a busy runner): give it until it
+  // comes to rest, then measure.
+  await page.waitForFunction(() => { const r = document.getElementById('me-field').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 }).catch(() => {});
   const box = await page.locator('#me-field').boundingBox();
   const tall = page.viewportSize().height;
-  ok(box.y >= 0 && box.y + box.height <= tall, 'the field is scrolled into view');
+  ok(box.y >= 0 && box.y + box.height <= tall, `the field is scrolled into view (top ${Math.round(box.y)}, height ${Math.round(box.height)}, window ${tall}, scrolled ${await page.evaluate(() => Math.round(scrollY))})`);
 
   // Type it: the complaint goes, the recap is made with that name.
   await page.keyboard.type('Amara');
@@ -1792,7 +1871,7 @@ await section('keyboard', 'Keyboard only, focus, announcements, reduced motion',
   const { page } = s;
   const active = () => page.evaluate(() => document.activeElement && (document.activeElement.id || document.activeElement.className));
   const seen = [];
-  for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); seen.push(await active()); }
+  for (let i = 0; i < 6; i++) { await page.keyboard.press(tabKey()); seen.push(await active()); }
   ok(seen.includes('tab-mac'), `Tab reaches the source tabs (${seen.join(' → ')})`);
   await page.focus('#tab-mac');
   await page.keyboard.press('ArrowRight');
@@ -1810,7 +1889,7 @@ await section('keyboard', 'Keyboard only, focus, announcements, reduced motion',
   await page.waitForSelector('#step-tune.is-active', { timeout: 30000 });
   eq(await active(), 'h-tune', 'focus moves to the step that opened');
   ok(/sample chat is ready/i.test(await text(page, '#status')), 'and the live region announces it');
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tabKey());
   eq(await active(), 'me-name', 'the next Tab stop is the first field of that step: your name');
   await page.keyboard.press('ControlOrMeta+A');
   await page.keyboard.press('Backspace');
@@ -1819,9 +1898,9 @@ await section('keyboard', 'Keyboard only, focus, announcements, reduced motion',
   eq([await active(), (await snap(page)).created], ['me-name', false], 'Create without a name puts the focus back in that field instead');
   ok(/first name/i.test(await text(page, '#status')), 'and says why');
   await page.keyboard.type('Kit');
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tabKey());
   eq(await active(), 'me-as-me', 'next comes the "Leave me as Me" box');
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tabKey());
   ok(await page.evaluate(() => document.activeElement.name === 'period'), 'and then the period');
   const chosen = () => page.locator('input[name="period"]:checked').getAttribute('value');
   const first = await chosen();
@@ -1964,7 +2043,8 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
-console.log(`${checks} checks, ${failures.length} failed`);
+printNotes();
+console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);

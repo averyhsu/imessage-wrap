@@ -43,6 +43,10 @@ allows**:
    interactive bubble and plays it inside Messages; and a Mac helper that answers a typed
    `/wrapped` in any group chat.
 
+**Update, 2026-11-15.** The last of these became the front door. A Mac app that answers a
+typed `/wrapped` is now the main way to use Threadback, and the browser maker is the
+alternative for people without it (D15, D17).
+
 ## Every path, scored
 
 Scores are 0–5, higher is better (Cost: 5 = free. Risk: 5 = low App Store / terms risk).
@@ -376,3 +380,51 @@ approval:
 - **Old artifacts are deleted daily** and new ones are kept three days. Uploads are
   best-effort everywhere, so a full store can no longer turn a good run red.
 
+
+### D17 — The Mac app becomes the front door, after a third review (2026-11-15)
+Once the owner's two tests had passed (D15), the Mac app stopped being an experiment.
+
+- **The site leads with it.** The front page now says "Type `/wrapped`. A Mac answers.", the
+  browser maker is the alternative for people without the app, and the last slide of every
+  story points there.
+- **Replies carry the link.** It was off while the site was not live. Turning it on changes
+  what leaves the Mac, so the app now stores, with each chat's approval, what a reply
+  carried when the owner agreed. When that changes, the chat is not answered until the owner
+  agrees again.
+- **A third independent review, before the public download was linked from the site.** A
+  reviewer who had not seen the app being written was asked to make it send to the wrong
+  chat, reply twice, or leak something. What it found and what was done:
+
+  | Finding | What was done |
+  |---------|---------------|
+  | **Pause did not pause**: a `/wrapped` was still answered while the window said "Paused", and a relaunch quietly resumed. | Pause is checked before every send, saved across launches, and nothing typed during a pause is answered later. |
+  | Two open copies of the app both answered. | A lock file: a second copy shows the first one's window and quits. |
+  | Turning a chat off did not stop a reply already in progress, and changing settings mid-reply could cause a second reply. | The live list of chats is checked before each of the three messages; one agent, changed on one queue. |
+  | What a reply contains was shown after the click that turned a chat on. | A confirmation sheet states it first; approvals record what was agreed to (above). |
+  | Two chats with similar names shared one picture file, so one chat's picture could reach the other. | Each send writes its own uniquely named file and deletes it afterwards. |
+  | A chat was looked up by row number with a fall-back to matching by name. | Id only; no fall-back. |
+  | "Delivered" could rest on some other message in the same chat. | A send counts only when the app finds its own exact message; it reports delivered, sent, or written but not yet sent. |
+  | No limit beyond one reply every two minutes. | 20 replies per chat per day, and a ten-minute wait after three in an hour. |
+  | The picture could fail for good after a crash in the web view that draws it. | The view is rebuilt after a crash or a stalled load; a natively drawn card is the fall-back. |
+  | The build job could publish, and its tools were not pinned. | The build job is read-only; a separate job that only handles the finished disk image may publish; tools are pinned by checksum; the unit tests also run against the release build. |
+  | Only twelve chats could be chosen; chat names reached the system log; the card's footer overprinted. | All chats, with search; nothing is logged in release builds; fixed, with a check in CI. |
+  | The guide page and release notes left out the link and what it carries. | Both now say that a reply is three messages, what the link holds and that anyone it is passed to can open it. |
+
+  What it could not break is listed in [`MAC-APP.md`](MAC-APP.md).
+- **The merge waited for the fixes.** The pull request was green when the review came back.
+  It was held anyway, because merging is what links the download from the public guide page,
+  and a build whose Pause button does nothing should not be the first one strangers get.
+- **The web pages are now tested in Safari's engine too.** Everyone who gets a recap on an
+  iPhone opens it in Safari, and until now every browser test had run in Chromium. The
+  story, the maker and the Mac guide suites now also run in WebKit (on Linux and macOS) and
+  in Firefox on every push. Almost everything that failed at first was a test leaning on
+  Chromium's automation. One real fault turned up, in the maker under WebKit: pressing
+  Create without a name could scroll the name field out of view. This is the engine in a
+  test harness, not the Safari app on a phone, which stays on the list of things to check
+  on a real device.
+- **Accepted, not changed.** A person without a contact name whose handle is an e-mail
+  address shows as the part before the `@` (up to 16 characters), which can be a full name;
+  and two people who share a first name and an initial are shown with their full contact
+  names. Both follow [`SCHEMA.md`](SCHEMA.md) §2 and are what makes people recognisable to
+  their own chat; the confirmation sheet says first names "and counts", which is the usual
+  case, not a guarantee.
