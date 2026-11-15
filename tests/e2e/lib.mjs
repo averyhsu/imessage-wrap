@@ -204,7 +204,10 @@ export async function showSettled(page, i) {
  * Decorative backgrounds (.slide__bg) are exempt: they bleed off the stage on purpose.
  */
 export async function findOverflow(page) {
-  return page.evaluate(() => {
+  // Firefox gives a run of emoji the emoji font's own (taller) box, so the line it sits on
+  // looks closer to the one above than it is. The rule is about the display font's ink:
+  // there, runs that are nothing but emoji are left out of the line measurement.
+  const { issues, emojiRuns } = await page.evaluate((skipEmoji) => {
     const stage = document.querySelector('.stage');
     const slide = document.querySelector('.slide.is-active');
     if (!stage || !slide) return ['no active slide'];
@@ -293,12 +296,14 @@ export async function findOverflow(page) {
       return inks[key];
     };
     const blocks = new Map();
+    let emojiRuns = 0;
     const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       const parent = node.parentElement;
       if (!node.nodeValue.trim() || parent.closest('svg')) continue;
       const pcs = getComputedStyle(parent);
       if (!/^"?Archivo/.test(pcs.fontFamily) || pcs.display === 'none' || pcs.visibility === 'hidden') continue;
+      if (skipEmoji && /^[\p{Extended_Pictographic}\p{Emoji_Component}\u200d\ufe0f\s]+$/u.test(node.nodeValue) && !/^[\d#*\s]+$/.test(node.nodeValue)) { emojiRuns++; continue; }
       let block = parent;
       while (block !== body && getComputedStyle(block).display.startsWith('inline')) block = block.parentElement;
       const range = document.createRange();
@@ -323,8 +328,10 @@ export async function findOverflow(page) {
         }
       }
     }
-    return issues;
-  });
+    return { issues, emojiRuns };
+  }, BROWSER === 'firefox');
+  if (emojiRuns) note('runs of emoji are left out of the display-type line spacing rule (Firefox sizes them by the emoji font)');
+  return issues;
 }
 
 export function encodePayload(stats) {

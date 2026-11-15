@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
 import { fixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -100,7 +100,16 @@ async function open(opts = {}) {
   const page = await context.newPage();
   page.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(page, m.text())) problems.push('console: ' + m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
-  page.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
+  page.on('requestfailed', (r) => {
+    const why = r.failure() ? r.failure().errorText : '';
+    // Firefox fetches the site's icons itself (Chromium headless does not) and drops that
+    // fetch when the test navigates on at once. That is the browser's request, not the page's.
+    if (!IS_CHROMIUM && ABORTED.test(why) && /\/assets\/(favicon[^/]*|apple-touch-icon\.png)$/.test(r.url())) {
+      note('the browser\'s own icon fetch, cut short by the next navigation, is not counted as a failed request');
+      return;
+    }
+    problems.push('requestfailed: ' + r.url() + ' ' + why);
+  });
   return { context, page, problems, foreign, requests, close: () => context.close() };
 }
 
@@ -220,21 +229,34 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   await waitForStory(kb.page);
   await kb.page.evaluate(() => { WrappedStory.goTo(2); WrappedStory.pause(); });
   const stops = [];
+  let stayed = false;   // Tab after the last stop left the focus where it was (Firefox under Playwright)
   for (let i = 0; i < 6; i++) {
     await kb.page.keyboard.press(tabKey());
     const stop = await kb.page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body || !el.closest('#story')) return null;
+      if (window.__lastStop === el) return 'same';
+      window.__lastStop = el;
       const r = el.getBoundingClientRect();
       const cs = getComputedStyle(el);
       return { label: el.getAttribute('aria-label') || el.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), shown: cs.visibility === 'visible' && cs.display !== 'none' && Number(cs.opacity) > 0.5 };
     });
+    if (stop === 'same') { stayed = true; break; }
     if (!stop) break;
     stops.push(stop);
   }
   eq(stops.map((x) => x.label), ['Pause', 'Close', 'Previous slide', 'Next slide'], 'tab order on a slide: the visible controls first, then Previous / Next');
   ok(stops.every((x) => x.shown && x.w >= 30 && x.h >= 30), `every focus stop is visible and a reasonable size when focused (${JSON.stringify(stops)})`);
-  await kb.page.keyboard.press(tabKey(true));
+  if (stayed) {
+    // Nothing to leave the page for: the focus is still on the last stop, so one Shift+Tab
+    // goes back to the one before it, and Tab returns.
+    note('Tab after the last control leaves the focus on it (no browser UI to move to); Shift+Tab is checked from there');
+    await kb.page.keyboard.press(tabKey(true));
+    eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Previous slide', 'Shift+Tab walks back through the same stops');
+    await kb.page.keyboard.press(tabKey());
+  } else {
+    await kb.page.keyboard.press(tabKey(true));
+  }
   eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Next slide', 'Shift+Tab walks back through the same stops');
   await kb.page.keyboard.press('Enter');
   eq((await state(kb.page)).index, 3, 'the focusable "Next slide" button works from the keyboard');
