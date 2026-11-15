@@ -10,7 +10,56 @@ enum Entry {
             exit(code)
         }
         #endif
+        // One copy per user: a second one (another copy, or a second launch) shows the
+        // running copy's window and leaves, so a /wrapped is never answered twice.
+        if !SingleInstance.isExperiment && !SingleInstance.claim() {
+            exit(0)
+        }
         ThreadbackApp.main()
+    }
+}
+
+/// The single-instance rule around `InstanceLock`.
+enum SingleInstance {
+    static let lock = InstanceLock()
+
+    /// CI's permission probes (Debug builds only) never answer anything: no lock for them.
+    static var isExperiment: Bool {
+        #if DEBUG
+        return ["TBProbe", "TBAutomationProbe", "TBLoginItemProbe", "TBContactsProbe"].contains {
+            UserDefaults.standard.object(forKey: $0) != nil
+        }
+        #else
+        return false
+        #endif
+    }
+
+    /// Takes the lock (waiting a moment for a copy that is handing over). When another copy
+    /// holds it, opens that copy again (it shows its window) and returns false.
+    static func claim() -> Bool {
+        if lock.acquire(retryFor: 3) { return true }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+            .filter { $0.processIdentifier != me }
+        if let other = others.first, let url = other.bundleURL {
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            let finished = Flag()
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in finished.set() }
+            let deadline = Date().addingTimeInterval(5)
+            while !finished.value && Date() < deadline {
+                RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
+            }
+            other.activate()
+        }
+        return false
+    }
+
+    private final class Flag {
+        private let lock = NSLock()
+        private var done = false
+        var value: Bool { lock.withLock { done } }
+        func set() { lock.withLock { done = true } }
     }
 }
 
@@ -46,9 +95,14 @@ struct MenuContent: View {
             }
         }
         Divider()
+        if !model.needsReconsent.isEmpty {
+            Button("Replies changed: confirm \(model.needsReconsent.count == 1 ? "1 chat" : "\(model.needsReconsent.count) chats")\u{2026}") {
+                NotificationCenter.default.post(name: .showStatus, object: nil)
+            }
+        }
         if !model.approved.isEmpty {
             Button("Preview a reply…") { model.previewInFinder() }
-            Button(model.paused ? "Resume" : "Pause") { model.togglePause() }
+            Button(model.paused ? "Resume" : "Pause all") { model.togglePause() }
         }
         if let outcome = model.lastUnconfirmed {
             Button("Reply in \(outcome.chat.name) not confirmed: send by hand…") { model.sendByHand() }
@@ -117,6 +171,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func showStatus() {
         let window = show(StatusView(model: model), title: "Threadback")
         model.window = window
+        // A chat turned on when replies carried less: ask before anything is sent there.
+        DispatchQueue.main.async { [weak self] in self?.model.askReconsentIfNeeded(window) }
     }
 
     @discardableResult

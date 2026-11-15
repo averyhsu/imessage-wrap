@@ -46,14 +46,20 @@ final class RecordingSender: MessageSender {
     }
 
     private(set) var sent: [Sent] = []
+    /// Called after each recorded send (tests use it to change things mid-reply).
+    var afterSend: ((Sent) -> Void)?
 
     func sendFile(_ url: URL, to chat: ChatRef) -> SendResult {
-        sent.append(Sent(kind: "file", chatKey: chat.key, payload: url.path))
+        let item = Sent(kind: "file", chatKey: chat.key, payload: url.path)
+        sent.append(item)
+        afterSend?(item)
         return SendResult(status: .dryRun)
     }
 
     func sendText(_ text: String, to chat: ChatRef) -> SendResult {
-        sent.append(Sent(kind: "text", chatKey: chat.key, payload: text))
+        let item = Sent(kind: "text", chatKey: chat.key, payload: text)
+        sent.append(item)
+        afterSend?(item)
         return SendResult(status: .dryRun)
     }
 }
@@ -107,17 +113,40 @@ final class AppleScriptSender: MessageSender {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/Threadback", isDirectory: true)
     }
 
+    /// Each send stages its own copy under a new name, so two chats can never pick up each
+    /// other's card. It is deleted once the send is confirmed; at most `keepStaged` are kept.
     func sendFile(_ url: URL, to chat: ChatRef) -> SendResult {
         let folder = AppleScriptSender.stagingFolder
-        let staged = folder.appendingPathComponent(url.lastPathComponent)
+        let staged = AppleScriptSender.stagedURL(in: folder, extension: url.pathExtension)
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try? FileManager.default.removeItem(at: staged)
             try FileManager.default.copyItem(at: url, to: staged)
         } catch {
             return SendResult(status: .failed, reason: "could not stage the image in ~/Pictures: \(error.localizedDescription)")
         }
-        return send(chat, text: "", filePath: staged.path, isFile: true)
+        let result = send(chat, text: "", filePath: staged.path, isFile: true)
+        if result.status == .delivered { try? FileManager.default.removeItem(at: staged) }
+        AppleScriptSender.prune(folder, keep: AppleScriptSender.keepStaged)
+        return result
+    }
+
+    static let keepStaged = 30
+
+    /// A new, unique file name for one send: threadback-card-<UUID>.png.
+    static func stagedURL(in folder: URL, extension ext: String) -> URL {
+        return folder.appendingPathComponent("threadback-card-\(UUID().uuidString).\(ext.isEmpty ? "png" : ext)")
+    }
+
+    /// Keeps the newest `keep` staged cards (our own threadback-card-* files only).
+    static func prune(_ folder: URL, keep: Int) {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: folder.path) else { return }
+        let ours = names.filter { $0.hasPrefix("threadback-card-") }.map { folder.appendingPathComponent($0) }
+        let dated = ours.map { url -> (URL, Date) in
+            let date = ((try? fm.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date) ?? .distantPast
+            return (url, date)
+        }.sorted { $0.1 > $1.1 }
+        for (url, _) in dated.dropFirst(max(0, keep)) { try? fm.removeItem(at: url) }
     }
 
     func sendText(_ text: String, to chat: ChatRef) -> SendResult {

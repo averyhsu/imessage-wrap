@@ -45,6 +45,22 @@ class ThreadbackUITestCase: XCTestCase {
         return element.label
     }
 
+    /// Clicks Turn on for a chat in the chooser, then Turn on in the sheet that says what it
+    /// means (nothing is turned on before that click). Returns the sheet's words.
+    @discardableResult
+    func turnOnChat(_ app: XCUIApplication, _ index: Int, shot: String? = nil) -> String {
+        let button = element(app, "chat.turnOn.\(index)")
+        XCTAssertTrue(button.waitForExistence(timeout: 10))
+        button.click()
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "Turn on first says what it means")
+        let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
+        if let shot { shootWindow(app, shot) }
+        XCTAssertFalse(element(app, "onboarding.ready").exists, "nothing is on before the click")
+        sheet.buttons["Turn on"].click()
+        return words
+    }
+
     func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-TBReportDir", reportDir] + arguments
@@ -112,10 +128,13 @@ final class OnboardingUITests: ThreadbackUITestCase {
         shootWindow(app, "onboarding-2b-connected")
         element(app, "onboarding.toChats").click()
 
-        let turnOn = element(app, "chat.turnOn.0")
-        XCTAssertTrue(turnOn.waitForExistence(timeout: 10))
+        XCTAssertTrue(element(app, "chat.turnOn.0").waitForExistence(timeout: 10))
         shootWindow(app, "onboarding-3-choose-chat")
-        turnOn.click()
+        let consent = turnOnChat(app, 0, shot: "onboarding-3a-consent")
+        note("consent sheet: \(consent)")
+        for words in ["three messages", "Apple ID", "once every 2 minutes", "forwarded"] {
+            XCTAssertTrue(consent.contains(words), "the consent sheet says \(words)")
+        }
         let ready = element(app, "onboarding.ready")
         XCTAssertTrue(ready.waitForExistence(timeout: 30))
         // The real card (the site's 1080 x 1350 card) appears in the preview.
@@ -196,8 +215,7 @@ final class LifecycleUITests: ThreadbackUITestCase {
         element(app, "onboarding.connect").click()
         XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
         element(app, "onboarding.toChats").click()
-        XCTAssertTrue(element(app, "chat.turnOn.0").waitForExistence(timeout: 10))
-        element(app, "chat.turnOn.0").click()
+        turnOnChat(app, 0)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
         element(app, "onboarding.done").click()
         let sheet = app.sheets.firstMatch
@@ -207,7 +225,7 @@ final class LifecycleUITests: ThreadbackUITestCase {
         XCTAssertTrue(element(app, "status.addChat").waitForExistence(timeout: 15))
         element(app, "status.addChat").click()
         XCTAssertTrue(element(app, "chat.isOn.0").waitForExistence(timeout: 15), "the chooser marks the chat that is on")
-        element(app, "chat.turnOn.1").click()
+        turnOnChat(app, 1)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
         element(app, "onboarding.done").click()
         sleep(2)
@@ -226,11 +244,87 @@ final class LifecycleUITests: ThreadbackUITestCase {
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15))
     }
 
-    private func setUpFixture() throws -> XCUIApplication {
+    private func setUpFixture(reset: Bool = true, extra: [String] = []) throws -> XCUIApplication {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
-        return launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
+        return launch((reset ? ["-TBResetOnboarding", "YES"] : []) + ["-TBDatabase", fixture + "/mac/chat.db",
                        "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
-                       "-TBTimeZone", "America/Los_Angeles"])
+                       "-TBTimeZone", "America/Los_Angeles"] + extra)
+    }
+
+    /// Test 1 (the app): Pause all lasts across a relaunch, and the menu bar says the same.
+    /// Then a chat whose stored approval is for what replies used to carry is not answered
+    /// until the owner clicks Keep on in the sheet that says what changed.
+    func test6_PauseLastsAcrossARelaunchAndAChangedReplyAsksAgain() throws {
+        let app = try setUpFixture()
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let told = app.sheets.firstMatch
+        if told.waitForExistence(timeout: 10) { told.buttons["OK"].click() }
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(app, "status.pause").waitForExistence(timeout: 15))
+        element(app, "status.pause").click()
+        sleep(1)
+        XCTAssertEqual(text(of: element(app, "status.title")), "Paused.")
+        app.terminate()
+
+        let again = try setUpFixture(reset: false)
+        let title = element(again, "status.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 30))
+        XCTAssertEqual(text(of: title), "Paused.", "still paused after a relaunch")
+        XCTAssertEqual(text(of: element(again, "status.pause")), "Resume")
+        note("after a relaunch: \(text(of: title))")
+        again.terminate()
+
+        let third = try setUpFixture(reset: false, extra: ["-TBForgetSignatures", "YES"])
+        let sheet = third.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 30), "a changed reply asks again")
+        let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
+        note("replies-changed sheet: \(words)")
+        XCTAssertTrue(words.contains("now include a link"))
+        XCTAssertTrue(words.contains("Nothing is sent in this chat until you choose"))
+        XCTAssertTrue(text(of: element(third, "status.last.0")).contains("Not answering"), "the chat waits for the click")
+        shootWindow(third, "status-3-replies-changed")
+        sheet.buttons["Keep on"].click()
+        sleep(1)
+        XCTAssertFalse(text(of: element(third, "status.last.0")).contains("Not answering"))
+        third.terminate()
+    }
+
+    /// Test 2 (the app): a second copy does not run alongside the first. It brings the first
+    /// one's window forward and quits, so a /wrapped is answered once.
+    func test7_ASecondCopyShowsTheFirstAndQuits() throws {
+        let app = launch(["-TBResetOnboarding", "YES"])
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        let bundle = "io.github.averyhsu.threadback.mac"
+        let url = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.bundleURL)
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        let opened = expectation(description: "second copy launched")
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            if let error { print("WRAPPED_NOTE second copy error: \(error)") }
+            opened.fulfill()
+        }
+        wait(for: [opened], timeout: 30)
+        var copies = 0
+        var most = 0
+        for _ in 0..<20 {
+            copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).filter { !$0.isTerminated }.count
+            most = max(most, copies)
+            if copies == 1 && most == 2 { break }
+            sleep(1)
+        }
+        note("single instance: at most \(most) copies running, \(copies) after the second launch")
+        XCTAssertEqual(copies, 1, "the second copy quit")
+        XCTAssertNotEqual(app.state, .notRunning, "the first copy still runs")
+        XCTAssertTrue(element(app, "onboarding.continue").exists, "with its window")
+        app.terminate()
     }
 
     func test1_ClosingTheWindowBeforeSetupQuits() throws {
@@ -264,8 +358,7 @@ final class LifecycleUITests: ThreadbackUITestCase {
         element(app, "onboarding.connect").click()
         XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
         element(app, "onboarding.toChats").click()
-        XCTAssertTrue(element(app, "chat.turnOn.0").waitForExistence(timeout: 10))
-        element(app, "chat.turnOn.0").click()
+        turnOnChat(app, 0)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
         element(app, "onboarding.done").click()
         let sheet = app.sheets.firstMatch

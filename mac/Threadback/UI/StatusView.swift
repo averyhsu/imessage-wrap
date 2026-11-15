@@ -68,7 +68,7 @@ struct StatusView: View {
                 }
                 Spacer(minLength: 0)
                 HStack(alignment: .top, spacing: 12) {
-                    Text("Closing this window keeps Threadback answering from the menu bar (the speech-bubble icon). To uninstall: click Quit Threadback, then drag Threadback from Applications to the Trash. Its settings stay in ~/Library/Preferences (io.github.averyhsu.threadback.mac.plist) and ~/Library/Application Support/Threadback; delete those too for a clean slate. Threadback never goes online by itself.")
+                    Text("Closing this window keeps Threadback answering from the menu bar (the speech-bubble icon). To uninstall: click Quit Threadback, then drag Threadback from Applications to the Trash. Its settings stay in ~/Library/Preferences (io.github.averyhsu.threadback.mac.plist) and ~/Library/Application Support/Threadback, and the pictures it sent stay in ~/Pictures/Threadback; delete those too for a clean slate. Threadback never goes online by itself.")
                         .font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("status.uninstall")
                     QuietButton(title: "Check for updates", identifier: "status.updates") { model.checkForUpdates() }
@@ -88,7 +88,11 @@ struct StatusView: View {
                     .accessibilityIdentifier("status.last.\(index)")
             }
             Spacer()
-            QuietButton(title: "\u{25B6} Play the story", identifier: "status.playStory.\(index)") { model.playStory(chat) }
+            if model.needsReconsent.contains(where: { $0.key == chat.key }) {
+                PillButton(title: "Keep on", color: Theme.green, identifier: "status.keepOn.\(index)") { model.keepOn(chat) }
+            } else {
+                QuietButton(title: "\u{25B6} Play the story", identifier: "status.playStory.\(index)") { model.playStory(chat) }
+            }
             QuietButton(title: "Turn off", identifier: "status.turnOff.\(index)") { model.turnOff(chat) }
         }
         .padding(.horizontal, 14).padding(.vertical, 10)
@@ -96,6 +100,9 @@ struct StatusView: View {
     }
 
     private func lastLine(_ chat: ChatRef) -> String {
+        if model.needsReconsent.contains(where: { $0.key == chat.key }) {
+            return "Not answering: replies now include a link. Keep on, or Turn off."
+        }
         guard let last = model.lastByChat[chat.key] else { return "No /wrapped yet." }
         let formatter = DateFormatter()
         formatter.dateStyle = .short

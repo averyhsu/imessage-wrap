@@ -59,7 +59,16 @@ final class AppModel: ObservableObject {
     @Published var status = "Not set up"
     @Published var access = "Messages: not connected"
     @Published var accessLost = false
-    @Published var paused = false
+    /// Pause all: saved, so a relaunch or the login item stays paused.
+    @Published var paused = false {
+        didSet {
+            defaults.set(paused, forKey: Key.paused)
+            control.paused = paused
+        }
+    }
+    /// Chats that were turned on when replies carried less (for example, no link): not
+    /// answered until the owner confirms again.
+    @Published var needsReconsent: [ChatRef] = []
     @Published var lastUnconfirmed: ReplyOutcome?
     @Published var replies: [ReplyRecord] = []
     @Published var copiedNote = ""
@@ -79,7 +88,11 @@ final class AppModel: ObservableObject {
 
     weak var window: NSWindow?
     private(set) var engine: ThreadbackEngine?
+    /// The one agent. Created, changed and used on `work` only, so its state (answered
+    /// commands, cooldowns) is never split between two agents.
     private var agent: Agent?
+    /// Pause and the live set of chats: read by the agent before every command and send.
+    let control = AgentControl()
     private var watcher: FolderWatcher?
     private var activity: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -88,7 +101,6 @@ final class AppModel: ObservableObject {
     private var readNow = "not tried"
     private var groupChats: Int?
     private var totalMessages: Int?
-    private var tickQueued = false
 
     /// Every database read and engine call runs here, one at a time.
     let work = DispatchQueue(label: "io.github.averyhsu.threadback.work", qos: .userInitiated)
@@ -107,8 +119,10 @@ final class AppModel: ObservableObject {
         static let automation = "report.automation"
         static let replies = "report.replies"
         static let lastByChat = "lastReplyByChat"
+        static let paused = "paused"
+        static let signatures = "approvalSignatures"
         static let all = [onboarded, bookmark, bookmarkScoped, approved, method, ownerName, directBefore, afterGrant,
-                          walReadable, automation, replies, lastByChat, "toldAboutMenuBar"]
+                          walReadable, automation, replies, lastByChat, paused, signatures, "toldAboutMenuBar"]
     }
 
     var isFixture: Bool { DebugOptions.fixtureDatabase != nil }
@@ -137,6 +151,12 @@ final class AppModel: ObservableObject {
         if let data = defaults.data(forKey: Key.lastByChat), let saved = try? JSONDecoder().decode([String: ReplyRecord].self, from: data) {
             lastByChat = saved
         }
+        paused = defaults.bool(forKey: Key.paused)
+        control.paused = paused
+        if DebugOptions.flag("TBForgetSignatures") { defaults.removeObject(forKey: Key.signatures) }
+        let signatures = defaults.dictionary(forKey: Key.signatures) as? [String: String] ?? [:]
+        needsReconsent = approved.filter { Consent.needsConfirmation(stored: signatures[$0.key]) }
+        updateLive()
         loginItemOn = Permissions.loginItemStatus() == "enabled"
         do {
             engine = try ThreadbackEngine()
@@ -337,7 +357,8 @@ final class AppModel: ObservableObject {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let all):
-                    self.chats = all
+                    // Most recently active first; the chooser shows them all, with a search.
+                    self.chats = all.sorted { ($0.lastUnix ?? 0, $0.messages, -$0.id) > ($1.lastUnix ?? 0, $1.messages, -$1.id) }
                     self.groupChats = all.count
                     self.totalMessages = all.reduce(0) { $0 + $1.messages }
                     self.readNow = "ok"
@@ -367,13 +388,32 @@ final class AppModel: ObservableObject {
     /// Your name must be there before a chat is turned on: the recap shows it to everyone.
     var nameIsReady: Bool { !ownerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    /// Turns a chat on (more chats can be on; each is approved by its id, on the screen that
-    /// says what happens), then asks macOS, on purpose, whether Threadback may use Messages.
+    /// Turns a chat on, after the whole statement of what that means was shown and accepted
+    /// (more chats can be on; each is approved by its id). Then macOS is asked, on purpose,
+    /// whether Threadback may use Messages. Nothing typed before this moment is answered.
     func turnOn(_ chat: ChatInfo) {
         guard nameIsReady else { return }
         let ref = Agent.chatRef(chat)
+        let alert = NSAlert()
+        alert.messageText = Consent.title(chat: ref.name)
+        alert.informativeText = Consent.statement()
+        alert.addButton(withTitle: "Turn on")
+        alert.addButton(withTitle: "Cancel")
+        let decide: (NSApplication.ModalResponse) -> Void = { [weak self] response in
+            guard response == .alertFirstButtonReturn else { return }
+            self?.approve(ref)
+        }
+        if let window {
+            alert.beginSheetModal(for: window, completionHandler: decide)
+        } else {
+            decide(alert.runModal())
+        }
+    }
+
+    private func approve(_ ref: ChatRef) {
         if !approved.contains(where: { $0.key == ref.key }) { approved.append(ref) }
         saveApproved()
+        setSignature(ref.key)
         defaults.set(true, forKey: Key.onboarded)
         lastTurnedOn = ref
         cardImage = nil
@@ -381,7 +421,7 @@ final class AppModel: ObservableObject {
         makePreview(ref)
         if isFixture || DebugOptions.flag("TBNoAutomation") {
             automationNote = "Sending: skipped in this test run."
-            startAgent()
+            startAgent(startFromNow: true)
             return
         }
         automationNote = "macOS may ask whether Threadback may use Messages: click Allow."
@@ -393,8 +433,48 @@ final class AppModel: ObservableObject {
             case -1743: self.automationNote = "Threadback may not use Messages yet. Open System Settings, then Privacy & Security, find Threadback in the list of apps that control other apps, and switch on Messages."
             default: self.automationNote = "Messages did not answer yet. Open Messages once, then try again."
             }
-            self.startAgent()
         }
+        startAgent(startFromNow: true)
+    }
+
+    private func setSignature(_ key: String) {
+        var signatures = defaults.dictionary(forKey: Key.signatures) as? [String: String] ?? [:]
+        signatures[key] = Consent.signature()
+        defaults.set(signatures, forKey: Key.signatures)
+        needsReconsent.removeAll { $0.key == key }
+        updateLive()
+    }
+
+    /// The chats the agent may answer now: on, and confirmed for what a reply carries.
+    private func updateLive() {
+        let pending = Set(needsReconsent.map(\.key))
+        control.liveKeys = Set(approved.map(\.key)).subtracting(pending)
+        control.paused = paused
+    }
+
+    /// Asks again, chat by chat, when what a reply carries changed since it was turned on.
+    /// Nothing is sent in such a chat before the click.
+    func askReconsentIfNeeded(_ window: NSWindow) {
+        guard let chat = needsReconsent.first, window.attachedSheet == nil else { return }
+        let alert = NSAlert()
+        alert.messageText = Consent.changedTitle(chat: chat.name)
+        alert.informativeText = Consent.changedStatement
+        alert.addButton(withTitle: "Keep on")
+        alert.addButton(withTitle: "Turn off")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self else { return }
+            if response == .alertFirstButtonReturn {
+                self.keepOn(chat)
+            } else {
+                self.turnOff(chat)
+            }
+            DispatchQueue.main.async { self.askReconsentIfNeeded(window) }
+        }
+    }
+
+    func keepOn(_ chat: ChatRef) {
+        setSignature(chat.key)
+        startAgent(startFromNow: true)
     }
 
     private func saveApproved() {
@@ -420,6 +500,8 @@ final class AppModel: ObservableObject {
     /// Turns one chat off; the others keep answering.
     func turnOff(_ chat: ChatRef) {
         approved.removeAll { $0.key == chat.key }
+        needsReconsent.removeAll { $0.key == chat.key }
+        updateLive()                       // takes effect before the next send, even mid-reply
         lastByChat[chat.key] = nil
         saveLastByChat()
         if approved.isEmpty {
@@ -428,7 +510,7 @@ final class AppModel: ObservableObject {
         }
         saveApproved()
         turnOffNote = "\(chat.name) is off. The other chats keep answering."
-        startAgent()
+        startAgent(startFromNow: false)
     }
 
     /// Exactly what a reply would contain: the card and the text (and the link only when the
@@ -475,7 +557,7 @@ final class AppModel: ObservableObject {
                 let db = try self.openDatabase()
                 let token = engine.open(db)
                 defer { engine.close(token) }
-                let full = try engine.statsJSON(token: token, chat: String(chat.rowid), me: me, tz: tz, period: nil,
+                let full = try engine.statsJSON(token: token, chatID: chat.rowid, me: me, tz: tz, period: nil,
                                                 contacts: self.contacts(), shortNames: false)
                 let short = try engine.shortNames(statsJSON: full, me: me)
                 // The same payload a shared link would carry: short names, no message text.
@@ -517,8 +599,10 @@ final class AppModel: ObservableObject {
 
     /// Turn off: forget the chat, stop answering, and do not open at login any more.
     func turnOff() {
-        stopAgent()
         approved = []
+        needsReconsent = []
+        updateLive()
+        stopAgent()
         lastTurnedOn = nil
         defaults.removeObject(forKey: Key.approved)
         defaults.set(false, forKey: Key.onboarded)
@@ -576,6 +660,10 @@ final class AppModel: ObservableObject {
             moveNote = "Could not move it. Drag Threadback onto Applications in the Finder instead."
             return
         }
+        // Hand over: this copy stops answering and lets go of the single-instance lock before
+        // the moved copy opens (that one also waits a few seconds for the lock).
+        stopAgent()
+        SingleInstance.lock.release()
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
         NSWorkspace.shared.openApplication(at: target, configuration: configuration) { _, _ in
@@ -585,11 +673,11 @@ final class AppModel: ObservableObject {
 
     // MARK: Agent
 
-    func agentConfig() -> AgentConfig {
+    func agentConfig(withContacts: Bool = true) -> AgentConfig {
         var config = AgentConfig()
         config.me = me
         config.tz = DebugOptions.string("TBTimeZone") ?? TimeZone.current.identifier
-        config.contacts = contacts()
+        if withContacts { config.contacts = contacts() }
         config.dryRun = isFixture
         config.link = MacConfig.storySiteIsLive
         return config
@@ -600,49 +688,74 @@ final class AppModel: ObservableObject {
         return support.appendingPathComponent("Threadback/state.json")
     }
 
-    /// Starts answering: a file watch on the Messages folder (with a slow safety poll), a
-    /// check after the Mac wakes up, and every read on the work queue.
-    func startAgent() {
+    /// Starts answering, or applies a change to the chats that are on: a file watch on the
+    /// Messages folder (with a slow safety poll), a check after the Mac wakes up. The agent
+    /// is created once and changed in place on the work queue, so a change never runs two
+    /// agents side by side. `startFromNow`: nothing typed before this moment is answered.
+    func startAgent(startFromNow: Bool = false) {
         guard let engine, !approved.isEmpty else { return }
-        stopAgent()
-        let sender: MessageSender
-        if isFixture {
-            sender = RecordingSender()
-        } else {
-            sender = AppleScriptSender(openDatabase: { [unowned self] in try self.openDatabase() },
-                                       decode: { engine.decodeText(text: $0, attributedBody: $1) })
+        updateLive()
+        var config = agentConfig(withContacts: false)
+        let approvedNow = approved
+        let fixture = isFixture
+        let path = isFixture ? nil : statePath
+        work.async { [weak self] in
+            guard let self else { return }
+            config.contacts = self.contacts()
+            let agent: Agent
+            if let existing = self.agent {
+                agent = existing
+                agent.config = config
+            } else {
+                let sender: MessageSender
+                if fixture {
+                    sender = RecordingSender()
+                } else {
+                    sender = AppleScriptSender(openDatabase: { [unowned self] in try self.openDatabase() },
+                                               decode: { engine.decodeText(text: $0, attributedBody: $1) })
+                }
+                agent = Agent(engine: engine, sender: sender, config: config,
+                              openDatabase: { [unowned self] in try self.openDatabase() }, statePath: path)
+                #if DEBUG
+                agent.log = { line in NSLog("Threadback: %@", line) }   // CI only: Release logs nothing
+                #endif
+                agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
+                agent.onReply = { [weak self] outcome in
+                    DispatchQueue.main.async { self?.record(outcome) }
+                }
+                agent.control = self.control
+                self.agent = agent
+            }
+            agent.approve(approvedNow)
+            if startFromNow { try? agent.skipToNow() }
+            self.runAgent()
         }
-        let agent = Agent(engine: engine, sender: sender, config: agentConfig(),
-                          openDatabase: { [unowned self] in try self.openDatabase() }, statePath: isFixture ? nil : statePath)
-        agent.approve(approved)
-        agent.log = { line in NSLog("Threadback: %@", line) }
-        agent.renderCard = { try WebCard.shared.png(statsJSON: $0) }
-        agent.onReply = { [weak self] outcome in
-            DispatchQueue.main.async { self?.record(outcome) }
+        if watcher == nil {
+            let watcher = FolderWatcher(folder: messagesFolder, queue: work) { [weak self] in self?.runAgent() }
+            watcher.start()
+            self.watcher = watcher
         }
-        self.agent = agent
-        let watcher = FolderWatcher(folder: messagesFolder, queue: work) { [weak self] in self?.runAgent() }
-        watcher.start()
-        self.watcher = watcher
-        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            // After sleep: commands typed while it slept are answered only if younger than
-            // ten minutes (the agent's own limit); older ones are skipped.
-            self?.tick()
+        if wakeObserver == nil {
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                // After sleep: commands typed while it slept are answered only if younger than
+                // ten minutes (the agent's own limit); older ones are skipped.
+                self?.tick()
+            }
         }
         if activity == nil {
             activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
                                                              reason: "Answering /wrapped in the chats you turned on")
         }
-        status = onStatus
-        tick()
+        status = paused ? "Paused" : onStatus
     }
 
     func stopAgent() {
+        control.liveKeys = []              // nothing more is sent, even mid-reply
         watcher?.stop()
         watcher = nil
-        agent = nil
+        work.async { [weak self] in self?.agent = nil }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
         if let activity { ProcessInfo.processInfo.endActivity(activity) }
@@ -671,25 +784,21 @@ final class AppModel: ObservableObject {
 
     /// Asks for one pass of the agent (from the main thread).
     func tick() {
-        guard !paused else { return }
         work.async { [weak self] in self?.runAgent() }
     }
 
-    /// One pass of the agent, on the work queue. Bursts of file events are already coalesced
-    /// by the watcher; a pass that is asked for while one runs is folded into the next one.
+    /// One pass of the agent, on the work queue (the watcher, the safety poll and tick all
+    /// end up here, one at a time). While paused the agent reads nothing.
     private func runAgent() {
         guard let agent else { return }
-        if tickQueued { return }
-        tickQueued = true
-        defer { tickQueued = false }
         var failure: Error?
         do {
             try agent.runOnce()
         } catch {
             failure = error
         }
-        let watching = watcherOn
         DispatchQueue.main.async {
+            let watching = self.watcherOn
             if let failure {
                 self.readNow = TestReport.shortError(failure)
                 self.access = "Messages: Lost access \u{00B7} Reconnect"
@@ -704,10 +813,17 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Pause all, or Resume. On Resume reading starts from the newest message, so nothing
+    /// typed during the pause is ever answered.
     func togglePause() {
         paused.toggle()
         status = paused ? "Paused" : onStatus
-        if !paused { tick() }
+        if !paused {
+            work.async { [weak self] in
+                try? self?.agent?.skipToNow()
+                self?.runAgent()
+            }
+        }
     }
 
     /// One click when reading fails: the same Open panel again.
@@ -779,7 +895,7 @@ final class AppModel: ObservableObject {
         facts.loginItem = Permissions.loginItemStatus()
         facts.linkInReplies = MacConfig.storySiteIsLive ? "on" : "off (the story site is not live yet)"
         facts.chatsTurnedOn = approved.count
-        facts.watcher = agent == nil ? "not running" : (watcherOn ? "on (file events, safety check every minute)" : "off (safety check every minute only)")
+        facts.watcher = watcher == nil ? "not running" : (watcherOn ? "on (file events, safety check every minute)" : "off (safety check every minute only)")
         facts.card = WebCard.pageURL == nil ? "missing" : "site card (\(WebCard.shared.lastMilliseconds) ms last time)"
         facts.replies = replies
         return facts

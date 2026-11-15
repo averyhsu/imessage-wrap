@@ -382,4 +382,173 @@ final class AgentTests: XCTestCase {
         XCTAssertTrue(files.contains("link.txt"))
         XCTAssertTrue(files.contains { $0.hasPrefix("threadback-taco-tuesday-crew-2026") && $0.hasSuffix(".png") })
     }
+
+    // MARK: Review batch 1: pause, turn off, one copy, staged cards, consent
+
+    /// The owner's switches, as the app passes them to its agent.
+    private func controlled(_ agent: Agent, live: Bool = true) -> AgentControl {
+        let control = AgentControl()
+        control.liveKeys = live ? [Fixture.tacoIdentifier] : []
+        agent.control = control
+        return control
+    }
+
+    /// Test 1: while paused, a file event or the safety poll sends nothing; on Resume reading
+    /// starts from the newest message, so nothing typed during the pause is ever answered.
+    func testPausedSendsNothingAndResumeStartsFromNow() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let control = controlled(agent)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        control.paused = true
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "a watcher event while paused")
+        XCTAssertEqual(try agent.runOnce(), 0, "the safety poll while paused")
+        XCTAssertTrue(sender.sent.isEmpty, "nothing is sent while paused")
+        control.paused = false
+        try agent.skipToNow()
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "a command typed during the pause is not answered after Resume")
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 1, "a command typed after Resume is answered")
+    }
+
+    /// Test 3: Turn off (or Pause) clicked while a reply is going out: nothing more is sent,
+    /// and turning the chat on again does not bring a second reply inside the cooldown.
+    func testTurnOffDuringAReplyStopsItAndNoSecondReplyInsideTheCooldown() throws {
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        agent.config.link = true
+        let control = controlled(agent)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        sender.afterSend = { _ in control.liveKeys = [] }      // Turn off, while the card goes out
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try agent.runOnce()
+        XCTAssertEqual(sender.sent.map(\.kind), ["file"], "nothing is sent after Turn off")
+        XCTAssertEqual(agent.lastOutcome?.error, Agent.stopped)
+        sender.afterSend = nil
+        control.liveKeys = [Fixture.tacoIdentifier]            // on again, at once
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0, "no second reply inside the cooldown")
+        XCTAssertEqual(sender.sent.count, 1)
+
+        // The same for Pause, in another agent on a fresh cooldown.
+        let second = RecordingSender()
+        let (other, _) = try makeAgent(second)
+        other.config.link = true
+        let switches = controlled(other)
+        XCTAssertEqual(try other.runOnce(), 0)
+        second.afterSend = { item in if item.kind == "text" { switches.paused = true } }
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        _ = try other.runOnce()
+        XCTAssertEqual(second.sent.map(\.kind), ["file", "text"], "the link is not sent after Pause")
+    }
+
+    /// Test 2 (the lock): only one copy holds it; a copy that hands over lets the next one in.
+    func testOnlyOneCopyHoldsTheInstanceLock() throws {
+        let path = folder.appendingPathComponent("instance.lock")
+        let first = InstanceLock(path: path)
+        let second = InstanceLock(path: path)
+        XCTAssertTrue(first.acquire())
+        XCTAssertFalse(second.acquire(retryFor: 0.3), "a second copy does not get the lock")
+        // Move to Applications: the old copy lets go a moment after the new one started.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { first.release() }
+        XCTAssertTrue(second.acquire(retryFor: 3), "the new copy gets it once the old one lets go")
+        XCTAssertFalse(first.acquire(), "and the old one cannot take it back")
+        second.release()
+    }
+
+    /// Test 5a: every send stages its own card under a new name, so two chats whose names make
+    /// the same slug never get each other's picture; at most 30 staged cards are kept.
+    func testCollidingSlugsNeverShareACard() throws {
+        let db = try SQLiteDB(path: dbPath, readOnly: false)
+        _ = try db.execute("UPDATE chat SET display_name = 'Taco Tuesday Crew!' WHERE chat_identifier = ?", [Fixture.bookClubIdentifier])
+        _ = try db.execute("UPDATE chat SET display_name = 'Taco Tuesday Crew?' WHERE chat_identifier = ?", [Fixture.tacoIdentifier])
+        XCTAssertEqual(Agent.slugify("Taco Tuesday Crew!"), Agent.slugify("Taco Tuesday Crew?"))
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let engine = try ThreadbackEngine()
+        let token = engine.open(try SQLiteDB(path: dbPath))
+        let both = try engine.listChats(token: token, me: "Amara", contacts: [])
+            .filter { [Fixture.tacoIdentifier, Fixture.bookClubIdentifier].contains($0.chatIdentifier) }
+        engine.close(token)
+        XCTAssertEqual(both.count, 2)
+        agent.approve(both.map(Agent.chatRef))
+        var cards: [String: (String, Data)] = [:]
+        sender.afterSend = { item in
+            if item.kind == "file", let data = FileManager.default.contents(atPath: item.payload) { cards[item.chatKey] = (item.payload, data) }
+        }
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        try insert("/wrapped", chat: Fixture.bookClubIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 2)
+        let taco = try XCTUnwrap(cards[Fixture.tacoIdentifier])
+        let club = try XCTUnwrap(cards[Fixture.bookClubIdentifier])
+        XCTAssertNotEqual(taco.0, club.0, "each reply has its own card file")
+        XCTAssertNotEqual(taco.1, club.1, "each chat gets its own picture")
+
+        let staging = folder.appendingPathComponent("staging", isDirectory: true)
+        let a = AppleScriptSender.stagedURL(in: staging, extension: "png")
+        let b = AppleScriptSender.stagedURL(in: staging, extension: "png")
+        XCTAssertNotEqual(a, b)
+        XCTAssertTrue(a.lastPathComponent.hasPrefix("threadback-card-"))
+        XCTAssertFalse(a.lastPathComponent.contains("taco"), "the staged name carries no chat name")
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        var made: [URL] = []
+        for i in 0..<35 {
+            let url = AppleScriptSender.stagedURL(in: staging, extension: "png")
+            try Data([UInt8(i)]).write(to: url)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: Double(i - 100))], ofItemAtPath: url.path)
+            made.append(url)
+        }
+        let mine = staging.appendingPathComponent("someone-elses-photo.png")
+        try Data([1]).write(to: mine)
+        AppleScriptSender.prune(staging, keep: AppleScriptSender.keepStaged)
+        let left = try FileManager.default.contentsOfDirectory(atPath: staging.path)
+        XCTAssertEqual(left.filter { $0.hasPrefix("threadback-card-") }.count, 30)
+        XCTAssertTrue(left.contains("someone-elses-photo.png"), "only Threadback's own cards are pruned")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: made[0].path), "the oldest go first")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: made[34].path))
+    }
+
+    /// Test 5b: what turning a chat on means is said in full, and a change in what a reply
+    /// carries asks again before anything is sent in that chat.
+    func testConsentAndAChangeInWhatARepliesCarriesAsksAgain() throws {
+        XCTAssertNotEqual(Consent.signature(link: true), Consent.signature(link: false))
+        XCTAssertTrue(Consent.needsConfirmation(stored: nil), "a chat turned on before signatures existed")
+        XCTAssertTrue(Consent.needsConfirmation(stored: Consent.signature(link: false), current: Consent.signature(link: true)))
+        XCTAssertFalse(Consent.needsConfirmation(stored: Consent.signature()))
+        let statement = Consent.statement(link: true)
+        for words in ["/wrapped", "Apple ID", "three messages", "a picture, a short text and a link", "Anyone in the chat",
+                      "once every 2 minutes", "first names", "no message text", "forwarded"] {
+            XCTAssertTrue(statement.contains(words), "the statement says \(words)")
+        }
+        XCTAssertTrue(Consent.changedStatement.contains("Nothing is sent in this chat until you choose"))
+        Fixture.note("consent: \(Consent.title(chat: "Taco Tuesday Crew")) | \(statement) | \(Consent.changedTitle(chat: "Taco Tuesday Crew")) | \(Consent.changedStatement)")
+
+        // Approved under the old signature: not live until the owner clicks Keep on.
+        let sender = RecordingSender()
+        let (agent, _) = try makeAgent(sender)
+        let control = controlled(agent, live: false)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        try insert("/wrapped", chat: Fixture.tacoIdentifier)
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "nothing is sent before the click")
+        control.liveKeys = [Fixture.tacoIdentifier]            // Keep on
+        try agent.skipToNow()
+        XCTAssertEqual(try agent.runOnce(), 0)
+        XCTAssertTrue(sender.sent.isEmpty, "the command typed before the click is not answered later")
+    }
+
+    /// L4: a chat is looked up by its id only; an id that is gone is an error, never a name match.
+    func testStatsByIdNeverFallsBackToAName() throws {
+        let engine = try ThreadbackEngine()
+        let token = engine.open(try SQLiteDB(path: dbPath))
+        defer { engine.close(token) }
+        let taco = try XCTUnwrap(try engine.listChats(token: token, me: "Amara", contacts: []).first { $0.chatIdentifier == Fixture.tacoIdentifier })
+        let byId = try engine.statsJSON(token: token, chatID: taco.id, me: "Amara", tz: "America/Los_Angeles", period: "2026", contacts: [], shortNames: true)
+        let before = try engine.statsJSON(token: token, chat: String(taco.id), me: "Amara", tz: "America/Los_Angeles", period: "2026", contacts: [], shortNames: true)
+        XCTAssertEqual(byId, before)
+        XCTAssertThrowsError(try engine.statsJSON(token: token, chatID: 987_654, me: "Amara", tz: nil, period: nil, contacts: [], shortNames: true))
+    }
 }

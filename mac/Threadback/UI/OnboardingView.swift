@@ -56,6 +56,16 @@ struct QuietButton: View {
 
 struct OnboardingView: View {
     @ObservedObject var model: AppModel
+    /// The chooser's search field.
+    @State private var search = ""
+
+    /// Every group chat (most recently active first, as the model keeps them), narrowed by
+    /// the search field.
+    private var shownChats: [ChatInfo] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return model.chats }
+        return model.chats.filter { $0.name.localizedCaseInsensitiveContains(query) }
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -243,9 +253,19 @@ struct OnboardingView: View {
                 }
                 Text("Replies come from your Apple ID, in that chat only, at most once every 2 minutes. Next, macOS asks whether Threadback may use Messages: click Allow.")
                     .font(.system(size: 14)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                if model.chats.count > 1 {
+                    TextField("Search \(model.chats.count) group chats", text: $search)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 320)
+                        .accessibilityIdentifier("chat.search")
+                }
                 ScrollView {
-                    VStack(spacing: 8) {
-                        ForEach(Array(model.chats.prefix(12).enumerated()), id: \.element.id) { index, chat in
+                    LazyVStack(spacing: 8) {
+                        if shownChats.isEmpty && !search.isEmpty {
+                            Text("No group chat called \u{201C}\(search)\u{201D}.").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        ForEach(Array(shownChats.enumerated()), id: \.element.id) { index, chat in
                             HStack(spacing: 12) {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(chat.name).font(.system(size: 15, weight: .bold)).foregroundStyle(.white).lineLimit(1)
@@ -296,7 +316,7 @@ struct OnboardingView: View {
                         .accessibilityIdentifier("onboarding.text")
                     VStack(alignment: .leading, spacing: 6) {
                         if MacConfig.storySiteIsLive {
-                            Text("Three messages: this picture, this text, and a link that opens the full tap-through story for everyone in the chat.")
+                            Text("Three messages: this picture, this text, and a link that opens the full tap-through story for everyone in the chat, and for anyone it is forwarded to.")
                                 .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white).fixedSize(horizontal: false, vertical: true)
                         } else {
                             Text("Today: this picture and this text.").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white)

@@ -102,6 +102,9 @@ final class Agent {
     }
     /// Called once per answered command (the menu and the test report show it).
     var onReply: (ReplyOutcome) -> Void = { _ in }
+    /// Pause and the live set of chats, read before every command and every send. Without
+    /// one (tests, previews) everything approved may be answered.
+    var control: AgentControl?
     private(set) var state: AgentState
     /// The approved chats, by key, frozen at consent.
     private(set) var approved: [String: ChatRef] = [:]
@@ -126,11 +129,28 @@ final class Agent {
         return ChatRef(guid: info.guid, identifier: info.chatIdentifier, name: info.name, rowid: info.id, members: info.members)
     }
 
+    /// Whether a reply may go to this chat right now (not paused, still turned on).
+    func mayAnswer(_ key: String) -> Bool {
+        return control?.mayAnswer(key) ?? true
+    }
+
+    /// Starts reading after the newest message there is now: nothing typed before this
+    /// moment is answered (used on Resume and when a chat is turned on).
+    func skipToNow() throws {
+        let db = try openDatabase()
+        state.cursor = try MessagesDB.maxMessageRowid(db)
+        state.save(statePath)
+        log("starting after message row \(state.cursor ?? 0); nothing typed before now is answered")
+    }
+
     // MARK: Loop
 
-    /// Handles every pending row, then returns the number of commands answered.
+    /// Handles every pending row, then returns the number of commands answered. While paused
+    /// it reads nothing (Resume then starts from the newest row, so nothing typed during a
+    /// pause is ever answered).
     @discardableResult
     func runOnce() throws -> Int {
+        if control?.paused == true { return 0 }
         let db = try openDatabase()
         var answered = 0
         let top = try MessagesDB.maxMessageRowid(db)
@@ -190,6 +210,10 @@ final class Agent {
                 return false
             }
         }
+        guard mayAnswer(chat.key) else {
+            log("ignored a /\(trigger.command): that chat is off or paused (row \(row.rowid))")
+            return false
+        }
         if let done = state.answered[chat.key], done >= row.rowid {
             log("ignored a /\(trigger.command) that was already answered (row \(row.rowid))")
             return false
@@ -238,7 +262,7 @@ final class Agent {
             let db = try openDatabase()
             let token = engine.open(db)
             defer { engine.close(token) }
-            fullStats = try engine.statsJSON(token: token, chat: String(chat.rowid), me: config.me, tz: config.tz,
+            fullStats = try engine.statsJSON(token: token, chatID: chat.rowid, me: config.me, tz: config.tz,
                                              period: trigger.period, contacts: config.contacts, shortNames: false)
         } catch {
             outcome.error = "could not compute stats (\(error))"
@@ -269,6 +293,7 @@ final class Agent {
                     outcome.folder = folder
                     try? (line + "\n").write(to: folder.appendingPathComponent("recap.txt"), atomically: true, encoding: .utf8)
                 }
+                guard mayAnswer(chat.key) else { outcome.error = Agent.stopped; return outcome }
                 outcome.results.append(("text", sender.sendText(line, to: chat)))
                 return outcome
             }
@@ -297,19 +322,24 @@ final class Agent {
                 try (recap.message + "\n").write(to: folder.appendingPathComponent("recap.txt"), atomically: true, encoding: .utf8)
                 try (link + "\n").write(to: folder.appendingPathComponent("link.txt"), atomically: true, encoding: .utf8)
             }
+            guard mayAnswer(chat.key) else { outcome.error = Agent.stopped; return outcome }
             let cardResult = sender.sendFile(card, to: chat)
             outcome.results.append(("card", cardResult))
             if cardResult.status == .failed || cardResult.orphan { return outcome }
+            guard mayAnswer(chat.key) else { outcome.error = Agent.stopped; return outcome }
             let textResult = sender.sendText(recap.message, to: chat)
             outcome.results.append(("text", textResult))
             if textResult.status == .failed || textResult.orphan || link.isEmpty { return outcome }
             // The link goes alone: Messages builds a preview only for a bare URL.
+            guard mayAnswer(chat.key) else { outcome.error = Agent.stopped; return outcome }
             outcome.results.append(("link", sender.sendText(link, to: chat)))
         } catch {
             outcome.error = "\(error)"
         }
         return outcome
     }
+
+    static let stopped = "stopped: the chat was turned off or paused"
 
     private func dryRunFolder(_ chat: ChatRef) throws -> URL {
         let base = config.outFolder ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/Threadback/dry-run")
