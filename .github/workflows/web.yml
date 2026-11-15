@@ -82,8 +82,11 @@ jobs:
 
       - name: Upload screenshots
         if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
+          retention-days: 3
           name: web-screenshots
           path: |
             test-results/web-screenshots/

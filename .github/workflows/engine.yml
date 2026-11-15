@@ -133,9 +133,11 @@ jobs:
         run: /usr/bin/python3 tests/conformance/describe_typedstream.py "$RUNNER_TEMP/real_typedstream.json"
       - name: Keep the real samples
         if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: real-typedstream-samples
           path: ${{ runner.temp }}/real_typedstream.json
           if-no-files-found: ignore
-          retention-days: 14
+          retention-days: 3
