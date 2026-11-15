@@ -431,6 +431,22 @@ jobs:
             -only-testing:ThreadbackUITests/LifecycleUITests/test5_TwoChatsAddTurnOffPause \
             -test-iterations 5 -run-tests-until-failure -resultBundlePath "$OUT/LifecycleRepeat.xcresult" | tee "$RES/08c-lifecycle-repeat.txt"
 
+      # Diagnostics for run 43710352298, outside the pass/fail gate: the menu-bar notice as it
+      # was then, with one and with two close requests (see NoticeDiagnosticsUITests).
+      - name: "Diagnostics: how a second menu-bar notice appeared (the notice as it was)"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_SHOTS: ${{ env.SHOTS }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/notice-diagnostics.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+            -only-testing:ThreadbackUITests/NoticeDiagnosticsUITests -resultBundlePath "$OUT/NoticeDiagnostics.xcresult" | tee "$RES/08e-notice-diagnostics.txt"
+
       # What the app itself recorded during the lifecycle tests (Debug builds only): every
       # launch, close request, sheet and reopen, with the process id.
       - name: "Lifecycle: the app's own trace"

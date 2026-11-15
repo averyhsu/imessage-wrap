@@ -88,6 +88,59 @@ class ThreadbackUITestCase: XCTestCase {
         return true
     }
 
+    /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
+    func reopen() {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
+        guard let url = running?.bundleURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        let done = expectation(description: "opened")
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            if let error { print("WRAPPED_NOTE reopen error: \(error)") }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 20)
+    }
+
+    /// Onboarding with one chat, close, Add a chat, a second chat, close, reopen: how many
+    /// menu-bar notices appeared, and what is on the status window at the end.
+    func twoChatWalk(_ app: XCUIApplication) -> (notices: Int, sheetsOverStatus: Int, turnedOff: Bool) {
+        var notices = 0
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        if dismissMenuBarNotice(app, timeout: 10, "walk, first close") { notices += 1 }
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(app, "status.addChat").waitForExistence(timeout: 15))
+        if app.sheets.count > 0, dismissMenuBarNotice(app, timeout: 1, "walk, after reopen") { notices += 1 }
+        element(app, "status.addChat").click()
+        guard element(app, "chat.turnOn.1").waitForExistence(timeout: 15) else { return (notices, app.sheets.count, false) }
+        turnOnChat(app, 1)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        sleep(2)
+        let beforeDone = app.sheets.count
+        element(app, "onboarding.done").click()
+        sleep(2)
+        reopen()
+        _ = element(app, "status.last.1").waitForExistence(timeout: 15)
+        sleep(1)
+        let over = app.sheets.count
+        note("walk: \(notices) notice(s) dismissed; sheets after the second chat's consent \(beforeDone); sheets over the status window \(over)")
+        if over > 0 {
+            shootWindow(app, "status-9-notice-over-status")
+            if dismissMenuBarNotice(app, timeout: 1, "walk, over the status window") { notices += 1 }
+        }
+        element(app, "status.turnOff.1").click()
+        let turnedOff = element(app, "status.turnOffNote").waitForExistence(timeout: 10)
+        return (notices, over, turnedOff)
+    }
+
     func launch(_ arguments: [String]) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = ["-TBReportDir", reportDir] + arguments
@@ -220,19 +273,6 @@ final class OnboardingUITests: ThreadbackUITestCase {
 
 /// The lifecycle: never running invisibly by surprise.
 final class LifecycleUITests: ThreadbackUITestCase {
-    /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
-    func reopen() {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
-        guard let url = running?.bundleURL else { return }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        let done = expectation(description: "opened")
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-            if let error { print("WRAPPED_NOTE reopen error: \(error)") }
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 20)
-    }
 
     /// More than one chat: Add a chat, two rows, turn one off, Pause all.
     func test5_TwoChatsAddTurnOffPause() throws {
@@ -273,6 +313,18 @@ final class LifecycleUITests: ThreadbackUITestCase {
         element(app, "status.quit").click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15))
     }
+
+    /// Test 8: a second close request while the notice is up (as a double click on Done
+    /// sends) still gives one notice, and nothing is left on the window for later.
+    func test8_ASecondCloseRequestNeverStacksASecondNotice() throws {
+        let app = try setUpFixture(extra: ["-TBDoubleClose", "YES"])
+        let walk = twoChatWalk(app)
+        XCTAssertEqual(walk.notices, 1, "one notice per install, whatever the close requests")
+        XCTAssertEqual(walk.sheetsOverStatus, 0, "no notice over the status window later")
+        XCTAssertTrue(walk.turnedOff, "Turn off works after the walk")
+        app.terminate()
+    }
+
 
     private func setUpFixture(reset: Bool = true, extra: [String] = []) throws -> XCUIApplication {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
@@ -340,33 +392,41 @@ final class LifecycleUITests: ThreadbackUITestCase {
         turnOnChat(app, 0)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
 
-        // A second copy, launched with the flag that would wipe every setting.
+        // A second copy, launched with the flag that would wipe every setting. The copies are
+        // followed by process id: XCTest's own handle can switch to the second copy.
         let bundle = "io.github.averyhsu.threadback.mac"
-        let url = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.bundleURL)
+        let running = { NSRunningApplication.runningApplications(withBundleIdentifier: bundle).filter { !$0.isTerminated } }
+        let first = try XCTUnwrap(running().first)
+        XCTAssertEqual(running().count, 1)
+        let url = try XCTUnwrap(first.bundleURL)
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
         configuration.arguments = ["-TBResetOnboarding", "YES"]
+        var secondPid: pid_t = 0
         let opened = expectation(description: "second copy launched")
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { second, error in
             if let error { print("WRAPPED_NOTE second copy error: \(error)") }
+            secondPid = second?.processIdentifier ?? 0
             opened.fulfill()
         }
         wait(for: [opened], timeout: 30)
-        var copies = 0
-        var most = 0
-        for _ in 0..<20 {
-            copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).filter { !$0.isTerminated }.count
-            most = max(most, copies)
-            if copies == 1 && most == 2 { break }
-            sleep(1)
+        var secondGone = false
+        for _ in 0..<40 {
+            secondGone = secondPid != 0 && kill(secondPid, 0) != 0
+            if secondGone { break }
+            usleep(500_000)
         }
-        note("single instance: at most \(most) copies running, \(copies) after the second launch")
-        XCTAssertEqual(copies, 1, "the second copy quit")
-        XCTAssertNotEqual(app.state, .notRunning, "the first copy still runs")
-        XCTAssertTrue(app.windows.firstMatch.exists, "with its window")
-        app.terminate()
+        let firstAlive = kill(first.processIdentifier, 0) == 0
+        note("single instance: first copy pid \(first.processIdentifier) alive \(firstAlive); second copy pid \(secondPid) quit \(secondGone); copies now \(running().count)")
+        XCTAssertTrue(secondGone, "the second copy quit")
+        XCTAssertTrue(firstAlive, "the first copy still runs")
+        XCTAssertEqual(running().map(\.processIdentifier), [first.processIdentifier], "only the first copy is left")
 
-        // The second copy changed nothing: the chat is still on after a relaunch.
+        // Quit the first copy, then open Threadback again: the chat is still on, so the
+        // second copy changed nothing.
+        _ = first.terminate()
+        for _ in 0..<30 where kill(first.processIdentifier, 0) == 0 { usleep(500_000) }
+        if kill(first.processIdentifier, 0) == 0 { _ = first.forceTerminate() }
         let again = try setUpFixture(reset: false)
         let title = element(again, "status.title")
         XCTAssertTrue(title.waitForExistence(timeout: 30))
@@ -427,6 +487,24 @@ final class LifecycleUITests: ThreadbackUITestCase {
         element(app, "status.quit").click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Quit Threadback in the window quits")
     }
+}
+
+/// Diagnostics for run 43710352298 (not part of the pass/fail gate): the menu-bar notice as
+/// it was then (-TBNoticeLegacy), with and without a second close request, to show which
+/// sequence leaves a notice over the status window after the second chat is turned on.
+final class NoticeDiagnosticsUITests: ThreadbackUITestCase {
+    private func run(_ extra: [String], _ label: String) throws {
+        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
+        let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
+                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
+                          "-TBTimeZone", "America/Los_Angeles"] + extra)
+        let walk = twoChatWalk(app)
+        note("diagnostic \(label): notices \(walk.notices), sheets over the status window \(walk.sheetsOverStatus), Turn off worked \(walk.turnedOff)")
+        app.terminate()
+    }
+
+    func testLegacyNoticeOneCloseRequest() throws { try run(["-TBNoticeLegacy", "YES"], "legacy notice, one close request") }
+    func testLegacyNoticeTwoCloseRequests() throws { try run(["-TBNoticeLegacy", "YES", "-TBDoubleClose", "YES"], "legacy notice, two close requests") }
 }
 
 /// Proof 6: the Open panel instead of Full Disk Access, on the runner's real home folder.

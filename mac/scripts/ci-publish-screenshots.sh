@@ -20,6 +20,7 @@ describe() {
     onboarding-2b-connected) echo "Screen 2 after the folder grant (fixture data in this run): connected, with the optional Contacts step for first names." ;;
     onboarding-3-choose-chat) echo "Screen 3 of 3: choose the chat. Every group chat, most recently active first, with a search field; \"Turn on\" next to each." ;;
     onboarding-3a-consent) echo "Turn on, before anything is on: the whole statement of what a reply is (three messages from your Apple ID, who can trigger it, what the link shows and that anyone it is forwarded to can open it). Nothing is on until Turn on in this sheet." ;;
+    status-9-notice-over-status) echo "Diagnostics only (not the app as shipped): the menu-bar notice as it was before the fix; what is on the status window at the end of the two-chat walk when a notice is left over." ;;
     status-3-replies-changed) echo "A chat turned on when replies carried less: it is not answered until the owner clicks Keep on (or Turn off) in this sheet." ;;
     onboarding-3b-on) echo "Screen 3 after Turn on: the reply everyone in the chat would get (card and text), the login-item switch and Done." ;;
     onboarding-4-menu-bar) echo "The menu-bar item after onboarding (whole screen; best effort)." ;;

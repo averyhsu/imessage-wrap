@@ -599,6 +599,8 @@ final class AppModel: ObservableObject {
     /// answering from the menu bar).
     func finishOnboarding() {
         window?.performClose(nil)
+        // CI diagnostics only: a second close request while the menu-bar notice is up.
+        if DebugOptions.flag("TBDoubleClose") { window?.performClose(nil) }
     }
 
     /// Turn off: forget the chat, stop answering, and do not open at login any more.
