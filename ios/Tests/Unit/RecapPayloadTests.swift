@@ -61,10 +61,18 @@ final class RecapPayloadTests: XCTestCase {
         XCTAssertTrue(recap.summary.subcaption.hasSuffix("messages · Tap to play"))
     }
 
-    func testBundledDemoIsTheVector() throws {
+    /// The bundled sample is the site's demo (`web/js/demo-data.js`): the same chat as the
+    /// vector, with the personality the current rules give it. That its payload is the
+    /// site's demo, byte for byte, is checked by `tests/python/test_ios_demo.py`.
+    func testBundledDemoIsTheSiteDemo() throws {
         let vector = try PayloadVector.load()
-        XCTAssertEqual(DemoRecap.payload, vector.payload)
-        XCTAssertEqual(DemoRecap.recap.summary.totalMessages, 48213)
+        let old = try Recap(payload: vector.payload).summary
+        let demo = DemoRecap.recap.summary
+        XCTAssertEqual(demo.chatName, old.chatName)
+        XCTAssertEqual(demo.periodLabel, old.periodLabel)
+        XCTAssertEqual(demo.totalMessages, 48213)
+        XCTAssertEqual(demo.topSenders, old.topSenders)
+        XCTAssertEqual(demo.personalityTitle, "The Firehose")
         XCTAssertTrue(DemoRecap.recap.isDemo)
     }
 
