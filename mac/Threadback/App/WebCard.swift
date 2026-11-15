@@ -16,6 +16,8 @@ final class WebCard: NSObject, WKNavigationDelegate {
     private var loaded = false
     private var waiting: [() -> Void] = []
     private(set) var lastMilliseconds = 0
+    /// "" when the footer texts of the last card kept apart (CI fails a card otherwise).
+    private(set) var lastFooterProblem = ""
 
     struct Failure: Error, CustomStringConvertible {
         let description: String
@@ -66,13 +68,15 @@ final class WebCard: NSObject, WKNavigationDelegate {
                 return
             }
             webView.callAsyncJavaScript(
-                "return await window.ThreadbackCard.render(stats, live);",
+                "const url = await window.ThreadbackCard.render(stats, live); return [url, window.ThreadbackCard.footerProblem()];",
                 arguments: ["stats": statsJSON, "live": MacConfig.storySiteIsLive],
                 in: nil, in: .page
             ) { result in
                 switch result {
                 case .success(let value):
-                    guard let url = value as? String, let comma = url.firstIndex(of: ","),
+                    let pair = value as? [Any]
+                    self.lastFooterProblem = pair?.count == 2 ? (pair?[1] as? String ?? "") : "the card page gave no footer check"
+                    guard let url = pair?.first as? String, let comma = url.firstIndex(of: ","),
                           let data = Data(base64Encoded: String(url[url.index(after: comma)...])),
                           !data.isEmpty else {
                         done(.failure(Failure(description: "the card page returned no image")))

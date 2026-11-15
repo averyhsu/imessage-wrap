@@ -179,7 +179,8 @@ enum DebugCLI {
             do {
                 let png = try WebCard.shared.png(statsJSON: item.1)
                 let ms = WebCard.shared.lastMilliseconds
-                let problem = WebCard.check(png)
+                let footer = WebCard.shared.lastFooterProblem
+                let problem = WebCard.check(png) ?? (footer.isEmpty ? nil : footer)
                 let limit = index == 0 ? budget * 3 : budget   // the first one also loads the page and the font
                 let slow = ms > limit
                 if problem != nil || slow { failures += 1 }
