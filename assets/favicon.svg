@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="12%" r="95%">
+      <stop offset="0" stop-color="#3a1d66"/>
+      <stop offset="1" stop-color="#120a22"/>
+    </radialGradient>
+    <linearGradient id="bubble" x1="0.08" y1="0.95" x2="0.95" y2="0.08">
+      <stop offset="0" stop-color="#4a8cff"/>
+      <stop offset="0.5" stop-color="#a04dff"/>
+      <stop offset="1" stop-color="#f24d97"/>
+    </linearGradient>
+  </defs>
+  <rect id="plate" width="64" height="64" rx="14" fill="url(#bg)"/>
+  <path fill="url(#bubble)" d="M21.500 12.500h21c6.600 0 12 5.400 12 12v10.500c0 6.600-5.400 12-12 12H26L12.500 55l3.800-9.600C12.300 43.400 9.500 39.500 9.500 35V24.500c0-6.600 5.400-12 12-12z"/>
+  <rect x="19.500" y="30.500" width="6" height="9.500" rx="3" fill="#fff"/>
+  <rect x="29" y="25" width="6" height="15" rx="3" fill="#fff"/>
+  <rect x="38.500" y="19.500" width="6" height="20.500" rx="3" fill="#fff"/>
+</svg>
