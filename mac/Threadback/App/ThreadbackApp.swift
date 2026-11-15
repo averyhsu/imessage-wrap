@@ -262,7 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         let told = UserDefaults.standard.bool(forKey: toldKey)
         Trace.note("close asked: chat on \(model.chatIsOn), told \(told), notice pending \(noticePending), sheets on the window \(sender.sheets.count)")
-        if DebugOptions.flag("TBNoticeLegacy") { return legacyShouldClose(sender, told: told) }
         if noticePending { return false }          // the notice is up: its buttons decide
         guard model.chatIsOn, !told else { return true }
         // The first time with a chat on: say where Threadback goes before the window closes.
@@ -286,28 +285,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return false
     }
 
-    /// CI diagnostics only (-TBNoticeLegacy): the notice as it was before run 43710352298,
-    /// told only once OK is clicked and with nothing against a second one, to show how a
-    /// second close request stacks a second notice.
-    private func legacyShouldClose(_ sender: NSWindow, told: Bool) -> Bool {
-        guard model.chatIsOn, !told else { return true }
-        let alert = NSAlert()
-        alert.messageText = "Threadback keeps answering from the menu bar."
-        alert.informativeText = "To stop it, open Threadback again (from Applications) and click Turn off or Quit Threadback."
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "Quit Threadback")
-        alert.beginSheetModal(for: sender) { response in
-            UserDefaults.standard.set(true, forKey: self.toldKey)
-            Trace.note("menu-bar notice (legacy) answered: \(response == .alertSecondButtonReturn ? "Quit" : "OK")")
-            if response == .alertSecondButtonReturn {
-                NSApp.terminate(nil)
-            } else {
-                sender.close()
-            }
-        }
-        return false
-    }
-
     func windowWillClose(_ notification: Notification) {
         Trace.note("window closes: chat on \(model.chatIsOn)")
         if model.chatIsOn {
@@ -317,10 +294,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    /// Settings written just before quitting (the notice's Quit button sets "told" and quits
-    /// in the same moment) must reach the preferences store before the process ends.
+    /// Settings written just before quitting (the notice counts as shown, then its Quit
+    /// button quits at once) must reach the preferences store before the process ends.
     func applicationWillTerminate(_ notification: Notification) {
-        if DebugOptions.flag("TBNoticeLegacy") { return }   // CI diagnostics: the old behaviour
         let flushed = UserDefaults.standard.synchronize()
         Trace.note("quitting: settings flushed \(flushed), told about the menu bar \(UserDefaults.standard.bool(forKey: toldKey))")
     }

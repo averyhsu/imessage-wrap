@@ -58,7 +58,6 @@ sections 13 and 15 of [MAC-APP-RESULTS.txt](MAC-APP-RESULTS.txt).
 | [`status-1-two-chats`](status-1-two-chats.jpg) | Opening Threadback with two chats on: each with its last reply, Play the story and Turn off; Add a chat, Pause all, Quit, Check for updates. |
 | [`status-2-one-off-paused`](status-2-one-off-paused.jpg) | After turning one chat off and clicking Pause all. |
 | [`status-3-replies-changed`](status-3-replies-changed.jpg) | A chat turned on when replies carried less: it is not answered until the owner clicks Keep on (or Turn off) in this sheet. |
-| [`status-9-notice-over-status`](status-9-notice-over-status.jpg) | Diagnostics only (not the app as shipped): the menu-bar notice as it was before the fix; what is on the status window at the end of the two-chat walk when a notice is left over. |
 | [`story-1-playing`](story-1-playing.jpg) | Play the story: the bundled web story for the chosen chat, in its own window, on this Mac only. |
 | [`story-2-next`](story-2-next.jpg) | The story after pressing the right arrow key: the next slide. |
 | [`system-1-messages-first-launch`](system-1-messages-first-launch.jpg) | The runner's Messages app on first launch (not signed in), captured with screencapture. |
@@ -170,12 +169,6 @@ After turning one chat off and clicking Pause all.
 A chat turned on when replies carried less: it is not answered until the owner clicks Keep on (or Turn off) in this sheet.
 
 <img src="status-3-replies-changed.jpg" width="560" alt="status-3-replies-changed">
-
-### status-9-notice-over-status
-
-Diagnostics only (not the app as shipped): the menu-bar notice as it was before the fix; what is on the status window at the end of the two-chat walk when a notice is left over.
-
-<img src="status-9-notice-over-status.jpg" width="560" alt="status-9-notice-over-status">
 
 ### lifecycle-0-dock-and-menu
 

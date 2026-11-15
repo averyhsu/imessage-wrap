@@ -147,10 +147,7 @@ class ThreadbackUITestCase: XCTestCase {
         sleep(1)
         let over = app.sheets.count
         note("walk: \(notices) notice(s) dismissed; sheets after the second chat's consent \(beforeDone); sheets over the status window \(over)")
-        if over > 0 {
-            shootWindow(app, "status-9-notice-over-status")
-            if dismissMenuBarNotice(app, timeout: 1, "walk, over the status window") { notices += 1 }
-        }
+        if over > 0, dismissMenuBarNotice(app, timeout: 1, "walk, over the status window") { notices += 1 }
         element(app, "status.turnOff.1").click()
         let turnedOff = element(app, "status.turnOffNote").waitForExistence(timeout: 10)
         return (notices, over, turnedOff)
@@ -340,6 +337,39 @@ final class LifecycleUITests: ThreadbackUITestCase {
         app.terminate()
     }
 
+    /// Test 9: the notice answered with its other button, Quit Threadback. It still counts
+    /// as shown: after opening Threadback again and turning on a second chat, closing the
+    /// window shows no second notice and leaves nothing over the status window.
+    func test9_QuitOnTheNoticeStillCountsAsShown() throws {
+        let app = try setUpFixture()
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the first close explains the menu bar")
+        waitUntilSettled(sheet)
+        sheet.buttons["Quit Threadback"].click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Quit Threadback in the notice quits")
+        let again = try setUpFixture(reset: false)
+        XCTAssertTrue(element(again, "status.addChat").waitForExistence(timeout: 30), "opened again: the chat is still on")
+        XCTAssertEqual(again.sheets.count, 0, "no notice on opening again")
+        element(again, "status.addChat").click()
+        XCTAssertTrue(element(again, "chat.turnOn.1").waitForExistence(timeout: 15))
+        turnOnChat(again, 1)
+        XCTAssertTrue(element(again, "onboarding.ready").waitForExistence(timeout: 30))
+        element(again, "onboarding.done").click()
+        XCTAssertFalse(dismissMenuBarNotice(again, timeout: 4, "after Quit on the notice"), "the menu-bar notice appears only once per install")
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(again, "status.last.1").waitForExistence(timeout: 15), "two chats are listed")
+        XCTAssertEqual(again.sheets.count, 0, "no sheet over the status window")
+        again.terminate()
+    }
 
     private func setUpFixture(reset: Bool = true, extra: [String] = []) throws -> XCUIApplication {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
@@ -501,123 +531,6 @@ final class LifecycleUITests: ThreadbackUITestCase {
         note("lifecycle: opened again -> \(text(of: title)); uninstall line present: \(element(app, "status.uninstall").exists)")
         element(app, "status.quit").click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Quit Threadback in the window quits")
-    }
-}
-
-/// Diagnostics for run 43710352298 (not part of the pass/fail gate): the menu-bar notice as
-/// it was then (-TBNoticeLegacy), with and without a second close request, to show which
-/// sequence leaves a notice over the status window after the second chat is turned on.
-final class NoticeDiagnosticsUITests: ThreadbackUITestCase {
-    private func run(_ extra: [String], _ label: String) throws {
-        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
-        let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
-                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
-                          "-TBTimeZone", "America/Los_Angeles"] + extra)
-        let walk = twoChatWalk(app)
-        note("diagnostic \(label): notices \(walk.notices), sheets over the status window \(walk.sheetsOverStatus), Turn off worked \(walk.turnedOff)")
-        app.terminate()
-    }
-
-    func testLegacyNoticeOneCloseRequest() throws { try run(["-TBNoticeLegacy", "YES"], "legacy notice, one close request") }
-    func testLegacyNoticeTwoCloseRequests() throws { try run(["-TBNoticeLegacy", "YES", "-TBDoubleClose", "YES"], "legacy notice, two close requests") }
-
-    /// The first notice answered with its other button, Quit Threadback (where a click aimed
-    /// at OK lands while the sheet is still sliding in), then Threadback opened again and the
-    /// rest of the old test5 sequence: is "told" still set, and what is on the status window?
-    private func quitThenWalk(_ extra: [String], _ label: String) throws {
-        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
-        let args = ["-TBDatabase", fixture + "/mac/chat.db", "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara",
-                    "-TBNoAutomation", "YES", "-TBTimeZone", "America/Los_Angeles"] + extra
-        let app = launch(["-TBResetOnboarding", "YES"] + args)
-        var steps: [String] = []
-        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
-        element(app, "onboarding.continue").click()
-        element(app, "onboarding.connect").click()
-        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
-        element(app, "onboarding.toChats").click()
-        turnOnChat(app, 0)
-        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
-        element(app, "onboarding.done").click()
-        let sheet = app.sheets.firstMatch
-        steps.append("notice shown: \(sheet.waitForExistence(timeout: 10))")
-        waitUntilSettled(sheet)
-        sheet.buttons["Quit Threadback"].click()
-        steps.append("quit: \(app.wait(for: .notRunning, timeout: 15))")
-        let again = launch(args)
-        steps.append("status after opening again: \(element(again, "status.addChat").waitForExistence(timeout: 30))")
-        element(again, "status.addChat").click()
-        if element(again, "chat.turnOn.1").waitForExistence(timeout: 15) {
-            turnOnChat(again, 1)
-            _ = element(again, "onboarding.ready").waitForExistence(timeout: 30)
-            element(again, "onboarding.done").click()
-            sleep(2)
-            steps.append("sheets after the second close: \(again.sheets.count)")
-            reopen()
-            steps.append("two chats listed: \(element(again, "status.last.1").waitForExistence(timeout: 15))")
-            sleep(1)
-            let over = again.sheets.count
-            steps.append("sheets over the status window: \(over)")
-            if over > 0 {
-                let words = again.sheets.firstMatch.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
-                steps.append("it says: \(String(words.prefix(60)))")
-                if extra.contains("-TBNoticeLegacy") { shootWindow(again, "status-9-notice-over-status") }
-            }
-        }
-        note("diagnostic \(label): " + steps.joined(separator: "; "))
-        again.terminate()
-    }
-
-    func testLegacyNoticeQuitThenOpenAgain() throws { try quitThenWalk(["-TBNoticeLegacy", "YES"], "legacy notice answered with Quit, then opened again") }
-    func testNoticeQuitThenOpenAgain() throws { try quitThenWalk([], "current notice answered with Quit, then opened again") }
-
-    /// The first notice is left unanswered, as if the OK click had not reached it, and the
-    /// rest of the old test5 sequence runs as it did: does each step still work, and what is
-    /// on the status window at the end?
-    func testLegacyNoticeFirstOKNotReceived() throws {
-        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
-        let app = launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
-                          "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara", "-TBNoAutomation", "YES",
-                          "-TBTimeZone", "America/Los_Angeles", "-TBNoticeLegacy", "YES"])
-        var steps: [String] = []
-        func step(_ what: String, _ ok: Bool) { steps.append("\(what): \(ok ? "yes" : "NO")") }
-        step("welcome", element(app, "onboarding.continue").waitForExistence(timeout: 30))
-        element(app, "onboarding.continue").click()
-        element(app, "onboarding.connect").click()
-        step("connected", element(app, "onboarding.toChats").waitForExistence(timeout: 30))
-        element(app, "onboarding.toChats").click()
-        turnOnChat(app, 0)
-        step("first chat on", element(app, "onboarding.ready").waitForExistence(timeout: 30))
-        element(app, "onboarding.done").click()
-        step("notice shown at the first close", app.sheets.firstMatch.waitForExistence(timeout: 10))
-        // No OK click here.
-        sleep(2)
-        reopen()
-        step("status after reopen", element(app, "status.addChat").waitForExistence(timeout: 15))
-        steps.append("sheets after reopen: \(app.sheets.count)")
-        element(app, "status.addChat").click()
-        step("Add a chat opened the chooser", element(app, "chat.isOn.0").waitForExistence(timeout: 15))
-        if element(app, "chat.turnOn.1").exists {
-            element(app, "chat.turnOn.1").click()
-            sleep(2)
-            let sheet = app.sheets.firstMatch
-            let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
-            steps.append("sheet after Turn on: \(String(words.prefix(80)))")
-            if sheet.buttons["Turn on"].exists { sheet.buttons["Turn on"].click(); steps.append("clicked Turn on in the consent sheet") }
-        }
-        let ready = element(app, "onboarding.ready").waitForExistence(timeout: 10)
-        step("second chat ready", ready)
-        if ready { element(app, "onboarding.done").click() }
-        sleep(2)
-        reopen()
-        step("two chats listed", element(app, "status.last.1").waitForExistence(timeout: 10))
-        steps.append("sheets over the status window: \(app.sheets.count)")
-        if app.sheets.count > 0 { shootWindow(app, "status-9-notice-over-status") }
-        if element(app, "status.turnOff.1").exists {
-            element(app, "status.turnOff.1").click()
-            step("Turn off worked", element(app, "status.turnOffNote").waitForExistence(timeout: 5))
-        }
-        note("diagnostic first OK not received: " + steps.joined(separator: "; "))
-        app.terminate()
     }
 }
 
