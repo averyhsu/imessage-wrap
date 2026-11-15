@@ -42,11 +42,21 @@ test('pick and personaEmoji: only own entries, never Object.prototype', () => {
   }
   assert.equal(F.personaEmoji('night_owls'), '🦉');
   assert.equal(F.personaEmoji('after_hours'), '🌙');
+  assert.equal(F.personaEmoji('daily_ritual'), '📆');
+  assert.equal(F.personaEmoji('round_table'), '⚖️');
+  assert.equal(F.FALLBACK_EMOJI, '✨');
   for (const id of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'custom', '', null, undefined, 7, {}]) {
     const emoji = F.personaEmoji(id);
-    assert.equal(emoji, '💬', String(id));
+    assert.equal(emoji, '✨', String(id));
     assert.equal(typeof emoji, 'string');
   }
+});
+
+test('personaEmoji knows every personality the engines can produce', () => {
+  const Engine = require('../../web/make/engine.js');
+  const ids = Object.keys(Engine._internals.PERSONALITIES);
+  assert.equal(ids.length, 25);
+  for (const id of ids) assert.equal(F.personaEmoji(id), Engine._internals.PERSONALITIES[id][0], id);
 });
 
 test('compact: short numbers for tight spaces', () => {

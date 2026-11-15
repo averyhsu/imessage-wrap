@@ -39,11 +39,11 @@ against the real API).
 | Piece | What has been seen working | Where |
 |-------|----------------------------|-------|
 | **Mac app** (`/wrapped`) | **On the owner's own Mac (macOS 26.7.1, 2026-11-15):** installed from the disk image and set up by clicking only; read the real Messages history after one folder pick with no Full Disk Access; answered a real `/wrapped` in a group chat with the picture and the text, and found both afterwards in the Messages database with no error. In CI on a macOS 26 runner: builds; numbers and text reply byte-identical to the command-line tool on five invented chats; the link it builds decodes back to the same recap and the story plays from it in the app's own window; the download is fetched and opened the way a browser and a double-click would; the sender refuses to run. An independent review then found that Pause did not pause, among other faults; all were fixed before this version was merged and are covered by tests ([DECISIONS](docs/DECISIONS.md) D17). | `mac/`, [guide page](https://averyhsu.github.io/imessage-wrap/mac/), [write-up](docs/MAC-APP.md), [screenshots](docs/screenshots/mac/) |
-| **Story** (the tap-through recap) | All 12 slides from invented data in a real browser, 3,147 automated checks including 18 different recaps at 6 screen sizes; opened from a link built by the command-line tool with matching numbers; zero outside requests; hostile links do nothing. On the live site: the demo and a recap link were driven in a browser on 2026-11-15. The suite also passes in WebKit (the engine behind Safari, on Linux and on macOS) and in Firefox. | `web/`, [screenshots](docs/screenshots/web/), [recording](docs/media/demo-story.mp4) |
+| **Story** (the tap-through recap) | All 12 slides from invented data in a real browser, 3,986 automated checks across more than twenty different recaps and six screen sizes; each slide's headline is picked from a set of patterns by the chat's own numbers, and a check fails if any pattern is never shown; opened from a link built by the command-line tool with matching numbers; zero outside requests; hostile links do nothing. On the live site: the demo and a recap link were driven in a browser on 2026-11-15. The suite also passes in WebKit (the engine behind Safari, on Linux and on macOS) and in Firefox. | `web/`, [screenshots](docs/screenshots/web/), [recording](docs/media/demo-story.mp4) |
 | **Maker page** | 568 checks: the invented Mac database with its write-ahead log, an iPhone backup folder, pasted exports and the sample chat all go from file to chat list to link; the numbers match the Python engine byte for byte; quotes off by default; the preview holds exactly what the link holds. Passes in WebKit and Firefox too, which found one real fault (pressing Create without a name could scroll the name field out of view in WebKit; fixed). Driven on the live site with sample data. | `web/make/`, [screenshots](docs/screenshots/web/) |
-| **Stats engines** (Python + JavaScript) | Byte-identical results on every invented chat, period and time zone in the conformance suite; match a chat whose numbers were worked out by hand and an independent recount by a reviewer. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
+| **Stats engines** (Python + JavaScript) | Byte-identical results on every invented chat, period and time zone in the conformance suite; the personality (25 kinds, each with the number that earned it) and the 15 awards are held to a shared set of cases worked out by hand; match a chat whose numbers were worked out by hand and an independent recount by a reviewer. On a macOS runner they decode text archived by Apple's own code. | `wrapped/`, `web/make/engine.js`, `tests/` |
 | **Command-line tool and helper** | `wrapped chats`, `stats`, `link` on the invented database; the Terminal version of `/wrapped` up to the moment of sending, against a fake Messages; its installer runs for real on a clean macOS runner. | `wrapped/`, [guide](docs/MAC.md) |
-| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. | `ios/`, [screenshots](docs/screenshots/ios/) |
+| **iPhone app** | Builds on a macOS runner with no signing; unit and UI tests pass in the iOS Simulator; plays the real story; opens recap links. Its built-in sample is the site's current demo, and a test fails if the two ever differ. | `ios/`, [screenshots](docs/screenshots/ios/) |
 | **Messages extension** | In the Simulator's real Messages app, driven by UI tests: appears in the app drawer, sends a recap card ("Delivered"), a tap plays the story inside Messages, close returns to the launcher; also from the receiving side of the simulated chat. | `ios/MessagesExtension/` |
 
 CI runs on `main`: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac app`, plus
@@ -84,6 +84,11 @@ None of this has been claimed as working. It needs real devices.
    System Settings were not (check 4).
 7. **The numbers on a real chat.** The app has read one real database and produced a
    recap. Nobody has compared its numbers with a hand count of a real chat.
+8. **Whether the titles fit real chats.** The personality and the headlines are now picked
+   by what the chat's numbers show ([DECISIONS](docs/DECISIONS.md) D18). The bars a chat
+   must pass ("a quarter of messages after midnight" for Night Owls, and so on) are first
+   guesses, checked only against invented chats. Say what your chat gets and whether it
+   fits (check 2).
 
 **One failed test run whose cause was not found.** After the merge, one CI run of the Mac
 app failed. The one-time message "Threadback keeps answering from the menu bar" came up a
@@ -97,26 +102,34 @@ saved before the app quits), and test builds now record every window event, so a
 would name its cause. On a real Mac the worst case is seeing that message twice and
 clicking OK twice. Nothing is sent because of it.
 
+**One slow iPhone test run.** While this change was in CI, one run of the iPhone app's
+tests failed: a test that waits up to 30 seconds for the story's very first start in the
+Simulator gave up. The same recap then started in 0.3 seconds in the same test, the other
+69 tests passed, and that whole run was two to five times slower than usual. The next run
+passed. Measured here, the story's first start is about 18% heavier than before (five more
+layout passes for the new lines), which is not enough to explain it. GitHub does not let
+this session re-run a job, so there is one passing run after it, not several.
+
 **Everything else**
 
-8. **The link on a real phone**: whether a preview card (and its short video) appears,
+9. **The link on a real phone**: whether a preview card (and its short video) appears,
    whether the part after `#` survives delivery, and how a long link looks in a group with
    Android phones (check 2).
-9. **Safari itself.** The story, the maker and the Mac guide pass their suites in WebKit,
+10. **Safari itself.** The story, the maker and the Mac guide pass their suites in WebKit,
    the engine behind Safari, and in Firefox. That is the engine in a test harness, not the
    Safari app on a real iPhone or Mac; nobody has opened a recap there yet (check 2 does).
    In Firefox one layout check is relaxed for emoji in the chat's name, and nobody has
    looked at that screen by eye.
-10. **The maker page on a real Mac.** Whether Safari and Chrome let you pick or drag
+11. **The maker page on a real Mac.** Whether Safari and Chrome let you pick or drag
     `chat.db` out of `~/Library/Messages` without extra permissions (check A).
-11. **The Messages extension between two real phones**, in a group, and for people without
+12. **The Messages extension between two real phones**, in a group, and for people without
     the app. In the Simulator a *received* live bubble gets no data from Messages, so the
     app sends a plain card instead; real phones may differ (check D).
-12. **Making a recap with only an iPhone.** The Shortcut recipe has never been run (check E).
-13. **Encrypted iPhone backups** are detected and explained, not read.
-14. **AI-written awards** (`--ai`, off by default, command-line helper only): tested with a
+13. **Making a recap with only an iPhone.** The Shortcut recipe has never been run (check E).
+14. **Encrypted iPhone backups** are detected and explained, not read.
+15. **AI-written awards** (`--ai`, off by default, command-line helper only): tested with a
     fake API only.
-15. **Large histories in the browser.** The engines have been through synthetic runs of
+16. **Large histories in the browser.** The engines have been through synthetic runs of
     500,000 rows; a real multi-year database has been through the Mac app on the owner's
     Mac, but not through the browser maker.
 
@@ -138,6 +151,9 @@ whose members will not mind, type `/wrapped` from your phone.
   sent, written, or not confirmed?
 - How does the link look in the thread: a card with a picture, or a long plain link?
 - Tap it on your phone. Does the story open with your chat's numbers?
+- Which personality does it give your chat, and does it fit? Do the headlines on the
+  slides match what you know about the chat? If one is off, say which and what the chat is
+  really like.
 - On the last slide tap **Share card**. Does the share sheet offer the image?
 
 **3. Names.** In the app, allow Contacts when asked (or in System Settings → Privacy &

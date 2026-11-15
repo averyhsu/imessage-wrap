@@ -326,6 +326,28 @@ def peak_hour(stats: dict) -> Optional[int]:
     return None
 
 
+# docs/SCHEMA.md section 3. A recap carries its own emoji; this table is for stats made
+# before it did. Ids are open-ended: one this table does not know gets the fallback.
+PERSONALITY_EMOJI = {
+    "quiet_ones": "🤫", "one_person_show": "🎤", "dynamic_duo": "👯", "round_table": "⚖️",
+    "night_owls": "🦉", "weekend_warriors": "🎉", "weekday_regulars": "💼", "always_on": "🔋",
+    "daily_ritual": "📆", "flash_mob": "⚡", "seasonal_special": "🏖️", "firehose": "🚿",
+    "slow_burn": "🕯️", "photo_dump": "📸", "hype_squad": "🙌", "comedy_club": "😂",
+    "love_fest": "💖", "essayists": "📝", "rapid_fire": "🏓",
+    "early_birds": "🐦", "morning_meeting": "☕", "lunch_break": "🥪", "afternoon_slackers": "😎",
+    "dinner_table": "🍽️", "after_hours": "🌙",
+}
+FALLBACK_EMOJI = "✨"
+
+
+def personality_emoji(personality: object) -> str:
+    """The personality's own emoji, else the one for its id, else the fallback."""
+    if not isinstance(personality, dict):
+        personality = {}
+    return (clean(personality.get("emoji"), 12)
+            or PERSONALITY_EMOJI.get(str(personality.get("id")), FALLBACK_EMOJI))
+
+
 def by_hour(stats: dict) -> List[int]:
     """24 ints from ``by_hour``, tolerating the legacy ``messages_by_hour`` dict."""
     h = stats.get("by_hour")

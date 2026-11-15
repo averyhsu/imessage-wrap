@@ -291,12 +291,27 @@
 
   // ---- text.py ------------------------------------------------------ //
 
+  // fmt.PERSONALITY_EMOJI and fmt.personality_emoji (docs/SCHEMA.md section 3)
   var PERSONALITY_EMOJI = {
-    quiet_ones: '\uD83E\uDD2B', night_owls: '\uD83E\uDD89', weekend_warriors: '\uD83C\uDF89',
-    always_on: '\uD83D\uDD0B', early_birds: '\uD83D\uDC26', morning_meeting: '\u2615',
-    lunch_break: '\uD83E\uDD6A', afternoon_slackers: '\uD83D\uDE0E', dinner_table: '\uD83C\uDF7D\uFE0F',
-    after_hours: '\uD83C\uDF19'
+    quiet_ones: '\uD83E\uDD2B', one_person_show: '\uD83C\uDFA4', dynamic_duo: '\uD83D\uDC6F',
+    round_table: '\u2696\uFE0F', night_owls: '\uD83E\uDD89', weekend_warriors: '\uD83C\uDF89',
+    weekday_regulars: '\uD83D\uDCBC', always_on: '\uD83D\uDD0B', daily_ritual: '\uD83D\uDCC6',
+    flash_mob: '\u26A1', seasonal_special: '\uD83C\uDFD6\uFE0F', firehose: '\uD83D\uDEBF',
+    slow_burn: '\uD83D\uDD6F\uFE0F', photo_dump: '\uD83D\uDCF8', hype_squad: '\uD83D\uDE4C',
+    comedy_club: '\uD83D\uDE02', love_fest: '\uD83D\uDC96', essayists: '\uD83D\uDCDD',
+    rapid_fire: '\uD83C\uDFD3',
+    early_birds: '\uD83D\uDC26', morning_meeting: '\u2615', lunch_break: '\uD83E\uDD6A',
+    afternoon_slackers: '\uD83D\uDE0E', dinner_table: '\uD83C\uDF7D\uFE0F', after_hours: '\uD83C\uDF19'
   };
+  var FALLBACK_EMOJI = '\u2728';
+
+  function personalityEmoji(personality) {
+    if (!isDict(personality)) personality = {};
+    var own = clean(personality.emoji, 12);
+    if (own) return own;
+    var key = personality.id === null || personality.id === undefined ? 'None' : str(personality.id);
+    return Object.prototype.hasOwnProperty.call(PERSONALITY_EMOJI, key) ? PERSONALITY_EMOJI[key] : FALLBACK_EMOJI;
+  }
   var MEDALS = ['\uD83E\uDD47', '\uD83E\uDD48', '\uD83E\uDD49'];
 
   function isDict(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
@@ -335,11 +350,12 @@
     var title = clean(personality.title, 40);
     var peak = peakHour(stats);
     if (title) {
-      var key = str(personality.id === undefined ? null : personality.id);
-      if (personality.id === null || personality.id === undefined) key = 'None';
-      var emoji = Object.prototype.hasOwnProperty.call(PERSONALITY_EMOJI, key) ? PERSONALITY_EMOJI[key] : '\u2728';
-      var tail = peak !== null ? ' \u2014 peak hour ' + hour12(peak) : '';
-      lines.push(emoji + ' You are ' + title + tail);
+      // "{emoji} You are {title}. {reason}." Stats made before there was a reason get
+      // the peak hour as the reason.
+      var reason = clean(personality.reason, 80).replace(/\.+$/, '');
+      if (!reason && peak !== null) reason = 'Peak hour: ' + hour12(peak);
+      var you = personalityEmoji(personality) + ' You are ' + title + '.';
+      lines.push(reason ? you + ' ' + reason + '.' : you);
     } else if (peak !== null) {
       lines.push('\u23F0 Peak hour: ' + hour12(peak));
     }

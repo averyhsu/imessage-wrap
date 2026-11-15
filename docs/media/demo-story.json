@@ -6,61 +6,61 @@
     {
       "id": "cover",
       "start": 0,
-      "seconds": 5.2
+      "seconds": 3.6666666666666665
     },
     {
       "id": "total",
-      "start": 5.2,
+      "start": 3.6666666666666665,
       "seconds": 6.5
     },
     {
       "id": "clock",
-      "start": 11.7,
+      "start": 10.166666666666666,
       "seconds": 7
     },
     {
       "id": "persona",
-      "start": 18.7,
-      "seconds": 7.6
+      "start": 17.166666666666668,
+      "seconds": 5.5
     },
     {
       "id": "late",
-      "start": 26.3,
+      "start": 22.666666666666668,
       "seconds": 6.5
     },
     {
       "id": "week",
-      "start": 32.8,
+      "start": 29.166666666666668,
       "seconds": 6.5
     },
     {
       "id": "year",
-      "start": 39.3,
+      "start": 35.666666666666664,
       "seconds": 6.5
     },
     {
       "id": "senders",
-      "start": 45.8,
+      "start": 42.166666666666664,
       "seconds": 7.5
     },
     {
       "id": "moty",
-      "start": 53.3,
+      "start": 49.666666666666664,
       "seconds": 8
     },
     {
       "id": "taps",
-      "start": 61.3,
+      "start": 57.666666666666664,
       "seconds": 7
     },
     {
       "id": "awards",
-      "start": 68.3,
+      "start": 64.66666666666667,
       "seconds": 8.7
     },
     {
       "id": "sum",
-      "start": 77,
+      "start": 73.36666666666666,
       "seconds": 4.2
     }
   ]

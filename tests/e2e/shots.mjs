@@ -9,7 +9,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, startServer, launch, waitForStory, showSettled, findOverflow, encodePayload } from './lib.mjs';
-import { fixtures } from './fixtures.mjs';
+import { fixtures as recaps, patternFixtures } from './fixtures.mjs';
+
+const fixtures = { ...recaps, ...patternFixtures };
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => {
   const m = /^--([^=]+)(?:=(.*))?$/.exec(a);

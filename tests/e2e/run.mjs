@@ -13,12 +13,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, printNotes, ABORTED, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
-import { fixtures, viewports } from './fixtures.mjs';
+import { fixtures, patternFixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const Codec = require(path.join(WEB, 'js/codec.js'));
 const Config = require(path.join(WEB, 'js/config.js'));
 const Data = require(path.join(WEB, 'js/normalize.js'));
+const Insights = require(path.join(WEB, 'js/insights.js'));
 const vector = require(path.join(ROOT, 'tests/vectors/payload-v1.json'));
 
 const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots');
@@ -147,8 +148,32 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   ok(await page.locator('.landing').isHidden(), 'landing page is hidden while the story plays');
   eq(await page.locator('.seg').count(), 12, 'one progress segment per slide');
 
-  // Auto-advance: the cover lasts about five seconds.
-  await page.waitForFunction(() => WrappedStory.index === 1, null, { timeout: 9000 });
+  // No deliberate waits: the cover and the personality start like every other slide,
+  // with something on screen within about a quarter of a second and everything in place
+  // a second later. (There used to be a typing bubble first, for 1.5 and 2.3 seconds.)
+  eq(await page.locator('#story .typing, #story .cover__typing, #story .persona__typing, #story .a-typing').count(), 0, 'no typing indicator anywhere in the story');
+  const frame = (index, ms, selector) => page.evaluate(([i, t, sel]) => {
+    WrappedStory.goTo(i);
+    WrappedStory.seek(t);
+    return new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+      const nodes = [...document.querySelectorAll('.slide.is-active ' + sel)];
+      resolve({ duration: WrappedStory.duration, opacity: nodes.map((el) => Number(getComputedStyle(el).opacity)) });
+    })));
+  }, [index, ms, selector]);
+  for (const [index, name, first, all, longest] of [
+    [0, 'cover', '.cover__meta', '.cover__meta, .cover__name .w, .cover__label', 4000],
+    [3, 'personality', '.slide__body > .kicker', '.kicker, .persona__emoji, .persona__the, .persona__line, .persona__blurb', 6000],
+  ]) {
+    const early = await frame(index, 250, first);
+    ok(early.opacity.length === 1 && early.opacity[0] > 0, `${name}: its first line is already coming in at 250 ms (opacity ${early.opacity})`);
+    const settled = await frame(index, 1300, all);
+    ok(settled.opacity.length >= 3 && settled.opacity.every((o) => o > 0.99), `${name}: everything is on screen at 1.3 s (${settled.opacity.map((o) => o.toFixed(2))})`);
+    ok(settled.duration > 3000 && settled.duration <= longest, `${name}: the slide is shorter by the wait it lost (${settled.duration} ms)`);
+  }
+  await page.evaluate(() => { WrappedStory.goTo(0); WrappedStory.resume(); });
+
+  // Auto-advance: the cover lasts under four seconds.
+  await page.waitForFunction(() => WrappedStory.index === 1, null, { timeout: 7000 });
   ok(true, 'auto-advances from the cover');
 
   // Hold to pause: time stands still while a finger is down, and lifting does not navigate.
@@ -422,8 +447,8 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
     const seen = texts.join('\n') + '\n' + drawn;
     ok(!/native code|function\s*\w*\s*\(|\[object|undefined|NaN|Infinity|e\+\d/.test(seen), `id "${id}": nothing inherited or malformed is printed on a slide or the card`);
     await showSettled(spy.page, 3);
-    eq(await spy.page.locator('.slide.is-active .persona__emoji').innerText(), '💬', `id "${id}": the personality slide shows the neutral emoji`);
-    ok(drawn.includes('💬') && drawn.includes('The Night Owls'), `id "${id}": so does the share card, next to the title`);
+    eq(await spy.page.locator('.slide.is-active .persona__emoji').innerText(), '✨', `id "${id}": the personality slide shows the neutral emoji`);
+    ok(drawn.includes('✨') && drawn.includes('The Night Owls'), `id "${id}": so does the share card, next to the title`);
     ok(drawn.includes('9,999,999,999') && texts[1].includes('9,999,999,999'), `id "${id}": absurd totals are capped on the slide and on the card`);
     await showSettled(spy.page, 8);
     eq(await spy.page.locator('.slide.is-active .moty__tbs .tb').count(), 5, `id "${id}": an unknown tapback kind becomes a generic badge`);
@@ -720,15 +745,77 @@ await section('file', 'Runs from file:// under the page CSP', async () => {
 });
 
 // ── 6. robustness matrix ───────────────────────────────────────────────────────────────
-await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × ${Object.keys(viewports).length} viewports (+2 with a wide system font), nothing overflows`, async () => {
+// The copy each slide should show for a recap, as web/js/insights.js picks it.
+function expectedCopy(stats) {
+  const c = Insights.pick(Data.normalize(stats));
+  const text = (parts) => (parts || []).map((p) => (typeof p === 'string' ? p : p.b != null ? p.b : p.name)).join('');
+  const out = {};
+  if (c.clock) out.clock = { headline: c.clock.headline, line: text(c.clock.line) };
+  if (c.week) out.week = { headline: c.week.headline, line: text(c.week.line) };
+  if (c.year) out.year = { headline: c.year.headline, line: text(c.year.line) };
+  if (c.senders) out.senders = { headline: c.senders.headline };
+  if (c.late) out.late = { tagline: c.late.tagline, top: c.late.top ? c.late.top.verb.trim() : '' };
+  if (c.moty) out.moty = { line: text(c.moty.line) };
+  if (c.taps) out.taps = { headline: c.taps.headline, line: text(c.taps.line) };
+  if (c.total) out.total = { fact: c.total.fact };
+  return out;
+}
+
+/** What the active slide shows in the places insights.js fills. */
+const copyOnSlide = (page) => page.evaluate(() => {
+  const slide = document.querySelector('.slide.is-active');
+  const t = (sel) => { const el = slide.querySelector(sel); return el ? el.textContent.replace(/\s+/g, ' ').trim() : ''; };
+  switch (slide.dataset.slide) {
+    case 'clock': return { headline: t('.headline'), line: t('.slide__body > .bubble') };
+    case 'week': return { headline: t('.headline'), line: t('.slide__body > .bubble') };
+    case 'year': return { headline: t('.headline'), line: t('.lede') };
+    case 'senders': return { headline: t('.headline') };
+    case 'late': {
+      const top = slide.querySelector('.late__top > span:last-child');
+      const verb = top ? [...top.childNodes].filter((n) => n.nodeType === 3).map((n) => n.nodeValue).join('').trim() : '';
+      return { tagline: t('.late__tag') || t('.late__cap').replace(/^messages after midnight\. /, ''), top: verb };
+    }
+    case 'moty': return { line: t('.moty__kinds') };
+    case 'taps': {
+      const cap = slide.querySelector('.taps__cap');
+      return { headline: cap ? cap.lastChild.textContent : '', line: t('.taps__line') };
+    }
+    case 'total': {
+      const chips = [...slide.querySelectorAll('.chips li')].map((li) => li.textContent);
+      return { chips };
+    }
+    default: return null;
+  }
+});
+
+// The recaps built to reach every pattern run at the smallest and the largest screen, and
+// on the smallest with the wide system font.
+const PATTERN_RUNS = new Set(['se-320x568', 'desktop-1440x900', 'se-320x568 wide-font']);
+
+await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × ${Object.keys(viewports).length} viewports (+2 with a wide system font), ${Object.keys(patternFixtures).length} more at ${PATTERN_RUNS.size} of them, nothing overflows`, async () => {
   let slides = 0;
+  // Every pattern of every slide is reached by at least one recap that the matrix lays out.
+  const all = { ...fixtures, ...patternFixtures };
+  const reached = {};
+  for (const stats of Object.values(all)) {
+    const c = Insights.pick(Data.normalize(stats));
+    for (const [slide, pick] of Object.entries(c)) {
+      if (!pick) continue;
+      (reached[slide] = reached[slide] || new Set()).add(pick.id);
+      if (slide === 'late' && pick.top) (reached.lateTop = reached.lateTop || new Set()).add(pick.top.id);
+    }
+  }
+  for (const [slide, ids] of Object.entries(Insights.ids())) {
+    eq(ids.filter((id) => !(reached[slide] && reached[slide].has(id))), [], `every ${slide} pattern is laid out by some recap in the matrix`);
+  }
   const runs = Object.entries(viewports).map(([name, vp]) => [name, vp, false]);
   // The two tightest phones again with a much wider body font than the one we design with.
   runs.push(['se-320x568 wide-font', viewports['se-320x568'], true], ['phone-390x844 wide-font', viewports['phone-390x844'], true]);
   for (const [vpName, vp, wideFont] of runs) {
     const s = await open({ viewport: vp, wideFont });
     const { page } = s;
-    for (const [name, stats] of Object.entries(fixtures)) {
+    const recaps = PATTERN_RUNS.has(vpName) ? all : fixtures;
+    for (const [name, stats] of Object.entries(recaps)) {
       await page.goto(link(stats));
       await page.reload();
       await waitForStory(page);
@@ -739,11 +826,22 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
         const family = await page.evaluate(() => getComputedStyle(document.querySelector('.total__facts .bubble')).fontFamily);
         ok(/^"?DejaVu Sans/.test(family), `[${vpName}] the wide font override is in effect (${family})`);
       }
+      const want = PATTERN_RUNS.has(vpName) ? expectedCopy(stats) : null;
       for (let i = 0; i < st.total; i++) {
         await showSettled(page, i);
         const issues = await findOverflow(page);
         slides++;
         ok(issues.length === 0, `[${vpName}] ${name} / ${st.ids[i]}: ${issues.join(' | ')}`);
+        // The slide shows the copy insights.js picked for this recap, all of it.
+        if (want && want[st.ids[i]]) {
+          const shown = await copyOnSlide(page);
+          if (st.ids[i] === 'total') {
+            const fact = want.total.fact;
+            ok(fact ? shown.chips.includes(fact) : shown.chips.every((c) => !/words a text/.test(c)), `[${vpName}] ${name} / total: the matched fact ${fact ? `"${fact}" is a chip` : 'is left out'} (${JSON.stringify(shown.chips)})`);
+          } else {
+            eq(shown, want[st.ids[i]], `[${vpName}] ${name} / ${st.ids[i]}: shows the matched copy`);
+          }
+        }
       }
       // Design rules from the review, checked wherever the data can break them.
       if (st.ids.includes('late')) {
@@ -930,7 +1028,7 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
   const segsAt = () => calm.page.evaluate(() => [...document.querySelectorAll('.seg > b')].slice(0, 3).map((b) => b.style.transform));
   eq(await segsAt(), ['scaleX(1)', 'scaleX(0)', 'scaleX(0)'], 'reduced motion: the current segment is simply filled');
   eq(await calm.page.locator('.slide.is-active .cover__hint').innerText(), 'Tap to continue', 'reduced motion: the hint says what to do');
-  await calm.page.waitForTimeout(6600); // the cover would auto-advance after 5.2 s
+  await calm.page.waitForTimeout(6600); // the cover would auto-advance after 3.65 s
   eq((await state(calm.page)).index, 0, 'reduced motion: the story does not auto-advance');
   eq(await segsAt(), ['scaleX(1)', 'scaleX(0)', 'scaleX(0)'], 'reduced motion: the segments did not move while waiting');
   ok(await calm.page.locator('.head__pause').isHidden(), 'reduced motion: there is nothing to pause, so no pause button');
@@ -1152,13 +1250,6 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   }
   eq(files.length, 12, 'twelve slide screenshots');
 
-  // Suspense frames: the typing indicator before the cover and the personality reveal.
-  for (const [i, ms, name] of [[0, 900, 'typing-cover'], [3, 1500, 'typing-personality']]) {
-    await page.evaluate(([index, t]) => { WrappedStory.goTo(index); WrappedStory.seek(t); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }, [i, ms]);
-    await shoot(page, () => page.screenshot({ path: path.join(SHOTS, `moment-${name}.png`) }));
-    ok(await page.locator('.slide.is-active .typing').first().isVisible(), `${name}: the typing indicator is on screen at ${ms} ms`);
-  }
-  await page.evaluate(() => WrappedStory.resume());
   eq(s.problems, [], 'no console errors while taking screenshots');
   await s.close();
 

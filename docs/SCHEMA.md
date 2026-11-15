@@ -26,11 +26,13 @@ contract. If you change it, bump `v` and update every consumer in the same commi
 
   "busiest_day": { "date": "2026-07-04", "messages": 612 },
 
-  "personality": {
-    "id": "night_owls",               // see §3
-    "title": "The Night Owls",
-    "blurb": "Peak hour: 11 PM. Sleep is a suggestion.",
-    "peak_hour": 23
+  "personality": {                    // see §3
+    "id": "firehose",
+    "emoji": "🚿",
+    "title": "The Firehose",
+    "reason": "154 messages a day, on average",   // the number behind the title; never a name
+    "blurb": "154 messages a day, on average. Mute at your own risk.",
+    "peak_hour": 23                   // index of max(by_hour), lowest index wins ties
   },
 
   "late_night": {                     // local hours 0..4 inclusive (midnight to 4:59 AM)
@@ -78,6 +80,11 @@ contract. If you change it, bump `v` and update every consumer in the same commi
 
 Consumers must tolerate missing optional sections (`awards`, `reactions`, `late_night.top`,
 `most_reacted` may be empty or absent) and must ignore unknown keys.
+
+Personality and award ids are open-ended: new ones can appear without a change of `v`, and
+links made before `emoji` and `reason` existed have neither. A consumer shows whatever
+`title` (and, when present, `emoji`) the object carries; for an id it does not know and no
+`emoji`, it shows the fallback emoji ✨.
 
 ### Legacy input
 The original prototype emitted `messages_by_hour` (`{"0": 1268, …}`), `messages_by_weekday`,
@@ -176,52 +183,147 @@ Input is the Messages SQLite schema (`chat.db` on a Mac, `sms.db` in an iPhone b
   The command-line tool (`stats`, `link`), the Mac helper and the maker page apply it unless
   asked not to (`--full-names`; an editable list on the maker page). `computeStats` itself
   returns full names, so merging by display name and the conformance suite are unaffected.
+- **Order of messages**: wherever order matters (tapbacks; who opened and closed a day and
+  runs of messages, §4), rows go by time to the nanosecond, then by ROWID, then by their
+  position in the input. A row without a ROWID (an imported or pasted chat) counts as ROWID 0,
+  so two such rows with the same time keep the order of the file they came from. Both
+  engines read the input in the same order, so this order is the same in both for every
+  source.
 - `senders` keeps the top 12; the rest are dropped from the list (totals still include them).
 - Rounding: shares are rounded to 4 decimals, half up: `Math.round(x * 10000) / 10000` in
   JS and `math.floor(x * 10000 + 0.5) / 10000` in Python, so both engines agree.
 
 ## 3. Personality (deterministic)
 
-Let `H` = `by_hour`, `T` = total messages, `peak_hour` = index of max(H) (lowest index wins
-ties), `weekend_share` = (Sat + Sun) / T, `night_share` = sum(H[0..4]) / T.
-First rule that matches wins:
+The personality names what makes this chat stand out, and says why next to it. The engine
+checks a list of traits, keeps the ones the chat clearly has, and picks the strongest.
 
-| # | Rule | id | title | line |
-|---|------|----|-------|------|
-| 1 | T < 50 | `quiet_ones` | The Quiet Ones | Few words. All of them count. |
-| 2 | night_share >= 0.12 or peak_hour in 0..4 | `night_owls` | The Night Owls | Sleep is a suggestion. |
-| 3 | weekend_share >= 0.42 | `weekend_warriors` | The Weekend Warriors | Weekdays are for recovering. |
-| 4 | max(H) / T < 0.065 | `always_on` | The Always-On Group Chat | There is no off switch. |
-| 5 | peak_hour in 5..8 | `early_birds` | The Early Birds | Texting before coffee is a choice. |
-| 6 | peak_hour in 9..11 | `morning_meeting` | The Morning Meeting | This could not have been an email. |
-| 7 | peak_hour in 12..13 | `lunch_break` | The Lunch Break Legends | Eating with one hand, typing with the other. |
-| 8 | peak_hour in 14..17 | `afternoon_slackers` | The Afternoon Slackers | Peak productivity, just not at work. |
-| 9 | peak_hour in 18..20 | `dinner_table` | The Dinner Table | Phones out, forks down. |
-| 10 | peak_hour in 21..23 | `after_hours` | The After-Hours Crew | The day ends. The chat begins. |
+The object has `id`, `emoji`, `title`, `reason`, `blurb` and `peak_hour`. `reason` is the
+number behind the title ("Active on 301 of 314 days"); `blurb` is always
+`reason + ". " + line`, with `line` the fixed sentence of the table below. `peak_hour` is the
+index of max(`by_hour`), the lowest index winning a tie. A `reason` or `blurb` never holds a
+person's name: short names (§2) do not rewrite those strings, so a name there could show a
+full contact name.
 
-`blurb` is `"Peak hour: {h12}. {line}"` where `{h12}` is the peak hour as `11 PM` / `12 AM` /
-`12 PM`, and `{line}` is the fixed sentence from the table.
+**Figures.** Everything comes from numbers the engine already has:
+
+| name | meaning |
+|------|---------|
+| T | `totals.messages` |
+| H, W, M | `by_hour`, `by_weekday`, `by_month` |
+| P | days in the period, first and last day included |
+| D | `totals.days_active` |
+| R, A, Wd | `totals.reactions`, `totals.attachments`, `totals.words` |
+| n | people with at least one countable message in the period (all of them, not only the 12 listed) |
+| top1, top2 | messages of the most and the second most active person (0 when there is no such person) |
+| low | messages of the least active person |
+| night | H[0] + … + H[4] |
+| weekend | W[5] + W[6] (Saturday and Sunday) |
+| best3 | the largest H[a] + H[(a+1) % 24] + H[(a+2) % 24]: the busiest three hours in a row, also across midnight |
+| month1 | max(M), and its month (the earliest month wins a tie) |
+| day1 | `busiest_day.messages` |
+| laugh, love | `reactions.by_kind.laugh`, `reactions.by_kind.love` |
+
+**Formatting**, in whole numbers so that both engines agree:
+`{pct(a,b)}` is a whole percent rounded half up, `(200*a + b) // (2*b)`, followed by `%`.
+`{x}` is a number with one decimal, rounded half up (`(a*20 + b) // (2*b)` tenths), as for
+the Novelist. "Rounded" below means to a whole number, half up: `(2*a + b) // (2*b)`.
+Counts get thousands separators (`1,500`). `{h12}` is an hour as `11 PM`, `12 AM`, `12 PM`.
+
+**Steps.**
+
+1. If T < 50: `quiet_ones` 🤫 "The Quiet Ones", reason `{T} messages in total` (`1 message in
+   total` for one), line "Few words. All of them count."
+2. Otherwise every trait of the table is checked. A trait **qualifies** when its gate holds
+   and its value has reached its floor: at or above it for a *high* trait, at or below it for
+   a *low* one. Its **strength** is `min(1, abs(value - floor) / abs(ceil - floor))`, in
+   ordinary double arithmetic, with the value worked out as one division. The qualifying
+   trait with the greatest strength wins; on equal strength the earlier row wins.
+3. If no trait qualifies, the peak hour decides, with reason `Peak hour: {h12}`.
+
+| # | id | emoji | title | gate | value | kind | floor | ceil | reason | line |
+|---|----|-------|-------|------|-------|------|-------|------|--------|------|
+| 1 | `one_person_show` | 🎤 | The One-Person Show | n >= 3 | top1 / T | high | 0.50 | 0.85 | `One person sent {pct(top1,T)} of the messages` | Everyone else is the audience. |
+| 2 | `dynamic_duo` | 👯 | The Dynamic Duo | n >= 4 | (top1+top2) / T | high | 0.80 | 0.98 | `Two people sent {pct(top1+top2,T)} of the messages` | The rest are here for the show. |
+| 3 | `round_table` | ⚖️ | The Round Table | n >= 4 and low*n*2 >= T | top1*n / T | low | 1.35 | 1.0 | `{n} people, and nobody sent more than {pct(top1,T)}` | Everybody gets a turn. |
+| 4 | `night_owls` | 🦉 | The Night Owls | none | night / T | high | 0.25 | 0.50 | `{pct(night,T)} of messages between midnight and 5 AM` | Sleep is a suggestion. |
+| 5 | `weekend_warriors` | 🎉 | The Weekend Warriors | none | weekend / T | high | 0.45 | 0.75 | `{pct(weekend,T)} of messages on Saturday and Sunday` | Weekdays are for recovering. |
+| 6 | `weekday_regulars` | 💼 | The Weekday Regulars | P >= 14 | weekend / T | low | 0.10 | 0.0 | `{pct(T-weekend,T)} of messages Monday to Friday` | Weekends are for other chats. |
+| 7 | `always_on` | 🔋 | The Always-On Group Chat | T >= 200 | best3 / T | low | 0.20 | 0.125 | `Only {pct(best3,T)} of messages in its busiest three hours` | There is no off switch. |
+| 8 | `daily_ritual` | 📆 | The Daily Ritual | P >= 28 | D / P | high | 0.97 | 1.0 | `Active on {D} of {P} days` | Skipping a day is not an option. |
+| 9 | `flash_mob` | ⚡ | The Flash Mob | P >= 28 and D >= 3 | day1 / T | high | 0.15 | 0.50 | `{pct(day1,T)} of the messages landed on a single day` | When it rains, it pours. |
+| 10 | `seasonal_special` | 🏖️ | The Seasonal Special | P >= 180 | month1 / T | high | 0.40 | 0.80 | `{pct(month1,T)} of messages came in {Month}` (full English month name) | The rest of the year is the off-season. |
+| 11 | `firehose` | 🚿 | The Firehose | none | T / P | high | 100 | 500 | `{T/P rounded} messages a day, on average` | Mute at your own risk. |
+| 12 | `slow_burn` | 🕯️ | The Slow Burn | P >= 90 | P / T | high | 2 | 7 | `About one message every {P/T rounded} days` | In no hurry at all. |
+| 13 | `photo_dump` | 📸 | The Photo Dump | none | A / T | high | 0.25 | 0.60 | `{pct(A,T)} of messages carry a photo, video or file` | Words optional. |
+| 14 | `hype_squad` | 🙌 | The Hype Squad | R >= 20 | R / T | high | 0.50 | 1.0 | `{R} tapbacks on {T} messages` | Nothing goes unnoticed. |
+| 15 | `comedy_club` | 😂 | The Comedy Club | R >= 20 and R*20 >= T | laugh / R | high | 0.50 | 0.85 | `{pct(laugh,R)} of all tapbacks are Ha Ha` | Everyone here thinks they are funny. They are right. |
+| 16 | `love_fest` | 💖 | The Love Fest | R >= 20 and R*20 >= T | love / R | high | 0.60 | 0.90 | `{pct(love,R)} of all tapbacks are hearts` | It is very supportive in here. |
+| 17 | `essayists` | 📝 | The Essayists | Wd > 0 | Wd / T | high | 14 | 30 | `{x} words per message, on average` | Every text is a paragraph. |
+| 18 | `rapid_fire` | 🏓 | The Rapid-Fire Round | Wd > 0 and A*4 < T | Wd / T | low | 3.5 | 1.5 | `{x} words per message, on average` | Why use many words. |
+
+By peak hour (step 3):
+
+| peak hour | id | emoji | title | line |
+|-----------|----|-------|-------|------|
+| 0..4 | `night_owls` | 🦉 | The Night Owls | Sleep is a suggestion. |
+| 5..8 | `early_birds` | 🐦 | The Early Birds | Texting before coffee is a choice. |
+| 9..11 | `morning_meeting` | ☕ | The Morning Meeting | This could not have been an email. |
+| 12..13 | `lunch_break` | 🥪 | The Lunch Break Legends | Eating with one hand, typing with the other. |
+| 14..17 | `afternoon_slackers` | 😎 | The Afternoon Slackers | Peak productivity, just not at work. |
+| 18..20 | `dinner_table` | 🍽️ | The Dinner Table | Phones out, forks down. |
+| 21..23 | `after_hours` | 🌙 | The After-Hours Crew | The day ends. The chat begins. |
+
+Example: a chat whose busiest hour is 11 AM and that sends 13% of its messages after midnight
+is not the Night Owls (13% is under the 25% floor); if nothing else stands out it is the
+Morning Meeting, "Peak hour: 11 AM".
+
+The floors and ceilings are first guesses, not measured from real chats. Both engines are
+held to the hand-worked cases in `tests/vectors/personality-awards-v1.json`.
 
 ## 4. Awards (deterministic, playful)
 
 Candidates are computed per sender (only senders with >= 5 messages qualify; the chat needs
 >= 3 qualifying senders or no awards are produced). Ties break by more messages, then name.
+Ratios are compared exactly (as fractions, never as rounded decimals).
+
+Per-sender counters, over the sender's countable messages in the period:
+
+- **late night**: messages in local hours 0..4; **early**: messages in local hours 5..8.
+- **questions**: messages whose cleaned text (the text words are counted from, §2) ends with
+  `?` (U+003F) or `？` (U+FF1F).
+- **links**: messages whose cleaned text contains `http://` or `https://`, exactly so, in
+  lowercase ASCII. A message counts once however many links it holds.
+- **starts** / **ends**: local days on which this sender sent the first / the last countable
+  message, in the order of §2.
+- **run**: the longest stretch of countable messages from this sender with nobody else's in
+  between, in the order of §2, also across midnight.
 
 | order | id | emoji | title | winner | detail template |
 |-------|----|-------|-------|--------|-----------------|
 | 1 | `yapper` | 🗣️ | The Yapper | most messages | `{n} messages. Nobody asked.` |
-| 2 | `lurker` | 👻 | The Lurker | fewest messages among qualifying senders | `{n} messages. Reads everything, says little.` |
+| 2 | `comedian` | 😂 | The Comedian | most standing "laugh" tapbacks received (>= 3) | `Made the chat laugh {n} times.` |
 | 3 | `night_owl` | 🦉 | The Night Owl | most late-night messages (>= 3) | `{n} messages after midnight.` |
-| 4 | `comedian` | 😂 | The Comedian | most standing "laugh" tapbacks received (>= 3) | `Made the chat laugh {n} times.` |
-| 5 | `hype` | 📣 | The Hype Machine | most tapbacks given (>= 3) | `Handed out {n} tapbacks.` |
-| 6 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages) | `{x} words per message. A paragraph person.` |
-| 7 | `paparazzi` | 📸 | The Paparazzi | most attachment messages (>= 3) | `{n} photos, videos and memes.` |
-| 8 | `favorite` | ⭐ | The Crowd Favorite | most standing tapbacks received (>= 3) | `{n} tapbacks received.` |
+| 4 | `starter` | 🚀 | The Conversation Starter | most starts (>= 3) | `Sent the first message of the day {n} times.` |
+| 5 | `paparazzi` | 📸 | The Paparazzi | most attachment messages (>= 3) | `{n} photos, videos and memes.` |
+| 6 | `interrogator` | ❓ | The Interrogator | most questions (>= 3) | `Asked {n} questions.` |
+| 7 | `hype` | 📣 | The Hype Machine | most tapbacks given (>= 3) | `Handed out {n} tapbacks.` |
+| 8 | `early_bird` | 🐦 | The Early Bird | most early messages (>= 3) | `{n} messages before 9 AM.` |
+| 9 | `closer` | 🎬 | The Last Word | most ends (>= 3) | `Had the last word on {n} days.` |
+| 10 | `link_dropper` | 🔗 | The Link Dropper | most links (>= 3) | `Shared {n} links.` |
+| 11 | `favorite` | ⭐ | The Crowd Favorite | most standing tapbacks received (>= 3) | `{n} tapbacks received.` |
+| 12 | `double_texter` | 📲 | The Double Texter | longest run (>= 5) | `{n} messages in a row. No reply needed.` |
+| 13 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages); only when that is at least 10 (words >= messages * 10) | `{x} words per message. A paragraph person.` |
+| 14 | `minimalist` | ✂️ | The Minimalist | lowest words per message among senders with >= 20 messages and >= 1 word; only when at least two senders pass that bar and the lowest is at most 3.5 (words * 2 <= messages * 7) | `{x} words per message. Straight to the point.` |
+| 15 | `lurker` | 👻 | The Lurker | fewest messages among qualifying senders | `{n} messages. Reads everything, says little.` |
+
+The Lurker comes last on purpose: the quietest person gets something more specific when
+they earned it.
 
 Selection: walk the table in order; an award whose winner already holds an award is
 deferred. Take up to 6 non-deferred awards, then fill remaining slots (up to 6 total) with
 deferred ones in table order. `{n}` is formatted with thousands separators (`,`), `{x}` with
-one decimal place.
+one decimal place, rounded half up.
 
 Optional AI-written awards (`--ai`, opt-in, sends the stats JSON off device) replace this
 list and set `"ai": true` on each entry.

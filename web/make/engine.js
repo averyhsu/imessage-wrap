@@ -103,38 +103,73 @@
   var MAX_QUOTE = 180;
   var LATE_NIGHT_HOURS = 5;           // local hours 0..4
 
+  // id -> [emoji, title, line] for every personality of section 3. The order of
+  // this table means nothing; TRAITS holds the order in which traits are tried.
   var PERSONALITIES = {
-    quiet_ones: ['The Quiet Ones', 'Few words. All of them count.'],
-    night_owls: ['The Night Owls', 'Sleep is a suggestion.'],
-    weekend_warriors: ['The Weekend Warriors', 'Weekdays are for recovering.'],
-    always_on: ['The Always-On Group Chat', 'There is no off switch.'],
-    early_birds: ['The Early Birds', 'Texting before coffee is a choice.'],
-    morning_meeting: ['The Morning Meeting', 'This could not have been an email.'],
-    lunch_break: ['The Lunch Break Legends', 'Eating with one hand, typing with the other.'],
-    afternoon_slackers: ['The Afternoon Slackers', 'Peak productivity, just not at work.'],
-    dinner_table: ['The Dinner Table', 'Phones out, forks down.'],
-    after_hours: ['The After-Hours Crew', 'The day ends. The chat begins.']
+    quiet_ones: ['\uD83E\uDD2B', 'The Quiet Ones', 'Few words. All of them count.'],
+    one_person_show: ['\uD83C\uDFA4', 'The One-Person Show', 'Everyone else is the audience.'],
+    dynamic_duo: ['\uD83D\uDC6F', 'The Dynamic Duo', 'The rest are here for the show.'],
+    round_table: ['\u2696\uFE0F', 'The Round Table', 'Everybody gets a turn.'],
+    night_owls: ['\uD83E\uDD89', 'The Night Owls', 'Sleep is a suggestion.'],
+    weekend_warriors: ['\uD83C\uDF89', 'The Weekend Warriors', 'Weekdays are for recovering.'],
+    weekday_regulars: ['\uD83D\uDCBC', 'The Weekday Regulars', 'Weekends are for other chats.'],
+    always_on: ['\uD83D\uDD0B', 'The Always-On Group Chat', 'There is no off switch.'],
+    daily_ritual: ['\uD83D\uDCC6', 'The Daily Ritual', 'Skipping a day is not an option.'],
+    flash_mob: ['\u26A1', 'The Flash Mob', 'When it rains, it pours.'],
+    seasonal_special: ['\uD83C\uDFD6\uFE0F', 'The Seasonal Special', 'The rest of the year is the off-season.'],
+    firehose: ['\uD83D\uDEBF', 'The Firehose', 'Mute at your own risk.'],
+    slow_burn: ['\uD83D\uDD6F\uFE0F', 'The Slow Burn', 'In no hurry at all.'],
+    photo_dump: ['\uD83D\uDCF8', 'The Photo Dump', 'Words optional.'],
+    hype_squad: ['\uD83D\uDE4C', 'The Hype Squad', 'Nothing goes unnoticed.'],
+    comedy_club: ['\uD83D\uDE02', 'The Comedy Club', 'Everyone here thinks they are funny. They are right.'],
+    love_fest: ['\uD83D\uDC96', 'The Love Fest', 'It is very supportive in here.'],
+    essayists: ['\uD83D\uDCDD', 'The Essayists', 'Every text is a paragraph.'],
+    rapid_fire: ['\uD83C\uDFD3', 'The Rapid-Fire Round', 'Why use many words.'],
+    // by peak hour, when no trait stands out
+    early_birds: ['\uD83D\uDC26', 'The Early Birds', 'Texting before coffee is a choice.'],
+    morning_meeting: ['\u2615', 'The Morning Meeting', 'This could not have been an email.'],
+    lunch_break: ['\uD83E\uDD6A', 'The Lunch Break Legends', 'Eating with one hand, typing with the other.'],
+    afternoon_slackers: ['\uD83D\uDE0E', 'The Afternoon Slackers', 'Peak productivity, just not at work.'],
+    dinner_table: ['\uD83C\uDF7D\uFE0F', 'The Dinner Table', 'Phones out, forks down.'],
+    after_hours: ['\uD83C\uDF19', 'The After-Hours Crew', 'The day ends. The chat begins.']
   };
+  var QUIET_BELOW = 50;               // fewer messages than this: the Quiet Ones
+  var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+    'September', 'October', 'November', 'December'];
 
-  // id, emoji, title, detail template ({n} or {x})
+  // id, emoji, title, detail template ({n} or {x}), in table order (section 4)
   var AWARDS = [
     ['yapper', '\uD83D\uDDE3\uFE0F', 'The Yapper', '{n} messages. Nobody asked.'],
-    ['lurker', '\uD83D\uDC7B', 'The Lurker', '{n} messages. Reads everything, says little.'],
-    ['night_owl', '\uD83E\uDD89', 'The Night Owl', '{n} messages after midnight.'],
     ['comedian', '\uD83D\uDE02', 'The Comedian', 'Made the chat laugh {n} times.'],
-    ['hype', '\uD83D\uDCE3', 'The Hype Machine', 'Handed out {n} tapbacks.'],
-    ['novelist', '\uD83D\uDCDA', 'The Novelist', '{x} words per message. A paragraph person.'],
+    ['night_owl', '\uD83E\uDD89', 'The Night Owl', '{n} messages after midnight.'],
+    ['starter', '\uD83D\uDE80', 'The Conversation Starter', 'Sent the first message of the day {n} times.'],
     ['paparazzi', '\uD83D\uDCF8', 'The Paparazzi', '{n} photos, videos and memes.'],
-    ['favorite', '\u2B50', 'The Crowd Favorite', '{n} tapbacks received.']
+    ['interrogator', '\u2753', 'The Interrogator', 'Asked {n} questions.'],
+    ['hype', '\uD83D\uDCE3', 'The Hype Machine', 'Handed out {n} tapbacks.'],
+    ['early_bird', '\uD83D\uDC26', 'The Early Bird', '{n} messages before 9 AM.'],
+    ['closer', '\uD83C\uDFAC', 'The Last Word', 'Had the last word on {n} days.'],
+    ['link_dropper', '\uD83D\uDD17', 'The Link Dropper', 'Shared {n} links.'],
+    ['favorite', '\u2B50', 'The Crowd Favorite', '{n} tapbacks received.'],
+    ['double_texter', '\uD83D\uDCF2', 'The Double Texter', '{n} messages in a row. No reply needed.'],
+    ['novelist', '\uD83D\uDCDA', 'The Novelist', '{x} words per message. A paragraph person.'],
+    ['minimalist', '\u2702\uFE0F', 'The Minimalist', '{x} words per message. Straight to the point.'],
+    ['lurker', '\uD83D\uDC7B', 'The Lurker', '{n} messages. Reads everything, says little.']
   ];
   var MAX_AWARDS = 6;
   var AWARD_MIN_MESSAGES = 5;
   var AWARD_MIN_SENDERS = 3;
   var AWARD_MIN_COUNT = 3;
   var NOVELIST_MIN_MESSAGES = 20;
+  var NOVELIST_MIN_WORDS = 10;        // per message: words >= messages * 10
+  var MINIMALIST_MAX_HALVES = 7;      // at most 3.5 words per message: words * 2 <= messages * 7
+  var DOUBLE_TEXT_MIN_RUN = 5;
+  var EARLY_FROM = 5, EARLY_TO = 9;   // local hours 5..8
+  var LINK = /https?:\/\//;           // a web link: exact lowercase ASCII, anywhere in the text
 
   // per-sender counters, by position
-  var MSG = 0, WORDS = 1, ATT = 2, LATE = 3, GIVEN = 4, RECV = 5, LAUGHS = 6;
+  var MSG = 0, WORDS = 1, ATT = 2, LATE = 3, GIVEN = 4, RECV = 5, LAUGHS = 6,
+    EARLY = 7, QUESTIONS = 8, LINKS = 9, STARTS = 10, ENDS = 11, RUN = 12;
+  var COUNTERS = 13;
 
   // ------------------------------------------------------------------ //
   // text
@@ -945,33 +980,182 @@
     return total;
   }
 
-  function personality(byHour, byWeekday, total) {
+  /** Whole percent, half up, in integer arithmetic (section 3). */
+  function pct(part, whole) {
+    return Math.floor((200 * part + whole) / (2 * whole)) + '%';
+  }
+
+  /** part / whole with one decimal, half up, in integer arithmetic. */
+  function tenths(part, whole) {
+    var t = Math.floor((part * 20 + whole) / (2 * whole));
+    return Math.floor(t / 10) + '.' + (t % 10);
+  }
+
+  /** part / whole rounded to a whole number, half up. */
+  function nearest(part, whole) {
+    return Math.floor((2 * part + whole) / (2 * whole));
+  }
+
+  function best3(byHour) {
+    var best = 0;
+    for (var a = 0; a < 24; a++) {
+      var v = byHour[a] + byHour[(a + 1) % 24] + byHour[(a + 2) % 24];
+      if (v > best) best = v;
+    }
+    return best;
+  }
+
+  function trait(id, gate, value, high, floor, ceil, reason) {
+    return { id: id, gate: gate, value: value, high: high, floor: floor, ceil: ceil, reason: reason };
+  }
+  function always() { return true; }
+
+  // Section 3, step 2, in table order. `f` holds the figures that
+  // personalityFigures describes.
+  var TRAITS = [
+    trait('one_person_show', function (f) { return f.n >= 3; }, function (f) { return f.top1 / f.T; }, true, 0.50, 0.85,
+      function (f) { return 'One person sent ' + pct(f.top1, f.T) + ' of the messages'; }),
+    trait('dynamic_duo', function (f) { return f.n >= 4; }, function (f) { return (f.top1 + f.top2) / f.T; }, true, 0.80, 0.98,
+      function (f) { return 'Two people sent ' + pct(f.top1 + f.top2, f.T) + ' of the messages'; }),
+    trait('round_table', function (f) { return f.n >= 4 && f.low * f.n * 2 >= f.T; },
+      function (f) { return f.top1 * f.n / f.T; }, false, 1.35, 1.0,
+      function (f) { return thousands(f.n) + ' people, and nobody sent more than ' + pct(f.top1, f.T); }),
+    trait('night_owls', always, function (f) { return f.night / f.T; }, true, 0.25, 0.50,
+      function (f) { return pct(f.night, f.T) + ' of messages between midnight and 5 AM'; }),
+    trait('weekend_warriors', always, function (f) { return f.weekend / f.T; }, true, 0.45, 0.75,
+      function (f) { return pct(f.weekend, f.T) + ' of messages on Saturday and Sunday'; }),
+    trait('weekday_regulars', function (f) { return f.P >= 14; }, function (f) { return f.weekend / f.T; }, false, 0.10, 0.0,
+      function (f) { return pct(f.T - f.weekend, f.T) + ' of messages Monday to Friday'; }),
+    trait('always_on', function (f) { return f.T >= 200; }, function (f) { return f.best3 / f.T; }, false, 0.20, 0.125,
+      function (f) { return 'Only ' + pct(f.best3, f.T) + ' of messages in its busiest three hours'; }),
+    trait('daily_ritual', function (f) { return f.P >= 28; }, function (f) { return f.D / f.P; }, true, 0.97, 1.0,
+      function (f) { return 'Active on ' + thousands(f.D) + ' of ' + thousands(f.P) + ' days'; }),
+    trait('flash_mob', function (f) { return f.P >= 28 && f.D >= 3; }, function (f) { return f.day1 / f.T; }, true, 0.15, 0.50,
+      function (f) { return pct(f.day1, f.T) + ' of the messages landed on a single day'; }),
+    trait('seasonal_special', function (f) { return f.P >= 180; }, function (f) { return f.month1 / f.T; }, true, 0.40, 0.80,
+      function (f) { return pct(f.month1, f.T) + ' of messages came in ' + MONTHS[f.month1_index]; }),
+    trait('firehose', always, function (f) { return f.T / f.P; }, true, 100, 500,
+      function (f) { return thousands(nearest(f.T, f.P)) + ' messages a day, on average'; }),
+    trait('slow_burn', function (f) { return f.P >= 90; }, function (f) { return f.P / f.T; }, true, 2, 7,
+      function (f) { return 'About one message every ' + thousands(nearest(f.P, f.T)) + ' days'; }),
+    trait('photo_dump', always, function (f) { return f.A / f.T; }, true, 0.25, 0.60,
+      function (f) { return pct(f.A, f.T) + ' of messages carry a photo, video or file'; }),
+    trait('hype_squad', function (f) { return f.R >= 20; }, function (f) { return f.R / f.T; }, true, 0.50, 1.0,
+      function (f) { return thousands(f.R) + ' tapbacks on ' + thousands(f.T) + ' messages'; }),
+    trait('comedy_club', function (f) { return f.R >= 20 && f.R * 20 >= f.T; }, function (f) { return f.laugh / f.R; },
+      true, 0.50, 0.85, function (f) { return pct(f.laugh, f.R) + ' of all tapbacks are Ha Ha'; }),
+    trait('love_fest', function (f) { return f.R >= 20 && f.R * 20 >= f.T; }, function (f) { return f.love / f.R; },
+      true, 0.60, 0.90, function (f) { return pct(f.love, f.R) + ' of all tapbacks are hearts'; }),
+    trait('essayists', function (f) { return f.Wd > 0; }, function (f) { return f.Wd / f.T; }, true, 14, 30,
+      function (f) { return tenths(f.Wd, f.T) + ' words per message, on average'; }),
+    trait('rapid_fire', function (f) { return f.Wd > 0 && f.A * 4 < f.T; }, function (f) { return f.Wd / f.T; }, false, 3.5, 1.5,
+      function (f) { return tenths(f.Wd, f.T) + ' words per message, on average'; })
+  ];
+
+  function byPeakHour(hour) {
+    if (hour <= 4) return 'night_owls';
+    if (hour <= 8) return 'early_birds';
+    if (hour <= 11) return 'morning_meeting';
+    if (hour <= 13) return 'lunch_break';
+    if (hour <= 17) return 'afternoon_slackers';
+    if (hour <= 20) return 'dinner_table';
+    return 'after_hours';
+  }
+
+  /**
+   * The numbers section 3 works from. `senderCounts` holds the messages of
+   * every sender with at least one countable message (all of them, not only
+   * the twelve that are listed).
+   */
+  function personalityFigures(totals, byHour, byWeekday, byMonth, periodDays, busiest, byKind, senderCounts) {
+    var counts = senderCounts.filter(function (c) { return c > 0; }).sort(function (a, b) { return b - a; });
+    var month1 = 0, month1Index = 0;
+    for (var m = 0; m < byMonth.length; m++) {
+      if (byMonth[m] > month1) { month1 = byMonth[m]; month1Index = m; }
+    }
+    return {
+      T: totals.messages, H: byHour.slice(), P: periodDays, D: totals.days_active,
+      R: totals.reactions, A: totals.attachments, Wd: totals.words,
+      n: counts.length, top1: counts.length ? counts[0] : 0,
+      top2: counts.length > 1 ? counts[1] : 0, low: counts.length ? counts[counts.length - 1] : 0,
+      night: sum(byHour, 0, LATE_NIGHT_HOURS), weekend: byWeekday[5] + byWeekday[6],
+      best3: best3(byHour), month1: month1, month1_index: month1Index,
+      day1: busiest, laugh: byKind.laugh || 0, love: byKind.love || 0
+    };
+  }
+
+  /** Section 3: the chat's personality from personalityFigures. */
+  function personality(f) {
+    var byHour = f.H;
     var peak = 0;
     var peakHour = 0;
     for (var h = 0; h < 24; h++) {
       if (byHour[h] > peak) { peak = byHour[h]; peakHour = h; }
     }
-    var id;
-    if (total < 50) id = 'quiet_ones';
-    else if (sum(byHour, 0, LATE_NIGHT_HOURS) / total >= 0.12 || peakHour <= 4) id = 'night_owls';
-    else if ((byWeekday[5] + byWeekday[6]) / total >= 0.42) id = 'weekend_warriors';
-    else if (peak / total < 0.065) id = 'always_on';
-    else if (peakHour <= 8) id = 'early_birds';
-    else if (peakHour <= 11) id = 'morning_meeting';
-    else if (peakHour <= 13) id = 'lunch_break';
-    else if (peakHour <= 17) id = 'afternoon_slackers';
-    else if (peakHour <= 20) id = 'dinner_table';
-    else id = 'after_hours';
+    var total = f.T;
+    var id = null, reason = null;
+    if (total < QUIET_BELOW) {
+      id = 'quiet_ones';
+      reason = total === 1 ? '1 message in total' : thousands(total) + ' messages in total';
+    } else {
+      var best = -1, chosen = null;
+      for (var i = 0; i < TRAITS.length; i++) {
+        var t = TRAITS[i];
+        if (!t.gate(f)) continue;
+        var v = t.value(f);
+        if (!(t.high ? v >= t.floor : v <= t.floor)) continue;
+        var strength = Math.min(1, Math.abs(v - t.floor) / Math.abs(t.ceil - t.floor));
+        if (strength > best) { chosen = t; best = strength; }
+      }
+      if (chosen === null) {
+        id = byPeakHour(peakHour);
+        reason = 'Peak hour: ' + hour12(peakHour);
+      } else {
+        id = chosen.id;
+        reason = chosen.reason(f);
+      }
+    }
+    var def = PERSONALITIES[id];
     return {
       id: id,
-      title: PERSONALITIES[id][0],
-      blurb: 'Peak hour: ' + hour12(peakHour) + '. ' + PERSONALITIES[id][1],
+      emoji: def[0],
+      title: def[1],
+      reason: reason,
+      blurb: reason + '. ' + def[2],
       peak_hour: peakHour
     };
   }
 
   function thousands(n) {
     return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+
+  /** floor(a / b) for non-negative safe integers, exact however large. */
+  function quotient(a, b) {
+    var q = Math.floor(a / b);
+    var r = a - q * b;
+    while (r < 0) { q--; r += b; }
+    while (r >= b) { q++; r -= b; }
+    return q;
+  }
+
+  /**
+   * The sign of a/b - c/d for non-negative safe integers (b, d > 0), exact
+   * where cross-multiplying could pass 2^53 (what Fraction does in Python):
+   * compare the whole parts, then the inverted remainders, as Euclid would.
+   */
+  function compareRatio(a, b, c, d) {
+    var sign = 1;
+    for (;;) {
+      var q1 = quotient(a, b);
+      var q2 = quotient(c, d);
+      if (q1 !== q2) return q1 < q2 ? -sign : sign;
+      var r1 = a - q1 * b;
+      var r2 = c - q2 * d;
+      if (r1 === 0 || r2 === 0) return r1 === r2 ? 0 : (r1 === 0 ? -sign : sign);
+      a = b; c = d; b = r1; d = r2;           // r1/b against r2/d is b/r1 against d/r2, reversed
+      sign = -sign;
+    }
   }
 
   /** Highest `field`; ties go to more messages, then to the name. */
@@ -1003,8 +1187,53 @@
       return winner ? [winner[0], thousands(winner[1])] : null;
     }
 
+    /**
+     * Highest (sign -1) or lowest (sign 1) words per message among `names`,
+     * compared exactly; ties go to more messages, then to the name.
+     */
+    function wordsPerMessage(names, sign) {
+      var best = null;
+      names.forEach(function (name) {
+        if (best === null) { best = name; return; }
+        var c = qualifying.get(name);
+        var b = qualifying.get(best);
+        var order = compareRatio(c[WORDS], c[MSG], b[WORDS], b[MSG]) * -sign;
+        if (order > 0 || (order === 0 && (c[MSG] > b[MSG] || (c[MSG] === b[MSG] && name < best)))) {
+          best = name;
+        }
+      });
+      if (best === null) return null;
+      var w = qualifying.get(best);
+      return [best, tenths(w[WORDS], w[MSG])];
+    }
+
+    var longWinded = [];
+    var terse = [];
+    qualifying.forEach(function (c, name) {
+      if (c[MSG] < NOVELIST_MIN_MESSAGES) return;
+      longWinded.push(name);
+      if (c[WORDS] >= 1) terse.push(name);
+    });
+
     var winners = {};
     winners.yapper = most(MSG, 1);
+    winners.comedian = most(LAUGHS, AWARD_MIN_COUNT);
+    winners.night_owl = most(LATE, AWARD_MIN_COUNT);
+    winners.starter = most(STARTS, AWARD_MIN_COUNT);
+    winners.paparazzi = most(ATT, AWARD_MIN_COUNT);
+    winners.interrogator = most(QUESTIONS, AWARD_MIN_COUNT);
+    winners.hype = most(GIVEN, AWARD_MIN_COUNT);
+    winners.early_bird = most(EARLY, AWARD_MIN_COUNT);
+    winners.closer = most(ENDS, AWARD_MIN_COUNT);
+    winners.link_dropper = most(LINKS, AWARD_MIN_COUNT);
+    winners.favorite = most(RECV, AWARD_MIN_COUNT);
+    winners.double_texter = most(RUN, DOUBLE_TEXT_MIN_RUN);
+    var novelist = wordsPerMessage(longWinded, -1);
+    winners.novelist = novelist && compareRatio(qualifying.get(novelist[0])[WORDS], qualifying.get(novelist[0])[MSG],
+      NOVELIST_MIN_WORDS, 1) >= 0 ? novelist : null;
+    var minimalist = terse.length >= 2 ? wordsPerMessage(terse, 1) : null;
+    winners.minimalist = minimalist && compareRatio(qualifying.get(minimalist[0])[WORDS], qualifying.get(minimalist[0])[MSG],
+      MINIMALIST_MAX_HALVES, 2) <= 0 ? minimalist : null;
     var lurker = null;
     qualifying.forEach(function (c, name) {
       if (lurker === null || c[MSG] < qualifying.get(lurker)[MSG] ||
@@ -1013,30 +1242,6 @@
       }
     });
     winners.lurker = [lurker, thousands(qualifying.get(lurker)[MSG])];
-    winners.night_owl = most(LATE, AWARD_MIN_COUNT);
-    winners.comedian = most(LAUGHS, AWARD_MIN_COUNT);
-    winners.hype = most(GIVEN, AWARD_MIN_COUNT);
-    var novelist = null;
-    qualifying.forEach(function (c, name) {
-      if (c[MSG] < NOVELIST_MIN_MESSAGES) return;
-      if (novelist === null) { novelist = name; return; }
-      var b = qualifying.get(novelist);
-      var left = c[WORDS] * b[MSG];           // exact comparison of words/messages
-      var right = b[WORDS] * c[MSG];
-      if (left > right || (left === right && (c[MSG] > b[MSG] ||
-          (c[MSG] === b[MSG] && name < novelist)))) {
-        novelist = name;
-      }
-    });
-    if (novelist !== null) {
-      var n = qualifying.get(novelist);
-      var tenths = Math.floor((n[WORDS] * 20 + n[MSG]) / (2 * n[MSG]));   // one decimal, half up
-      winners.novelist = [novelist, Math.floor(tenths / 10) + '.' + (tenths % 10)];
-    } else {
-      winners.novelist = null;
-    }
-    winners.paparazzi = most(ATT, AWARD_MIN_COUNT);
-    winners.favorite = most(RECV, AWARD_MIN_COUNT);
 
     var chosen = [];
     var deferred = [];
@@ -1118,10 +1323,12 @@
       if (Math.floor((sec + table.at(sec)) / DAY) > endDay) continue;   // after the period ended
       taps.push(i);
     }
-    taps.sort(function (a, b) {
+    // time to the nanosecond, then ROWID, then position in the input (section 2)
+    function chronological(a, b) {
       return (secs[a] - secs[b]) || (fracs[a] - fracs[b]) ||
         (toInt(rows[a].rowid) - toInt(rows[b].rowid)) || (a - b);
-    });
+    }
+    taps.sort(chronological);
     // one tapback per person per message part: the key keeps the "p:N/" or
     // "bp:" prefix, the message is whatever follows it
     var state = new Map();          // target -> Map(reactor -> kind)
@@ -1158,6 +1365,9 @@
 
     // ---- pass 2: countable messages inside the period
     var people = new Map();         // name -> counters
+    var timeline = [];              // row indexes of the countable messages
+    var timelineSender = new Array(count);
+    var timelineDay = new Float64Array(count);
     var byHour = new Array(24).fill(0);
     var dayCounts = new Map();
     var reacted = [];
@@ -1197,7 +1407,7 @@
 
       var sender = flag(row.is_from_me) ? me : names.handle(row.handle);
       var counters = people.get(sender);
-      if (!counters) { counters = [0, 0, 0, 0, 0, 0, 0]; people.set(sender, counters); }
+      if (!counters) { counters = new Array(COUNTERS).fill(0); people.set(sender, counters); }
       var nWords = countWords(text);
       var hour = Math.floor((local - day * DAY) / 3600);
       total++;
@@ -1206,6 +1416,15 @@
       counters[WORDS] += nWords;
       if (hasAttachment) { attachmentsTotal++; counters[ATT]++; }
       if (hour < LATE_NIGHT_HOURS) counters[LATE]++;
+      else if (hour >= EARLY_FROM && hour < EARLY_TO) counters[EARLY]++;
+      if (text) {
+        var last = text.charCodeAt(text.length - 1);
+        if (last === 0x3F || last === 0xFF1F) counters[QUESTIONS]++;
+        if (LINK.test(text)) counters[LINKS]++;
+      }
+      timeline.push(i);
+      timelineSender[i] = sender;
+      timelineDay[i] = day;
       byHour[hour]++;
       dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
       if (firstDay === null || day < firstDay) firstDay = day;
@@ -1219,6 +1438,26 @@
         }
       }
     }
+
+    // ---- the same messages in chronological order
+    // (time, then ROWID, then position in the input, as for tapbacks)
+    timeline.sort(chronological);
+    var opens = new Map();          // local day -> who sent its first message
+    var closes = new Map();         // local day -> who sent its last message
+    var previousSender = null;
+    var streak = 0;
+    for (i = 0; i < timeline.length; i++) {
+      var who = timelineSender[timeline[i]];
+      var onDay = timelineDay[timeline[i]];
+      if (!opens.has(onDay)) opens.set(onDay, who);
+      closes.set(onDay, who);
+      streak = who === previousSender ? streak + 1 : 1;
+      previousSender = who;
+      var mine = people.get(who);
+      if (streak > mine[RUN]) mine[RUN] = streak;
+    }
+    opens.forEach(function (who) { people.get(who)[STARTS]++; });
+    closes.forEach(function (who) { people.get(who)[ENDS]++; });
 
     // ---- standing tapbacks on those messages
     var byKind = [0, 0, 0, 0, 0, 0, 0];
@@ -1326,23 +1565,27 @@
     var byKindObject = {};
     KINDS.forEach(function (name, k) { byKindObject[name] = byKind[k]; });
 
+    var totals = {
+      messages: total,
+      words: wordsTotal,
+      attachments: attachmentsTotal,
+      reactions: reactionsTotal,
+      days_active: dayCounts.size,
+      longest_streak: longest
+    };
+    var figures = personalityFigures(totals, byHour, byWeekday, byMonth, endDay - startDay + 1,
+      busiest ? busiest[1] : 0, byKindObject, Array.from(people.values()).map(function (c) { return c[MSG]; }));
+
     return {
       v: 1,
       chat: { name: chatName, members: members.size },
       period: { label: label, start: iso(startDay), end: iso(endDay) },
-      totals: {
-        messages: total,
-        words: wordsTotal,
-        attachments: attachmentsTotal,
-        reactions: reactionsTotal,
-        days_active: dayCounts.size,
-        longest_streak: longest
-      },
+      totals: totals,
       by_hour: byHour,
       by_weekday: byWeekday,
       by_month: byMonth,
       busiest_day: busiest ? { date: iso(busiest[0]), messages: busiest[1] } : null,
-      personality: personality(byHour, byWeekday, total),
+      personality: personality(figures),
       late_night: {
         messages: lateTotal,
         share: round4(lateTotal, total),
@@ -1758,11 +2001,12 @@
       trim: trim, truncate: truncate, splitDate: function (v) { return splitDate(v) ? [dateSec, dateFrac] : null; },
       daysFromCivil: daysFromCivil, civilFromDays: civilFromDays, iso: iso,
       offsetFunction: offsetFunction, Offsets: Offsets, resolvePeriod: resolvePeriod,
-      round4: round4, hour12: hour12, personality: personality, awards: awards,
+      round4: round4, hour12: hour12, personality: personality, personalityFigures: personalityFigures,
+      awards: awards, compareRatio: compareRatio, TRAITS: TRAITS, AWARDS: AWARDS,
       fallbackName: fallbackName, Names: Names, distinct: distinct, resolveAll: resolveAll,
       chatLabel: chatLabel, ownerName: ownerName, personLabel: personLabel, nameWindow: nameWindow,
       shortForms: shortForms, toInt: toInt, coded: coded,
-      PERSONALITIES: PERSONALITIES, base64urlEncode: base64urlEncode,
+      PERSONALITIES: PERSONALITIES, COUNTERS: COUNTERS, base64urlEncode: base64urlEncode,
       base64urlDecode: base64urlDecode
     }
   };

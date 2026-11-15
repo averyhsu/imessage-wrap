@@ -438,3 +438,56 @@ Once the owner's two tests had passed (D15), the Mac app stopped being an experi
   names. Both follow [`SCHEMA.md`](SCHEMA.md) §2 and are what makes people recognisable to
   their own chat; the confirmation sheet says first names "and counts", which is the usual
   case, not a guarantee.
+
+### D18 — Results that match the chat (2026-11-15)
+The owner ran it on a real chat and said the results read like boilerplate: it called the
+chat "The Night Owls" while most of its messages were sent at 11 AM. They asked for
+pattern matching: a set of lines for each part of the recap, picked by how the chat behaves.
+
+- **The cause of the Night Owls case.** The old rule gave that title to any chat with 12% of
+  its messages after midnight, checked it before anything else, and then printed the peak
+  hour next to it ("Peak hour: 11 AM. Sleep is a suggestion."). Two of the invented test
+  chats had the same fault in some time zones.
+- **Personality: the trait a chat is most extreme in.** Both engines now measure eighteen
+  traits: one person or two carrying the chat, everyone talking about equally, nights,
+  weekends, weekdays only, no quiet hour, activity on nearly every day, one huge day, one
+  huge month, sheer volume, a slow trickle, mostly photos, tapbacks on everything, mostly
+  laughs, mostly hearts, long messages and very short ones. Each has a bar a chat must pass
+  and a point where it counts as extreme. The trait furthest past its bar wins. When
+  nothing stands out, the peak hour decides, as before.
+- **Every title states the number that earned it.** "52% of messages on Saturday and
+  Sunday", "Active on 301 of 314 days", "Peak hour: 11 AM". The text reply uses the same
+  sentence. Night Owls now needs a quarter of all messages after midnight, or a peak hour
+  between midnight and 5 AM.
+- **No names in the title's sentence.** It is not rewritten when names are shortened, so a
+  name there could have leaked a full contact name.
+- **Each slide picks its headline from a set of patterns**, first match wins, and the old
+  line is always the last one, so a slide can never be left without a headline. A headline
+  may only claim what a number on the same slide shows. Patterns that need a full week or a
+  full year are skipped on thin data, and months after the end of the period never count as
+  quiet months.
+- **Seven new awards** from things already in the messages: who sends the first and the
+  last message of the day, who asks the most questions, who shares the most links, who
+  writes before 9 AM, who sends the longest run in a row, and who uses the fewest words.
+  The Lurker moved to the end of the list so the quietest person gets something more
+  specific when they earned it.
+- **The bars are first guesses.** There is no real chat data to tune them on, by design.
+  Four were raised as soon as the invented test chats showed them to be too easy: The Daily
+  Ritual (from 92% of days to 97%), The Hype Squad (to a tapback for every other message),
+  and the Novelist and Minimalist awards, which went to somebody in nearly every chat
+  ("A paragraph person." for someone averaging five words). The rest wait for feedback on
+  real recaps. All of them are one table in [`SCHEMA.md`](SCHEMA.md) §3 and §4.
+- **The typing-dots waits are gone.** The cover and the personality slide held their
+  content back for about two seconds behind a typing bubble. The owner found it pointless,
+  and it was. Content now starts at once.
+- **Old links keep what they say.** A recap is whatever its link holds, so a link made by an
+  older build still shows the personality that build gave it. A new `/wrapped` gives the
+  new one.
+- **The demo follows its own numbers.** The invented demo chat used to be "The Night Owls"
+  with 13% of its messages after midnight. Under the new rule it is "The Firehose" (154
+  messages a day), and the pictures made from it were redone.
+- **The iPhone app's sample had been left behind.** It was a separate copy of the old demo
+  and would have gone on saying "The Night Owls. Peak hour: 11 PM." It is now built from
+  the site's demo by a script, and a test fails if the two ever differ. The old-shape test
+  recap that every engine reads stays as it is: it proves that links made by older builds
+  still open.

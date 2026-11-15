@@ -1,3 +1,6 @@
+import json
+import shutil
+import subprocess
 import unittest
 
 import mac_support
@@ -22,6 +25,26 @@ class RecapText(unittest.TestCase):
         # every line is emoji-led, never plain ASCII at the start
         for ln in lines:
             self.assertFalse(ln[0].isascii(), ln)
+
+    def test_personality_line(self):
+        stats = sample_stats()      # made before personalities had a reason: the peak hour stands in
+        self.assertIn("🦉 You are The Night Owls. Peak hour: 11 PM.", recap_lines(stats))
+        stats["personality"] = {"id": "daily_ritual", "emoji": "📆", "title": "The Daily Ritual",
+                                "reason": "Active on 301 of 314 days",
+                                "blurb": "Active on 301 of 314 days. Skipping a day is not an option.",
+                                "peak_hour": 23}
+        self.assertIn("📆 You are The Daily Ritual. Active on 301 of 314 days.", recap_lines(stats))
+        stats["personality"].pop("emoji")           # the emoji for its id
+        self.assertIn("📆 You are The Daily Ritual. Active on 301 of 314 days.", recap_lines(stats))
+        stats["personality"]["id"] = "something_new"            # ids are open-ended
+        self.assertIn("✨ You are The Daily Ritual. Active on 301 of 314 days.", recap_lines(stats))
+        stats["personality"]["emoji"] = "🧪"                    # its own emoji wins
+        stats["personality"]["reason"] = "A reason that ends in a full stop."
+        self.assertIn("🧪 You are The Daily Ritual. A reason that ends in a full stop.", recap_lines(stats))
+        stats["personality"].pop("reason")
+        stats["personality"].pop("peak_hour")
+        stats["by_hour"] = [0] * 24
+        self.assertIn("🧪 You are The Daily Ritual.", recap_lines(stats))
 
     def test_no_message_text_and_no_link_in_the_recap(self):
         text = recap_text(sample_stats())
@@ -257,6 +280,61 @@ class Formatting(unittest.TestCase):
         before = len(calls)
         self.assertEqual(fmt.account_first_name(platform="linux", run=runner("Amara Hsu")), "Me")
         self.assertEqual(len(calls), before)  # only asked on macOS
+
+    @unittest.skipUnless(shutil.which("node"), "Node.js is not installed")
+    def test_the_mac_apps_javascript_twin_writes_the_same_lines(self):
+        """mac/Threadback/Engine/recap-text.js is this module line for line (the Mac app
+        sends what the helper would). CI also compares the two on a Mac; this checks the
+        personality line and its fallbacks here."""
+        cases = []
+        for stats in (sample_stats(), sample_stats(members=2, messages=1), sample_stats(members=40, messages=900)):
+            cases.append(stats)
+        variants = [
+            {"id": "daily_ritual", "emoji": "📆", "title": "The Daily Ritual", "reason": "Active on 301 of 314 days",
+             "blurb": "x", "peak_hour": 23},
+            {"id": "daily_ritual", "title": "The Daily Ritual", "reason": "Active on 301 of 314 days"},
+            {"id": "something_new", "title": "The New One", "reason": "Ends in a stop..", "peak_hour": 4},
+            {"id": None, "emoji": "⁦🧪⁩", "title": "The Lab", "peak_hour": 12},
+            {"id": 5, "emoji": "", "title": "  The   Spaces  ", "reason": "  ", "peak_hour": 0},
+            {"id": "night_owls", "title": "The Night Owls", "reason": "r" * 200},
+            {"id": "constructor", "title": "The Proto"},
+            {"title": ""},
+        ]
+        for personality in variants:
+            stats = sample_stats()
+            stats["personality"] = personality
+            cases.append(stats)
+        bare = sample_stats()
+        bare["by_hour"] = [0] * 24
+        bare["personality"] = {"id": "quiet_ones", "title": "The Quiet Ones"}
+        cases.append(bare)
+        script = (
+            "const fs = require('fs');"
+            "globalThis.WrappedEngine = require(process.argv[1] + '/web/make/engine.js');"
+            "require(process.argv[1] + '/mac/Threadback/Engine/recap-text.js');"
+            "const cases = JSON.parse(fs.readFileSync(0, 'utf8'));"
+            "process.stdout.write(JSON.stringify(cases.map((c) => ["
+            "globalThis.ThreadbackText.recapLines(c, true), globalThis.ThreadbackText.recapLines(c, false)])));"
+        )
+        proc = subprocess.run(["node", "-e", script, str(mac_support.REPO_ROOT)], input=json.dumps(cases).encode(),
+                              capture_output=True, check=True)
+        theirs = json.loads(proc.stdout.decode("utf-8"))
+        for stats, (with_link, without) in zip(cases, theirs):
+            with self.subTest(personality=stats.get("personality")):
+                self.assertEqual(with_link, recap_lines(stats))
+                self.assertEqual(without, recap_lines(stats, with_link=False))
+
+    def test_personality_emoji_for_the_card_and_the_text(self):
+        self.assertEqual(fmt.personality_emoji({"id": "daily_ritual", "emoji": "🧪"}), "🧪")
+        self.assertEqual(fmt.personality_emoji({"id": "daily_ritual"}), "📆")
+        self.assertEqual(fmt.personality_emoji({"id": "night_owls", "emoji": "⁦\n"}), "🦉")
+        self.assertEqual(fmt.personality_emoji({"id": "something_new"}), "✨")
+        self.assertEqual(fmt.personality_emoji({"id": None}), "✨")
+        self.assertEqual(fmt.personality_emoji(None), "✨")
+        self.assertEqual(len(fmt.PERSONALITY_EMOJI), 25)
+        from wrapped import stats as engine
+        for pid, (emoji, _title, _line) in engine.PERSONALITIES.items():
+            self.assertEqual(fmt.PERSONALITY_EMOJI[pid], emoji, pid)
 
     def test_peak_hour_fallbacks(self):
         self.assertEqual(fmt.peak_hour({"personality": {"peak_hour": 7}}), 7)

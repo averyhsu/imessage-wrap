@@ -242,7 +242,7 @@
     // Personality.
     if (s.personality && s.personality.title) {
       blocks.push({ h: 178, draw: function (top) {
-        var emoji = F.personaEmoji(s.personality.id);
+        var emoji = s.personality.emoji || F.personaEmoji(s.personality.id);
         var text = s.personality.title;
         var fit = fitOne(ctx, text, 640, 900, 62, 34, [SEMI_WIDE, NORMAL, NARROW, XNARROW]);
         setFont(ctx, 900, fit.stretch, fit.size);

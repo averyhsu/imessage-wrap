@@ -72,9 +72,11 @@ window.WRAPPED_DEMO = {
     "messages": 612
   },
   "personality": {
-    "id": "night_owls",
-    "title": "The Night Owls",
-    "blurb": "Peak hour: 11 PM. Sleep is a suggestion.",
+    "id": "firehose",
+    "emoji": "🚿",
+    "title": "The Firehose",
+    "reason": "154 messages a day, on average",
+    "blurb": "154 messages a day, on average. Mute at your own risk.",
     "peak_hour": 23
   },
   "late_night": {
@@ -218,11 +220,11 @@ window.WRAPPED_DEMO = {
       "detail": "11,842 messages. Nobody asked."
     },
     {
-      "id": "lurker",
-      "emoji": "👻",
-      "title": "The Lurker",
-      "winner": "Lena",
-      "detail": "1,835 messages. Reads everything, says little."
+      "id": "comedian",
+      "emoji": "😂",
+      "title": "The Comedian",
+      "winner": "Jonah",
+      "detail": "Made the chat laugh 912 times."
     },
     {
       "id": "night_owl",
@@ -232,25 +234,25 @@ window.WRAPPED_DEMO = {
       "detail": "2,134 messages after midnight."
     },
     {
-      "id": "comedian",
-      "emoji": "😂",
-      "title": "The Comedian",
-      "winner": "Jonah",
-      "detail": "Made the chat laugh 912 times."
+      "id": "starter",
+      "emoji": "🚀",
+      "title": "The Conversation Starter",
+      "winner": "Priya",
+      "detail": "Sent the first message of the day 96 times."
     },
     {
-      "id": "hype",
-      "emoji": "📣",
-      "title": "The Hype Machine",
+      "id": "interrogator",
+      "emoji": "❓",
+      "title": "The Interrogator",
       "winner": "Tess",
-      "detail": "Handed out 2,240 tapbacks."
+      "detail": "Asked 803 questions."
     },
     {
-      "id": "novelist",
-      "emoji": "📚",
-      "title": "The Novelist",
+      "id": "early_bird",
+      "emoji": "🐦",
+      "title": "The Early Bird",
       "winner": "Marcus",
-      "detail": "10.0 words per message. A paragraph person."
+      "detail": "612 messages before 9 AM."
     }
   ],
   "meta": {

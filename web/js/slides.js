@@ -23,6 +23,7 @@
 
   var F = root.WrappedFormat;
   var G = root.WrappedGlyphs;
+  var I = root.WrappedInsights;
   var Config = root.WrappedConfig;
 
   // ── tiny DOM kit ───────────────────────────────────────────────────────────
@@ -64,7 +65,7 @@
     return node;
   }
 
-  /** Mark a node as an entrance: kind = up|fade|pop|pop-l|pop-r|slam|drop|grow-x|grow-y|typing… */
+  /** Mark a node as an entrance: kind = up|fade|pop|pop-l|pop-r|slam|drop|grow-x|grow-y… */
   function A(node, kind, delay, dur) {
     node.classList.add('a');
     if (kind && kind !== 'up') node.classList.add('a-' + kind);
@@ -81,12 +82,19 @@
     return parts.map(function (p, i) { return i % 2 ? b(p) : p; });
   }
 
-  function bubble(tone, side, kids, extra) {
-    return h('div', 'bubble bubble--' + tone + ' bubble--' + side + (extra ? ' ' + extra : ''), kids);
+  /**
+   * Copy from WrappedInsights: a list of parts, each a string, {b} (a number, in bold) or
+   * {name} (a person's name from the recap, set like every other name).
+   */
+  function say(parts) {
+    return (parts || []).map(function (p) {
+      if (typeof p === 'string') return p;
+      return p.name != null ? nm('b', '', p.name) : b(p.b);
+    });
   }
 
-  function typing() {
-    return h('span', 'bubble bubble--white bubble--left typing', [h('i'), h('i'), h('i')]);
+  function bubble(tone, side, kids, extra) {
+    return h('div', 'bubble bubble--' + tone + ' bubble--' + side + (extra ? ' ' + extra : ''), kids);
   }
 
   function kicker(text, glyph) {
@@ -207,33 +215,15 @@
   }
 
   // ── copy ───────────────────────────────────────────────────────────────────
-
-  function clockHeadline(hour) {
-    if (hour <= 4) return 'Up way past bedtime.';
-    if (hour <= 8) return 'Up before the alarm.';
-    if (hour <= 11) return 'A morning kind of chat.';
-    if (hour <= 13) return 'Out to lunch, in the chat.';
-    if (hour <= 17) return 'The afternoon scroll.';
-    if (hour <= 20) return 'Loudest around dinner.';
-    return 'Loudest after dark.';
-  }
-
-  var WEEK_HEADLINES = [
-    'Mondays, of all days.', 'Tuesday. Really, Tuesday.', 'Peak midweek energy.', 'Thursday is the new Friday.',
-    'Friday feeling, confirmed.', 'Saturdays are for the chat.', 'Sunday is group chat day.'
-  ];
-
-  var TAP_HEADLINES = {
-    love: 'Mostly love.', like: 'A thumbs-up kind of chat.', dislike: 'Tough crowd.', laugh: 'Mostly laughing.',
-    emphasize: 'Big !! energy.', question: 'So many questions.', emoji: 'Fluent in emoji.'
-  };
+  // Headlines and supporting lines are matched to the chat in insights.js; a slide only
+  // renders what it picked (copy.<slide>).
 
   function isYear(label) { return /^\d{4}$/.test(label); }
 
   // ── 1. cover ───────────────────────────────────────────────────────────────
 
   function cover(s, env) {
-    var slide = make('cover', { ink: 'light', world: '#0a7aff', duration: 5200, label: s.chat.name + ', ' + F.inReview(s.period.label) });
+    var slide = make('cover', { ink: 'light', world: '#0a7aff', duration: 3650, label: s.chat.name + ', ' + F.inReview(s.period.label) });
     decos(slide, ['cover__d1', 'cover__d2 deco--l', 'cover__d3 deco--l', 'cover__d4']);
 
     var meta = [];
@@ -241,7 +231,7 @@
     var range = F.dateRange(s.period.start, s.period.end);
     if (range) meta.push(range);
 
-    var T0 = 1650; // the typing bubble resolves into the title here
+    var T0 = 100; // the first line comes in here, like the kicker on every other slide
     var name = words(auto(h('h1', 'cover__name')), s.chat.name, T0 + 60, 80);
     fitBlock(slide, name, { max: 70, min: 24, lines: 3, lineHeight: 0.9, stretches: [116, 100, 82, 66] });
 
@@ -250,7 +240,6 @@
     // Somebody loved it: a heart tapback lands on the title bubble.
     label.appendChild(A(G.tapback('love', 'cover__tb'), 'drop', T0 + 1150, 0.5));
     var stack = h('div', 'cover__stack', [
-      A(h('div', 'cover__typing', typing()), 'typing', 200, 1.5),
       meta.length ? A(h('p', 'cover__meta', meta.join('  ·  ')), 'up', T0) : null,
       name,
       label
@@ -265,7 +254,7 @@
 
   // ── 2. total messages ──────────────────────────────────────────────────────
 
-  function total(s) {
+  function total(s, env, copy) {
     var n = s.totals.messages;
     if (!(n > 0)) return null;
     var slide = make('total', { ink: 'dark', world: '#30d158', duration: 6500, label: F.int(n) + ' messages' });
@@ -290,6 +279,7 @@
     if (s.totals.days_active > 0) chips.push(F.int(s.totals.days_active) + ' ' + F.plural(s.totals.days_active, 'day') + ' active');
     if (s.totals.longest_streak > 1) chips.push(F.int(s.totals.longest_streak) + '-day streak');
     if (s.totals.attachments > 0) chips.push(F.int(s.totals.attachments) + ' ' + F.plural(s.totals.attachments, 'photo & file', 'photos & files'));
+    if (copy.total && copy.total.fact) chips.push(copy.total.fact);
 
     add(slide.body, [
       A(kicker(lead), 'up', 100),
@@ -320,10 +310,10 @@
     return 'rgb(94,92,230)';
   }
 
-  function clock(s) {
+  function clock(s, env, copy) {
     var H = s.by_hour;
     var sum = F.sum(H);
-    if (!(sum > 0)) return null;
+    if (!(sum > 0) || !copy.clock) return null;
     var peak = F.argmax(H);
     var max = H[peak];
     var slide = make('clock', { ink: 'light', world: '#2a1f7a', duration: 7000, label: 'Peak hour: ' + F.hour(peak) });
@@ -353,11 +343,11 @@
 
     add(slide.body, [
       A(kicker('The 24-hour clock'), 'up', 100),
-      A(h('h2', 'headline', clockHeadline(peak)), 'up', 220),
+      A(h('h2', 'headline', copy.clock.headline), 'up', 220),
       gap('s'),
       dial,
       gap('s'),
-      A(bubble('white', 'left', [b(F.int(max) + ' ' + F.plural(max, 'message')), ' landed between ' + F.hourSpan(peak) + '.']), 'pop-l', 2350),
+      A(bubble('white', 'left', say(copy.clock.line)), 'pop-l', 2350),
       gap('s'),
       A(h('ul', 'chips', parts), 'up', 2900)
     ]);
@@ -399,10 +389,10 @@
   function persona(s) {
     var p = s.personality;
     if (!p || !p.title) return null;
-    var slide = make('persona', { ink: 'light', world: '#7a2cf0', duration: 7600, label: 'Personality: ' + p.title + '. ' + p.blurb });
+    var slide = make('persona', { ink: 'light', world: '#7a2cf0', duration: 5500, label: 'Personality: ' + p.title + '. ' + p.blurb });
     decos(slide, ['persona__d1 deco--l', 'persona__d2']);
 
-    var T0 = 2300;
+    var T0 = 200; // the reveal starts here
     var t = titleLines(p.title);
     var title = h('h2', 'persona__title');
     t.lines.forEach(function (line, i) {
@@ -415,8 +405,7 @@
     add(slide.body, [
       A(kicker("This chat's personality"), 'up', 100),
       h('div', 'persona__wrap', [
-        A(h('div', 'persona__typing', typing()), 'typing', 350, 1.9),
-        A(h('span', 'persona__emoji', F.personaEmoji(p.id)), 'pop', T0),
+        A(h('span', 'persona__emoji', p.emoji || F.personaEmoji(p.id)), 'pop', T0),
         t.the ? A(h('p', 'persona__the', 'The'), 'up', T0 + 100) : null,
         title,
         p.blurb ? A(auto(bubble('white', 'left', p.blurb, 'persona__blurb')), 'pop-l', after + 350) : null
@@ -439,9 +428,9 @@
     ['bottom', 0.46, 0.88, 7, 2.7], ['bottom', 0.70, 0.96, 5, 3.2], ['bottom', 0.30, 0.45, 5, 4.2], ['bottom', 0.60, 0.30, 4, 3]
   ];
 
-  function late(s) {
+  function late(s, env, copy) {
     var l = s.late_night;
-    if (!l) return null;
+    if (!l || !copy.late) return null;
     var n = l.messages;
     var slide = make('late', { ink: 'light', world: '#141a4d', duration: 6500, label: F.int(n) + ' messages between midnight and 5 AM' });
     var bg = slide.el.firstChild;
@@ -458,17 +447,18 @@
 
     var kids = [A(kicker('After midnight', 'moon'), 'up', 100), num];
     if (n > 0) {
-      kids.push(A(h('p', 'late__cap', F.plural(n, 'message') + ' sent between midnight and 5 AM'), 'up', 500));
+      kids.push(A(h('p', 'late__cap', [F.plural(n, 'message') + ' sent between midnight and 5 AM', h('span', 'late__tag', copy.late.tagline)]), 'up', 500));
       var fill = A(h('b', 'meter__fill'), 'grow-x', 1900);
       fill.style.width = Math.max(1, Math.min(100, l.share * 100)).toFixed(2) + '%';
       kids.push(A(h('div', 'meter', [
         h('div', 'meter__track', fill),
         h('p', 'meter__label', [b(F.pct(l.share)), ' of everything this chat said'])
       ]), 'up', 1750));
-      if (l.top && l.top.name) {
+      var who = copy.late.top;
+      if (l.top && l.top.name && who) {
         kids.push(A(bubble('yellow', 'right', [
           avatar(l.top.name),
-          h('span', '', [nm('b', '', l.top.name), ' kept the lights on', l.top.messages > 0 ? h('em', '', F.int(l.top.messages) + ' late-night ' + F.plural(l.top.messages, 'message')) : null])
+          h('span', '', [nm('b', '', l.top.name), who.verb, who.detail ? h('em', '', who.detail) : null])
         ], 'late__top'), 'pop-r', 2700));
       }
       // The rest of the night shift, from the per-sender counts.
@@ -481,7 +471,7 @@
         }))), 'up', 3200));
       }
     } else {
-      kids.push(A(h('p', 'late__cap', 'messages after midnight. A suspiciously well-rested chat.'), 'up', 500));
+      kids.push(A(h('p', 'late__cap', 'messages after midnight. ' + copy.late.tagline), 'up', 500));
     }
     // The moon is part of the column (not painted behind it), so a long number can never
     // run into it. The two spacers keep the text centred on the slide exactly as if the
@@ -534,33 +524,30 @@
     return cols;
   }
 
-  function week(s) {
+  function week(s, env, copy) {
     var W = s.by_weekday;
     var sum = F.sum(W);
-    if (!(sum > 0)) return null;
+    if (!(sum > 0) || !copy.week) return null;
     var peak = F.argmax(W);
     var slide = make('week', { ink: 'dark', world: '#ff9f0a', duration: 6500, label: 'Busiest weekday: ' + F.WEEKDAYS[peak] });
     decos(slide, ['week__d1']);
 
-    var weekend = (W[5] + W[6]) / sum;
-    var fact = [b(F.int(W[peak]) + ' ' + F.plural(W[peak], 'message')), ' landed on a ' + F.WEEKDAYS[peak] + '. '];
-    fact = fact.concat(weekend >= 0.4 ? ['Weekends are ', b(F.pct(weekend)), ' of the chat.'] : ['Weekdays carry ', b(F.pct(1 - weekend)), ' of the chat.']);
 
     add(slide.body, [
       A(kicker('The week'), 'up', 100),
-      A(h('h2', 'headline', WEEK_HEADLINES[peak]), 'up', 220),
+      A(h('h2', 'headline', copy.week.headline), 'up', 220),
       gap('m'),
       columns(W, F.WEEKDAY_LETTERS, peak, 550, 85, function (v) { return v >= 100000 ? F.compact(v) : F.int(v); }),
       gap('m'),
-      A(bubble('white', 'left', fact), 'pop-l', 2100)
+      A(bubble('white', 'left', say(copy.week.line)), 'pop-l', 2100)
     ]);
     return slide;
   }
 
-  function year(s) {
+  function year(s, env, copy) {
     var M = s.by_month;
     var sum = F.sum(M);
-    if (!(sum > 0)) return null;
+    if (!(sum > 0) || !copy.year) return null;
     var peak = F.argmax(M);
     var slide = make('year', { ink: 'dark', world: '#00c7be', duration: 6500, label: 'Busiest month: ' + F.MONTHS[peak] });
     decos(slide, ['year__d1 deco--l']);
@@ -579,7 +566,8 @@
 
     add(slide.body, [
       A(kicker('The year'), 'up', 100),
-      A(h('h2', 'headline', F.MONTHS[peak] + ' went off.'), 'up', 220),
+      A(h('h2', 'headline', copy.year.headline), 'up', 220),
+      copy.year.line ? A(h('p', 'lede', say(copy.year.line)), 'up', 320) : null,
       gap('m'),
       columns(M, F.MONTH_LETTERS, peak, 550, 55, function (v) { return v >= 10000 ? F.compact(v) : F.int(v); }),
       gap('m'),
@@ -590,9 +578,9 @@
 
   // ── 8. top senders ─────────────────────────────────────────────────────────
 
-  function senders(s) {
+  function senders(s, env, copy) {
     var list = s.senders.filter(function (p) { return p.messages > 0; });
-    if (list.length < 2) return null;
+    if (list.length < 2 || !copy.senders) return null;
     var top = list[0];
     var rows = list.slice(1, 5);
     var more = list.slice(5);
@@ -625,7 +613,7 @@
 
     add(slide.body, [
       A(kicker('Top senders'), 'up', 100),
-      A(h('h2', 'headline', list.length === 2 ? 'It takes two.' : 'Who carried the chat'), 'up', 220),
+      A(h('h2', 'headline', copy.senders.headline), 'up', 220),
       gap('s'),
       ol,
       more.length ? A(h('p', 'senders__more', [keep(h('span', '', '+' + more.length + ' more: '))].concat(more.map(function (p, i) {
@@ -688,7 +676,7 @@
     return css(node, { '--cols': entries.length === 4 ? 2 : Math.min(3, entries.length) });
   }
 
-  function moty(s) {
+  function moty(s, env, copy) {
     var m = s.most_reacted[0];
     if (!m || !(m.reactions > 0 || m.text)) return null;
     var slide = make('moty', { ink: 'dark', world: '#e9e9eb', backdrop: '#0a84ff', duration: 8000, label: 'Message of the year, from ' + m.sender + (m.text ? ': ' + m.text : ', ' + F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')) });
@@ -727,8 +715,12 @@
     var doneAt = landAt + landed * landStep;
 
     var from = h('p', 'moty__from', [avatar(m.sender, true), nm('b', '', m.sender), m.date ? keep(h('span', '', '·  ' + F.date(m.date))) : null]);
+    var kindsLine = copy.moty && copy.moty.line;
     var receipt = m.reactions > 0
-      ? h('p', 'moty__receipt', [b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the words stayed in the chat'])
+      ? h('p', 'moty__receipt', [
+        b(F.int(m.reactions) + ' ' + F.plural(m.reactions, 'tapback')), m.text ? '  ·  the most all year' : '  ·  the words stayed in the chat',
+        kindsLine ? h('span', 'moty__kinds', say(kindsLine)) : null
+      ])
       : null;
 
     var runners = s.most_reacted.slice(1, 3).filter(function (r) { return r.reactions > 0 || r.text; });
@@ -760,10 +752,10 @@
   // Slots for up to seven circles, biggest first: [centre x, centre y, largest radius].
   var CLOUD = [[88, 106, 84], [238, 72, 62], [262, 180, 46], [176, 196, 34], [310, 120, 22], [26, 204, 22], [112, 214, 20]];
 
-  function taps(s) {
+  function taps(s, env, copy) {
     var r = s.reactions;
     var totalTaps = s.totals.reactions;
-    if (!r || !(totalTaps > 0)) return null;
+    if (!r || !(totalTaps > 0) || !copy.taps) return null;
     var kinds = G.TAPBACKS.map(function (t) { return { kind: t.kind, count: r.by_kind[t.kind] || 0 }; })
       .filter(function (k) { return k.count > 0; })
       .sort(function (a, z) { return z.count - a.count; });
@@ -772,7 +764,7 @@
 
     var value = h('span', '', F.int(totalTaps));
     var num = A(h('div', 'taps__num num fit', value), 'up', 250, 0.9);
-    var top = h('div', 'taps__top', [num, A(h('p', 'taps__cap', [F.plural(totalTaps, 'tapback') + '.', h('br'), kinds.length ? F.pick(TAP_HEADLINES, kinds[0].kind, '') : '']), 'up', 500)]);
+    var top = h('div', 'taps__top', [num, A(h('p', 'taps__cap', [F.plural(totalTaps, 'tapback') + '.', h('br'), copy.taps.headline]), 'up', 500)]);
     fitLine(slide, num, { max: 96, min: 36, stretches: [100, 84, 70, 62], text: F.int(totalTaps), avail: function () { return top.clientWidth * 0.6; } });
     slide.counts.push({ el: value, to: totalTaps, at: 300, dur: 1300 });
 
@@ -799,6 +791,7 @@
     add(slide.body, [
       A(kicker('Tapbacks'), 'up', 100),
       top,
+      copy.taps.line ? A(h('p', 'lede taps__line', say(copy.taps.line)), 'up', 650) : null,
       cloud ? gap('s') : null,
       cloud,
       people.length ? gap('s') : null,
@@ -895,9 +888,10 @@
 
   function build(stats, env) {
     env = env || {};
+    var copy = I.pick(stats);
     var slides = [];
     ORDER.forEach(function (builder) {
-      var slide = builder(stats, env);
+      var slide = builder(stats, env, copy);
       if (slide) slides.push(slide);
     });
     return slides;
