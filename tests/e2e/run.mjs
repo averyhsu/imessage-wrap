@@ -4,7 +4,7 @@
 //   node tests/e2e/run.mjs --only=embed,matrix
 //   npm run shots                    refresh the committed screenshots (see below)
 //
-// Sections: play, links, share, embed, file, matrix, landing, brand, shots.
+// Sections: play, links, share, embed, file, matrix, landing, get, brand, shots.
 //
 // A test run never touches tracked files: screenshots go to test-results/web-screenshots/
 // (git-ignored; CI uploads that folder). Only --update-screenshots writes them to
@@ -914,13 +914,15 @@ await section('landing', 'Landing page', async () => {
     ok(await page.locator('#story').isHidden(), `[${vpName}] no story without a payload`);
     eq(await page.locator('.l-brand__name').innerText(), Config.PRODUCT_NAME, `[${vpName}] brand comes from the config constant`);
     eq(await page.locator('#play-demo').getAttribute('href'), '?demo=1', `[${vpName}] "Play the demo" links to ?demo=1`);
-    ok(await page.locator('a[href="make/"]').first().isVisible() || vp.width <= 420, `[${vpName}] "Make your own" links to make/`);
-    ok((await page.locator('.l-cta a[href="make/"]').innerText()).includes('Make your own'), `[${vpName}] make link label`);
+    eq(await page.locator('.l-hero .l-cta a').nth(0).getAttribute('id'), 'play-demo', `[${vpName}] "Play the demo" is the first button`);
+    eq(await page.getAttribute('#get-it', 'href'), '#get', `[${vpName}] the second button leads to the "get it" section`);
+    eq(await page.getAttribute('#get-mac', 'href'), 'mac/', `[${vpName}] the main way: "Get the Mac app" links to mac/`);
+    ok((await page.locator('#get-make').innerText()).includes('Make one in the browser') && await page.getAttribute('#get-make', 'href') === 'make/', `[${vpName}] the alternative: "Make one in the browser" links to make/`);
     const text = await visibleText(page);
     ok(/never send that part/i.test(text) && /no server/i.test(text) && /on your own device/i.test(text), `[${vpName}] explains the privacy model`);
     // Display type set tight: a line's descenders must clear the next line's tall letters.
     // Measured on the font's real ink (canvas metrics at a large size), not on the CSS number.
-    const leading = await page.evaluate(() => [...document.querySelectorAll('.l-h1, .l-h2, .l-step h3, .l-facts h3')].map((el) => {
+    const leading = await page.evaluate(() => [...document.querySelectorAll('.l-h1, .l-h2, .l-how h3, .l-alt h3, .l-facts h3')].map((el) => {
       const cs = getComputedStyle(el);
       const ctx = document.createElement('canvas').getContext('2d');
       ctx.font = `${cs.fontWeight} 200px ${cs.fontFamily}`;
@@ -955,6 +957,103 @@ await section('landing', 'Landing page', async () => {
   }
 });
 
+// ── 7b. "get it for your chat": the Mac app first, the browser second ────────────────
+await section('get', 'Landing: the "get it for your chat" section, the top bar, and the last slide\'s link to it', async () => {
+  const sizes = [['phone-360', { width: 360, height: 740, mobile: true }], ['phone-390x844', viewports['phone-390x844']], ['tablet-768x1024', viewports['tablet-768x1024']], ['desktop-1440x900', viewports['desktop-1440x900']]];
+  for (const [vpName, vp] of sizes) {
+    const s = await open({ viewport: vp, reducedMotion: 'reduce' });
+    const { page } = s;
+    await page.goto(server.url);
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));
+    await page.evaluate(() => document.fonts.ready);
+    // The section's pictures load lazily: bring them into view, then check they arrived.
+    await page.locator('#get').scrollIntoViewIfNeeded();
+    await page.evaluate(async () => {
+      for (const i of document.querySelectorAll('#get img')) {
+        if (i.getClientRects().length) { i.scrollIntoView(); await new Promise((r) => setTimeout(r, 50)); }
+      }
+    });
+    await page.waitForFunction(() => [...document.querySelectorAll('#get img')].filter((i) => i.getClientRects().length > 0).every((i) => i.complete), null, { timeout: 10000 });
+    const imgs = await page.$$eval('#get img', (list) => list.map((i) => ({ src: i.currentSrc || i.src, w: i.naturalWidth, shown: i.getClientRects().length > 0 })));
+    const card = imgs.find((i) => /reply-card/.test(i.src));
+    ok(card && card.w > 0 && card.src.startsWith(server.url), `[${vpName}] the reply card loads, from this site (${card && card.src})`);
+    ok(imgs.filter((i) => i.shown).every((i) => i.w > 0), `[${vpName}] every picture shown in the section loads`);
+    const thread = await page.evaluate(() => document.querySelector('.l-thread__text').textContent);
+    ok(/Dinner Club/.test(thread) && /48,213 messages/.test(thread), `[${vpName}] the reply text is the invented demo chat's`);
+    // The top bar: one link to the section on a phone, the two pages on wider screens.
+    const top = await page.$$eval('.l-top__nav a', (list) => list.filter((a) => a.getClientRects().length > 0).map((a) => a.getAttribute('href')));
+    eq(top, vp.width <= 560 ? ['#get'] : ['mac/', 'make/'], `[${vpName}] the top bar's links`);
+    // Nothing sticks out sideways.
+    const wide = await page.evaluate(() => {
+      const vw = document.documentElement.clientWidth;
+      const out = [];
+      if (document.documentElement.scrollWidth > vw + 1) out.push('page scrolls sideways: ' + document.documentElement.scrollWidth);
+      for (const el of document.querySelectorAll('#landing *')) {
+        if (el.closest('.l-sky, .sr-only, svg, .l-hero__art')) continue;
+        const cs = getComputedStyle(el);
+        if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+        const r = el.getBoundingClientRect();
+        if ((r.width || r.height) && (r.right > vw + 1 || r.left < -1)) out.push(`${el.tagName.toLowerCase()}.${String(el.className).split(' ')[0]} [${Math.round(r.left)}, ${Math.round(r.right)}]`);
+      }
+      return out.slice(0, 5);
+    });
+    eq(wide, [], `[${vpName}] nothing sticks out sideways`);
+    // Reduced motion: nothing on the landing page moves.
+    const moving = await page.evaluate(() => document.getAnimations().filter((a) => a.playState === 'running').length);
+    eq(moving, 0, `[${vpName}] with reduced motion nothing on the landing page animates`);
+    if (vpName === 'phone-390x844') {
+      const height = await page.evaluate(() => document.documentElement.scrollHeight);
+      // Before this section existed the phone page was 3,009 px tall: at most one more screen.
+      ok(height <= 3009 + 844 + 100, `[${vpName}] the page stays short: ${height} px tall`);
+    }
+    // The hero's second button goes to the section.
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.click('#get-it');
+    await page.waitForFunction(() => location.hash === '#get');
+    await page.waitForTimeout(200);
+    const at = await page.evaluate(() => Math.round(document.getElementById('get').getBoundingClientRect().top));
+    ok(at >= -2 && at < 60, `[${vpName}] "Get it for your chat" scrolls to the section (top at ${at} px)`);
+    ok(await page.locator('#landing').isVisible() && await page.locator('#story').isHidden(), `[${vpName}] and stays on the landing page`);
+    eq(s.problems, [], `[${vpName}] no console errors, failed requests or CSP violations`);
+    eq(s.foreign, [], `[${vpName}] no request left this origin`);
+    await s.close();
+  }
+
+  // The story's last slide: "Get one for your chat" leads to that section and leaves the story.
+  for (const [label, url] of [['a recap link (same page, new #)', link(fixtures.legacy)], ['the demo (?demo=1, a new page)', server.url + '?demo=1']]) {
+    const s = await open({ viewport: viewports['phone-390x844'] });
+    const { page } = s;
+    await page.goto(url);
+    await waitForStory(page);
+    const total = (await state(page)).total;
+    await showSettled(page, total - 1);
+    const a = page.locator('.slide.is-active .sum__make');
+    eq(await a.getAttribute('href'), Config.GET_PATH, `${label}: the last slide links to ${Config.GET_PATH}`);
+    ok(/Get one for your chat/.test(await a.innerText()), `${label}: and says what it is for`);
+    await a.click();
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-landing') && location.hash === '#get', null, { timeout: 10000 });
+    await page.waitForFunction(() => document.documentElement.classList.contains('is-ready'));
+    await page.waitForTimeout(400);
+    const after = await page.evaluate(() => ({
+      story: !!(window.WrappedStory && window.WrappedStory.isActive()),
+      storyHidden: document.getElementById('story').hidden || getComputedStyle(document.getElementById('story')).display === 'none',
+      landing: getComputedStyle(document.getElementById('landing')).display !== 'none',
+      overflow: getComputedStyle(document.body).overflow,
+      title: document.title,
+      top: Math.round(document.getElementById('get').getBoundingClientRect().top),
+      path: location.pathname + location.search,
+    }));
+    ok(!after.story && after.storyHidden && after.landing, `${label}: the story is gone and the landing page shows (${JSON.stringify(after)})`);
+    ok(after.overflow !== 'hidden', `${label}: the page scrolls again`);
+    ok(!after.title.includes('—'), `${label}: the title is the site's again, not the recap's (${after.title})`);
+    ok(after.top >= -2 && after.top < 80, `${label}: the "get it" section is in view (top at ${after.top} px)`);
+    ok(!/demo=|w1=/.test(after.path), `${label}: no recap or demo left in the address (${after.path})`);
+    eq(s.problems, [], `${label}: no console errors`);
+    eq(s.foreign, [], `${label}: no request left this origin`);
+    await s.close();
+  }
+});
+
 // ── 8. naming (docs/SCHEMA.md §7) ──────────────────────────────────────────────────────
 await section('brand', 'Copy: product name comes from one constant; no borrowed trademarks', async () => {
   const s = await open({ init: stubBridge });
@@ -975,7 +1074,7 @@ await section('brand', 'Copy: product name comes from one constant; no borrowed 
     }
   }
   const all = texts.join('\n');
-  ok(!/wrapped/i.test(all), 'no user-visible copy says "Wrapped"');
+  ok(!/wrapped/i.test(all.replace(/\/wrapped\b/g, '')), 'no user-visible copy says "Wrapped", except the command /wrapped');
   const imessage = all.match(/[^.\n]*imessage[^.\n]*/gi) || [];
   ok(imessage.every((line) => /works with imessage|trademark of apple/i.test(line)), `"iMessage" appears only as a compatibility note (${JSON.stringify(imessage)})`);
   ok(landingText.includes(Config.PRODUCT_NAME), 'the landing page shows the product name');

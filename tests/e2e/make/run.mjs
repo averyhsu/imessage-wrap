@@ -1220,6 +1220,18 @@ await section('sample', 'Sample data end to end: quotes opt-in, copy, share, ope
   ok(/\/make\/$/.test((await page.evaluate(() => window.__frameLoads))[0]), 'the maker did open inside the preview frame');
   ok(true, 'and was replaced by the story again');
   eq(s.requests.filter((u) => u.endsWith('/make/worker.js')).length, workersBefore, 'it never started working in there');
+  // Today's last slide links to the landing page's "get it" section (./#get) instead: the
+  // frame goes back to the story from there too.
+  await page.evaluate(() => {
+    window.__frameLoads = [];
+    document.getElementById('preview').contentWindow.location.href = new URL('../#get', location.href).href;
+  });
+  await page.waitForFunction(() => {
+    const inner = document.getElementById('preview').contentWindow;
+    return window.__frameLoads.length >= 2 && /index\.html$/.test(inner.location.pathname) && inner.WrappedStory && inner.WrappedStory.isActive();
+  }, null, { timeout: 20000 });
+  ok(/\/$/.test((await page.evaluate(() => window.__frameLoads))[0]), 'the landing page did open inside the preview frame');
+  ok(true, 'and was replaced by the story again');
   await (await previewFrame(page)).evaluate(() => window.WrappedStory.goTo(3));
   await page.locator('#replay').click();
   ok(await (await previewFrame(page)).evaluate(() => window.WrappedStory.index === 0), '"Play again" restarts the story from the cover');

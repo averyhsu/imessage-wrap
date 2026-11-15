@@ -74,7 +74,9 @@ test('link-preview tags are static and complete (Messages runs no JavaScript)', 
 
 test('no borrowed trademarks in the static copy', () => {
   const text = html.replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, ' ');
-  assert.doesNotMatch(text, /wrapped/i, 'the word "Wrapped" is not in the page copy');
+  // "Wrapped" is not a name here; /wrapped is the command people type in the chat.
+  const wrapped = text.match(/\S*wrapped\S*/gi) || [];
+  assert.ok(wrapped.length >= 2 && wrapped.every((w) => /^\/wrapped[.,]?$/.test(w)), `"wrapped" only as the command /wrapped: ${JSON.stringify(wrapped)}`);
   const mentions = text.match(/[^.]*imessage[^.]*\./gi) || [];
   assert.ok(mentions.length >= 1 && mentions.every((m) => /works with imessage|trademark of apple/i.test(m)), `"iMessage" only as a compatibility note: ${JSON.stringify(mentions)}`);
   assert.doesNotMatch(meta('name', 'description') + meta('property', 'og:description'), /wrapped|imessage/i);
@@ -175,6 +177,46 @@ test('stylesheets load nothing remote', () => {
   }
   assert.ok(fs.existsSync(path.join(WEB, 'assets/fonts/OFL.txt')), 'the font licence ships with the font');
   assert.ok(fs.existsSync(path.join(WEB, 'js/vendor/fflate.LICENSE.txt')), 'the fflate licence ships with the library');
+});
+
+test('the landing page leads with the demo, then the Mac app, then the browser', () => {
+  const body = html.replace(/<!--[\s\S]*?-->/g, '');
+  const at = (needle) => { const i = body.indexOf(needle); assert.ok(i > 0, `found ${needle}`); return i; };
+  // (1) what it is, the demo first; (2) the main way; (3) the alternative; (4) privacy.
+  assert.match(body, /<div class="l-cta">\s*<a class="l-btn l-btn--primary" id="play-demo" href="\?demo=1">/, '"Play the demo" is the first button');
+  assert.match(body, /<a class="l-btn" id="get-it" href="#get">Get it for your chat<\/a>/);
+  const order = [at('id="play-demo"'), at('<section class="l-section l-get" id="get"'), at('id="get-mac" href="mac/"'), at('id="get-make" href="make/"'), at('id="privacy"')];
+  assert.deepStrictEqual([...order].sort((a, b) => a - b), order, 'demo, Mac app, browser, privacy: in that order');
+  const get = body.slice(at('id="get"'), at('id="privacy"'));
+  const words = get.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(words, /one person with a Mac \(macOS 14 or later\)/i, 'says it needs one person with a Mac');
+  assert.match(words, /free and not signed through Apple’s paid developer program/, 'and that the app is not signed through Apple’s program');
+  assert.match(words, /The Mac page walks you through that/, 'and that the Mac page covers the extra step');
+  assert.match(words, /Nothing is installed or uploaded/, 'the browser way installs nothing');
+  assert.equal((get.match(/<li>/g) || []).length, 3, 'how it works, in three steps');
+  // The reply as it arrives: the Mac app's own card, from this site, light.
+  const card = /<img class="l-thread__card" src="(assets\/reply-card\.webp)" alt="([^"]+)" width="(\d+)" height="(\d+)"/.exec(get);
+  assert.ok(card, 'the reply card is on the page');
+  assert.ok(card[2].length > 40, 'with a description');
+  const file = read(card[1]);
+  assert.ok(file.length < 60 * 1024, `the card is light (${Math.round(file.length / 1024)} KB)`);
+  assert.equal(file.toString('latin1', 8, 12), 'WEBP');
+  assert.ok(read('assets/og-thumb.webp').length < 20 * 1024, 'the link preview thumbnail is light');
+  // The top bar: on a phone one link, to the section.
+  assert.match(body, /<a class="l-top__link l-top__link--narrow" href="#get">/);
+  // Privacy: one line about the Mac app.
+  const privacy = body.slice(at('id="privacy"')).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  assert.match(privacy, /The Mac app It reads and counts on your Mac and uploads nothing\. Replies come from your own Apple ID, only in the chat you turned on, and the app itself never contacts a server\./);
+});
+
+test('the story\'s last slide points at the landing page\'s "get it" section', () => {
+  assert.equal(Config.GET_PATH, './#get');
+  const slides = fs.readFileSync(path.join(WEB, 'js/slides.js'), 'utf8');
+  assert.match(slides, /makeLink\.href = Config\.GET_PATH;/);
+  assert.match(slides, /'Get one for your chat {2}→'/);
+  assert.match(html, /<section class="l-section l-get" id="get"/, 'and the landing page has that section');
+  const app = fs.readFileSync(path.join(WEB, 'js/app.js'), 'utf8');
+  assert.match(app, /showLanding\(\);\s*showAnchor\(\);/, 'arriving from a story, the landing page scrolls to it');
 });
 
 test('page weight stays small', () => {
