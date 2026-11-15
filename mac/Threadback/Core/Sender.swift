@@ -13,9 +13,11 @@ struct ChatRef: Codable, Equatable {
     var key: String { identifier.isEmpty ? guid : identifier }
 }
 
-/// How one send ended (wrapped/mac/send.py): delivered, unverified, failed, or dry-run.
+/// How one send ended, from what Messages recorded in chat.db for the exact message:
+/// delivered (is_delivered), sent (is_sent, not yet delivered), written (in the chat, not yet
+/// sent), unverified (no such message appeared), failed, or dry-run.
 struct SendResult: Equatable {
-    enum Status: String { case delivered, unverified, failed, dryRun = "dry-run" }
+    enum Status: String { case delivered, sent, written, unverified, failed, dryRun = "dry-run" }
 
     var status: Status
     var reason: String = ""
@@ -125,7 +127,8 @@ final class AppleScriptSender: MessageSender {
             return SendResult(status: .failed, reason: "could not stage the image in ~/Pictures: \(error.localizedDescription)")
         }
         let result = send(chat, text: "", filePath: staged.path, isFile: true)
-        if result.status == .delivered { try? FileManager.default.removeItem(at: staged) }
+        // Messages has its own copy once the message is sent.
+        if result.status == .delivered || result.status == .sent { try? FileManager.default.removeItem(at: staged) }
         AppleScriptSender.prune(folder, keep: AppleScriptSender.keepStaged)
         return result
     }
@@ -189,9 +192,9 @@ final class AppleScriptSender: MessageSender {
             failed.idForm = AppleScriptSender.idForm(guid)
             return failed
         }
-        var verdict = verify(chat, before: before, text: text, isFile: isFile)
+        var verdict = verify(chat, before: before, text: text, fileName: isFile ? (filePath as NSString).lastPathComponent : nil)
         verdict.idForm = AppleScriptSender.idForm(guid)
-        if verdict.status == .delivered { workingGuid[chat.key] = guid }
+        if [.delivered, .sent, .written].contains(verdict.status) { workingGuid[chat.key] = guid }
         return verdict
     }
 
@@ -253,39 +256,76 @@ final class AppleScriptSender: MessageSender {
         }
     }
 
-    /// Polls chat.db for a new outgoing row joined to this chat.
-    private func verify(_ chat: ChatRef, before: Int, text: String, isFile: Bool) -> SendResult {
+    /// Polls chat.db for OUR message: an outgoing row in this chat created after the send,
+    /// with exactly this text, or (for the card) an attachment with the unique staged file
+    /// name. Anything else the owner sends meanwhile, from this Mac or a phone, never counts.
+    private func verify(_ chat: ChatRef, before: Int, text: String, fileName: String?) -> SendResult {
         let deadline = Date().addingTimeInterval(verifyTimeout)
-        var orphan = false
+        var last = AppleScriptSender.Judgement.notFound
         while true {
-            orphan = false
             if let db = try? openDatabase(),
                let ids = try? MessagesDB.chatRowids(db, guids: [chat.guid, AppleScriptSender.swapGuidForm(chat.guid)], identifier: chat.identifier),
                let rows = try? MessagesDB.outgoingRows(db, after: before) {
-                for row in rows {
-                    if row.chatIDs.isEmpty { orphan = true; continue }
-                    guard row.chatIDs.contains(where: ids.contains) else { continue }
-                    guard looksLikeOurs(row, text: text, isFile: isFile) else { continue }
-                    if row.error != 0 {
-                        return SendResult(status: .failed, reason: "Messages recorded error \(row.error); not delivered", rowid: row.rowid)
-                    }
-                    return SendResult(status: .delivered, rowid: row.rowid)
+                last = AppleScriptSender.judge(rows, chatIDs: ids, text: text, fileName: fileName, decode: decode)
+                switch last {
+                case .found(let row) where row.error != 0 || row.isSent || row.isDelivered:
+                    return AppleScriptSender.result(for: row)
+                default: break
                 }
             }
             if Date() >= deadline { break }
             Thread.sleep(forTimeInterval: verifyInterval)
         }
-        if orphan {
-            return SendResult(status: .unverified, reason: "the new outgoing row is attached to no chat (the known macOS 26 group-send problem); treat it as NOT delivered", orphan: true)
+        switch last {
+        case .found(let row):
+            return AppleScriptSender.result(for: row)
+        case .orphan:
+            return SendResult(status: .unverified, reason: "our message was written but is attached to no chat (the known macOS 26 group-send problem); treat it as NOT delivered", orphan: true)
+        case .notFound:
+            return SendResult(status: .unverified, reason: "Messages said yes but our message did not appear in this chat within \(Int(verifyTimeout)) s")
         }
-        return SendResult(status: .unverified, reason: "Messages said yes but no outgoing message appeared in this chat within \(Int(verifyTimeout)) s")
     }
 
-    private func looksLikeOurs(_ row: MessagesDB.OutgoingRow, text: String, isFile: Bool) -> Bool {
-        let stored = AppleScriptSender.squash(decode(row.text, row.attributedBody))
-        if isFile { return row.hasAttachment || stored.isEmpty }
+    enum Judgement: Equatable {
+        case notFound
+        case orphan
+        case found(MessagesDB.OutgoingRow)
+
+        static func == (a: Judgement, b: Judgement) -> Bool {
+            switch (a, b) {
+            case (.notFound, .notFound), (.orphan, .orphan): return true
+            case (.found(let x), .found(let y)): return x.rowid == y.rowid
+            default: return false
+            }
+        }
+    }
+
+    /// Our message among the new outgoing rows: in this chat (or in no chat at all, the
+    /// orphan case), and exactly ours.
+    static func judge(_ rows: [MessagesDB.OutgoingRow], chatIDs: Set<Int>, text: String, fileName: String?,
+                      decode: (String?, Data?) -> String) -> Judgement {
+        var orphan = false
+        for row in rows where isOurs(row, text: text, fileName: fileName, decode: decode) {
+            if row.chatIDs.isEmpty { orphan = true; continue }
+            if row.chatIDs.contains(where: chatIDs.contains) { return .found(row) }
+        }
+        return orphan ? .orphan : .notFound
+    }
+
+    static func isOurs(_ row: MessagesDB.OutgoingRow, text: String, fileName: String?, decode: (String?, Data?) -> String) -> Bool {
+        if let fileName { return row.attachmentNames.contains(fileName) }
         if row.hasAttachment { return false }
-        return stored.isEmpty || stored == AppleScriptSender.squash(text)
+        let wanted = squash(text)
+        return !wanted.isEmpty && squash(decode(row.text, row.attributedBody)) == wanted
+    }
+
+    static func result(for row: MessagesDB.OutgoingRow) -> SendResult {
+        if row.error != 0 {
+            return SendResult(status: .failed, reason: "Messages recorded error \(row.error); not sent", rowid: row.rowid)
+        }
+        if row.isDelivered { return SendResult(status: .delivered, rowid: row.rowid) }
+        if row.isSent { return SendResult(status: .sent, reason: "sent; not yet marked delivered", rowid: row.rowid) }
+        return SendResult(status: .written, reason: "written in the chat; Messages has not marked it sent yet", rowid: row.rowid)
     }
 
     static func squash(_ text: String) -> String {

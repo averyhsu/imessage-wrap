@@ -5,7 +5,7 @@ import Foundation
 struct ReplyRecord: Codable, Equatable {
     struct Part: Codable, Equatable {
         let part: String          // "image", "text", "link"
-        let status: String        // delivered, not confirmed, failed, dry run
+        let status: String        // delivered, sent, written (not yet sent), not confirmed, failed, dry run
         let errorNumber: Int?
         let idForm: String        // "any;+;", "iMessage;-;", ... (a category, never the id)
         let orphan: Bool
@@ -30,6 +30,8 @@ struct ReplyRecord: Codable, Equatable {
     static func word(_ status: SendResult.Status) -> String {
         switch status {
         case .delivered: return "delivered"
+        case .sent: return "sent"
+        case .written: return "written, not yet sent"
         case .unverified: return "not confirmed"
         case .failed: return "failed"
         case .dryRun: return "dry run"
