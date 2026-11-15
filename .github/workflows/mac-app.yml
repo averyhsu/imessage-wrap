@@ -253,6 +253,40 @@ jobs:
             if [ -n "$A" ] && cmp -s "$A" "$P"; then echo "AGENT TEXT IDENTICAL (app vs Python helper with --no-link, both answering the same typed /wrapped 2026)"; else echo "AGENT TEXT DIFFERS"; diff "$A" "$P" || true; fi
           } 2>&1 | tee "$RES/04-dry-run.txt"
 
+      - name: "Commands: the app's /wrapped rule against wrapped/mac/triggers.py"
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          {
+            echo "== Commands (the whole message only; /wrapped, /recap, a year, all)"
+            "$WORK/venv/bin/python" - "$WORK/triggers.json" <<'EOF'
+          import json, random, sys
+          fixed = ["/wrapped", " /Wrapped ", "/recap", "/recap 2025", "/wrapped 2025", "/wrapped all", "/wrapped ALL",
+                   "/wrapped 2006", "/wrapped 2027", "/wrapped 2099", "/wrapped\u00a02024", "\ufffc/wrapped",
+                   "/wrapped please", "\uff0f\uff57\uff52\uff41\uff50\uff50\uff45\uff44", "/ wrapped", "/wrapped  2024",
+                   "/recap\t2024", "hi /wrapped", "/WRAPPED 2026", "/wrapped\n", "/wrapped 2026x", "/recap\u200b",
+                   "\u2028/wrapped", "/wrapped\u0085all", "", "wrapped", "/wrapped2025", "/wrapped -1", "/recap all please"]
+          rnd = random.Random(5)
+          pieces = ["/wrapped", "/recap", " ", "\u00a0", "2025", "all", "x", "\u200b", "\ufffc", "/", "W", "\t", "2007"]
+          fuzz = ["".join(rnd.choice(pieces) for _ in range(rnd.randrange(1, 5))) for _ in range(300)]
+          json.dump(fixed + fuzz, open(sys.argv[1], "w"))
+          EOF
+            "$BIN" --tb-triggers "$WORK/triggers.json" --year 2026 > "$WORK/triggers-app.json"
+            "$WORK/venv/bin/python" - "$WORK/triggers.json" "$WORK/triggers-app.json" <<'EOF'
+          import json, sys
+          from wrapped.mac.triggers import parse_trigger
+          texts = json.load(open(sys.argv[1]))
+          app = json.load(open(sys.argv[2]))
+          py = [(lambda t: [t.command, t.period] if t else None)(parse_trigger(s, current_year=2026)) for s in texts]
+          same = sum(1 for a, b in zip(app, py) if a == b)
+          for s, a, b in zip(texts, app, py):
+              if a != b:
+                  print("DIFFERENT", repr(s), "app", a, "python", b)
+          print("RESULT: %d/%d messages read the same way as wrapped/mac/triggers.py" % (same, len(texts)))
+          sys.exit(0 if same == len(texts) else 1)
+          EOF
+          } 2>&1 | tee "$RES/04c-commands.txt"
+
       - name: "The card friends receive: the site's card for every fixture chat and hostile names"
         if: ${{ !cancelled() }}
         run: |
@@ -524,7 +558,7 @@ jobs:
           "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
           import json, os, shutil, sys
           root, dst = sys.argv[1], sys.argv[2]
-          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-", "story-")
+          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-", "story-", "status-")
           for sub in sorted(os.listdir(root)):
               folder = os.path.join(root, sub)
               try:

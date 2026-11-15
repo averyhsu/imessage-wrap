@@ -1,66 +1,63 @@
 import SwiftUI
 
-/// What opening Threadback shows once it is set up: is it on, for which chat, the last
-/// reply, and plain ways out (Turn off, Quit Threadback), so nobody depends on finding the
-/// menu-bar icon.
+/// What opening Threadback shows once it is set up: the chats that are on, each with its
+/// last reply, Play the story and Turn off; Add a chat; Pause all; Quit. Nobody has to find
+/// the menu-bar icon.
 struct StatusView: View {
     @ObservedObject var model: AppModel
+
+    private static let red = Color(nsColor: MacPalette.rgb(0xFF453A))
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Theme.page.ignoresSafeArea()
             Circle().fill(Theme.green.opacity(0.22)).frame(width: 420, height: 420).blur(radius: 140).offset(x: -160, y: -200)
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
                     Image("BrandMark").resizable().frame(width: 30, height: 30)
                     Text(WrappedConfig.productName).font(.system(size: 17, weight: .heavy)).foregroundStyle(.white)
                     Spacer()
+                    Text(model.aboutLine).font(.system(size: 11)).foregroundStyle(Theme.muted)
+                        .accessibilityIdentifier("status.about")
                 }
-                Spacer().frame(height: 6)
-                if let chat = model.approved.first, model.chatIsOn {
+                if model.chatIsOn {
                     Text(model.paused ? "Paused." : "On.").font(Theme.display(44)).foregroundStyle(.white)
                         .accessibilityIdentifier("status.title")
-                    Text("Anyone in \(chat.name) can type /wrapped. This Mac replies while it is awake and you are logged in.")
-                        .font(.system(size: 15)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                    Text(model.paused ? "Nothing is answered until you click Resume." : "When anyone types /wrapped in one of these chats, this Mac replies while it is awake and you are logged in.")
+                        .font(.system(size: 14)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
                 } else {
                     Text("Off.").font(Theme.display(44)).foregroundStyle(.white).accessibilityIdentifier("status.title")
-                    Text("Threadback is not answering any chat.")
-                        .font(.system(size: 15)).foregroundStyle(Theme.muted)
+                    Text("Threadback is not answering any chat.").font(.system(size: 14)).foregroundStyle(Theme.muted)
                 }
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
                     Text(model.access).font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(model.accessLost ? Color(nsColor: MacPalette.rgb(0xFF453A)) : Theme.green)
+                        .foregroundStyle(model.accessLost ? StatusView.red : Theme.green)
+                        .accessibilityIdentifier("status.access")
                     if model.accessLost {
                         QuietButton(title: "Reconnect", identifier: "status.reconnect") { model.reconnect() }
                     }
-                    if let title = model.lastReplyTitle, let last = model.replies.last {
-                        Text(title).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                        Text(last.summary).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                    } else if model.chatIsOn {
-                        Text("No /wrapped yet.").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                }
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(Array(model.approved.enumerated()), id: \.element.key) { index, chat in
+                            row(chat, index: index)
+                        }
                     }
                 }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 16).fill(Theme.card))
+                .frame(maxHeight: 250)
                 if !model.turnOffNote.isEmpty {
                     Text(model.turnOffNote).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.green)
                         .accessibilityIdentifier("status.turnOffNote")
                 }
-                if let chat = model.approved.first, model.chatIsOn {
-                    HStack(spacing: 10) {
-                        QuietButton(title: "\u{25B6} Play the story", identifier: "status.playStory") { model.playStory(chat) }
-                        Text(model.storyNote.isEmpty ? "The tap-through recap of \(chat.name), on this Mac only." : model.storyNote)
-                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                    }
+                if !model.storyNote.isEmpty {
+                    Text(model.storyNote).font(.system(size: 12)).foregroundStyle(Theme.muted)
                 }
                 HStack(spacing: 10) {
+                    PillButton(title: model.chatIsOn ? "Add a chat" : "Turn on a chat\u{2026}", color: Theme.green, identifier: "status.addChat") { model.addChat() }
                     if model.chatIsOn {
-                        PillButton(title: "Turn off", color: Color.white.opacity(0.16), identifier: "status.turnOff") { model.turnOff() }
-                    } else {
-                        PillButton(title: "Turn on a chat\u{2026}", color: Theme.green, identifier: "status.setUp") { model.setUpAgain() }
+                        QuietButton(title: model.paused ? "Resume" : "Pause all", identifier: "status.pause") { model.togglePause() }
                     }
-                    PillButton(title: "Quit Threadback", color: Color(nsColor: MacPalette.rgb(0xFF453A)), identifier: "status.quit") { model.quitFromWindow() }
+                    PillButton(title: "Quit Threadback", color: StatusView.red, identifier: "status.quit") { model.quitFromWindow() }
                     Spacer()
                     QuietButton(title: "Copy test report", identifier: "status.copyReport") { model.copyTestReport() }
                 }
@@ -68,13 +65,39 @@ struct StatusView: View {
                     Text(model.copiedNote).font(.system(size: 12)).foregroundStyle(Theme.green)
                 }
                 Spacer(minLength: 0)
-                Text("Closing this window keeps Threadback answering from the menu bar (the speech-bubble icon). To uninstall: click Quit Threadback, then drag Threadback from Applications to the Trash. Its settings stay behind in ~/Library/Preferences (io.github.averyhsu.threadback.mac.plist) and ~/Library/Application Support/Threadback; delete those too for a clean slate.")
-                    .font(.system(size: 11.5)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("status.uninstall")
+                HStack(alignment: .top, spacing: 12) {
+                    Text("Closing this window keeps Threadback answering from the menu bar (the speech-bubble icon). To uninstall: click Quit Threadback, then drag Threadback from Applications to the Trash. Its settings stay in ~/Library/Preferences (io.github.averyhsu.threadback.mac.plist) and ~/Library/Application Support/Threadback; delete those too for a clean slate. Threadback never goes online by itself.")
+                        .font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("status.uninstall")
+                    QuietButton(title: "Check for updates", identifier: "status.updates") { model.checkForUpdates() }
+                }
             }
             .padding(36)
         }
         .frame(width: 720, height: 640)
         .preferredColorScheme(.dark)
+    }
+
+    private func row(_ chat: ChatRef, index: Int) -> some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(chat.name).font(.system(size: 15, weight: .bold)).foregroundStyle(.white).lineLimit(1)
+                Text(lastLine(chat)).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
+                    .accessibilityIdentifier("status.last.\(index)")
+            }
+            Spacer()
+            QuietButton(title: "\u{25B6} Play the story", identifier: "status.playStory.\(index)") { model.playStory(chat) }
+            QuietButton(title: "Turn off", identifier: "status.turnOff.\(index)") { model.turnOff(chat) }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.card))
+    }
+
+    private func lastLine(_ chat: ChatRef) -> String {
+        guard let last = model.lastByChat[chat.key] else { return "No /wrapped yet." }
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return "Last /wrapped \(formatter.string(from: last.time)): \(last.summary)"
     }
 }

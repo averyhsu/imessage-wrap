@@ -67,6 +67,11 @@ final class AppModel: ObservableObject {
     @Published var moveNote = ""
     @Published var turnOffNote = ""
     @Published var storyNote = ""
+    /// The chat just turned on (the "You're on" screen shows it).
+    @Published var lastTurnedOn: ChatRef?
+    /// The last reply in each chat that is on, by chat key (kept on this Mac only; the test
+    /// report never names a chat).
+    @Published var lastByChat: [String: ReplyRecord] = [:]
     /// The owner's name in the recap (prefilled from the Mac account, editable, stored).
     @Published var ownerName: String = "" {
         didSet { defaults.set(ownerName, forKey: Key.ownerName) }
@@ -101,8 +106,9 @@ final class AppModel: ObservableObject {
         static let walReadable = "report.walReadable"
         static let automation = "report.automation"
         static let replies = "report.replies"
+        static let lastByChat = "lastReplyByChat"
         static let all = [onboarded, bookmark, bookmarkScoped, approved, method, ownerName, directBefore, afterGrant,
-                          walReadable, automation, replies, "toldAboutMenuBar"]
+                          walReadable, automation, replies, lastByChat, "toldAboutMenuBar"]
     }
 
     var isFixture: Bool { DebugOptions.fixtureDatabase != nil }
@@ -127,6 +133,9 @@ final class AppModel: ObservableObject {
         }
         if let data = defaults.data(forKey: Key.replies), let saved = try? JSONDecoder().decode([ReplyRecord].self, from: data) {
             replies = saved
+        }
+        if let data = defaults.data(forKey: Key.lastByChat), let saved = try? JSONDecoder().decode([String: ReplyRecord].self, from: data) {
+            lastByChat = saved
         }
         loginItemOn = Permissions.loginItemStatus() == "enabled"
         do {
@@ -358,30 +367,68 @@ final class AppModel: ObservableObject {
     /// Your name must be there before a chat is turned on: the recap shows it to everyone.
     var nameIsReady: Bool { !ownerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-    /// Step 3: turn on one chat, then (on purpose) the "control Messages" prompt.
+    /// Turns a chat on (more chats can be on; each is approved by its id, on the screen that
+    /// says what happens), then asks macOS, on purpose, whether Threadback may use Messages.
     func turnOn(_ chat: ChatInfo) {
         guard nameIsReady else { return }
         let ref = Agent.chatRef(chat)
-        approved = [ref]
-        if let data = try? JSONEncoder().encode(approved) { defaults.set(data, forKey: Key.approved) }
+        if !approved.contains(where: { $0.key == ref.key }) { approved.append(ref) }
+        saveApproved()
         defaults.set(true, forKey: Key.onboarded)
+        lastTurnedOn = ref
+        cardImage = nil
+        recapPreview = ""
         makePreview(ref)
         if isFixture || DebugOptions.flag("TBNoAutomation") {
             automationNote = "Sending: skipped in this test run."
             startAgent()
             return
         }
-        automationNote = "macOS is asking whether Threadback may use Messages: click Allow."
+        automationNote = "macOS may ask whether Threadback may use Messages: click Allow."
         Permissions.requestAutomation { [weak self] result in
             guard let self else { return }
             self.defaults.set(Permissions.AutomationResult.describe(result.after), forKey: Key.automation)
             switch result.after {
             case 0: self.automationNote = "Threadback can reply in \(ref.name)."
-            case -1743: self.automationNote = "Threadback may not use Messages yet. Turn it on in System Settings \u{203A} Privacy & Security \u{203A} Automation \u{203A} Threadback \u{203A} Messages."
+            case -1743: self.automationNote = "Threadback may not use Messages yet. Open System Settings, then Privacy & Security, find Threadback in the list of apps that control other apps, and switch on Messages."
             default: self.automationNote = "Messages did not answer yet. Open Messages once, then try again."
             }
             self.startAgent()
         }
+    }
+
+    private func saveApproved() {
+        if let data = try? JSONEncoder().encode(approved) { defaults.set(data, forKey: Key.approved) }
+    }
+
+    /// Whether a chat in the chooser is already on.
+    func isOn(_ chat: ChatInfo) -> Bool {
+        approved.contains { $0.key == Agent.chatRef(chat).key }
+    }
+
+    /// "Add a chat": back to the chooser, with the list read again.
+    func addChat() {
+        lastTurnedOn = nil
+        cardImage = nil
+        recapPreview = ""
+        automationNote = ""
+        step = .chats
+        if chats.isEmpty { loadChats(method: defaults.string(forKey: Key.method) ?? "folder grant") }
+        NotificationCenter.default.post(name: .showOnboarding, object: nil)
+    }
+
+    /// Turns one chat off; the others keep answering.
+    func turnOff(_ chat: ChatRef) {
+        approved.removeAll { $0.key == chat.key }
+        lastByChat[chat.key] = nil
+        saveLastByChat()
+        if approved.isEmpty {
+            turnOff()
+            return
+        }
+        saveApproved()
+        turnOffNote = "\(chat.name) is off. The other chats keep answering."
+        startAgent()
     }
 
     /// Exactly what a reply would contain: the card and the text (and the link only when the
@@ -472,6 +519,7 @@ final class AppModel: ObservableObject {
     func turnOff() {
         stopAgent()
         approved = []
+        lastTurnedOn = nil
         defaults.removeObject(forKey: Key.approved)
         defaults.set(false, forKey: Key.onboarded)
         cardImage = nil
@@ -605,8 +653,15 @@ final class AppModel: ObservableObject {
         "On for \(approved.map(\.name).joined(separator: ", "))"
     }
 
+    private func saveLastByChat() {
+        if let data = try? JSONEncoder().encode(lastByChat) { defaults.set(data, forKey: Key.lastByChat) }
+    }
+
     private func record(_ outcome: ReplyOutcome) {
-        replies.append(ReplyRecord(outcome, time: Date()))
+        let reply = ReplyRecord(outcome, time: Date())
+        lastByChat[outcome.chat.key] = reply
+        saveLastByChat()
+        replies.append(reply)
         if replies.count > 10 { replies.removeFirst(replies.count - 10) }
         if let data = try? JSONEncoder().encode(replies) { defaults.set(data, forKey: Key.replies) }
         if outcome.results.contains(where: { $0.1.status == .unverified || $0.1.status == .failed }) {
@@ -728,6 +783,14 @@ final class AppModel: ObservableObject {
         facts.card = WebCard.pageURL == nil ? "missing" : "site card (\(WebCard.shared.lastMilliseconds) ms last time)"
         facts.replies = replies
         return facts
+    }
+
+    /// "Threadback 0.1.0 (1), commit abc1234"
+    var aboutLine: String { "Threadback \(MacConfig.version), commit \(MacConfig.commit)" }
+
+    /// Opens the download page in the browser. The app itself never goes online.
+    func checkForUpdates() {
+        NSWorkspace.shared.open(MacConfig.downloadPage)
     }
 
     func copyTestReport() {

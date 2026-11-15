@@ -228,7 +228,7 @@ struct OnboardingView: View {
 
     private var chooseChat: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let on = model.approved.first, model.cardImage != nil || model.previewing || !model.automationNote.isEmpty {
+            if let on = model.lastTurnedOn, model.cardImage != nil || model.previewing || !model.automationNote.isEmpty {
                 ready(on)
             } else {
                 Text("Choose the chat.").font(Theme.display(38)).foregroundStyle(.white)
@@ -253,9 +253,14 @@ struct OnboardingView: View {
                                         .font(.system(size: 12)).foregroundStyle(Theme.muted)
                                 }
                                 Spacer()
-                                PillButton(title: "Turn on", color: Theme.green, identifier: "chat.turnOn.\(index)") { model.turnOn(chat) }
-                                    .disabled(!model.nameIsReady)
-                                    .opacity(model.nameIsReady ? 1 : 0.4)
+                                if model.isOn(chat) {
+                                    Label("On", systemImage: "checkmark.circle.fill").font(.system(size: 14, weight: .bold))
+                                        .foregroundStyle(Theme.green).accessibilityIdentifier("chat.isOn.\(index)")
+                                } else {
+                                    PillButton(title: "Turn on", color: Theme.green, identifier: "chat.turnOn.\(index)") { model.turnOn(chat) }
+                                        .disabled(!model.nameIsReady)
+                                        .opacity(model.nameIsReady ? 1 : 0.4)
+                                }
                             }
                             .padding(.horizontal, 16).padding(.vertical, 12)
                             .background(RoundedRectangle(cornerRadius: 16).fill(Theme.card))

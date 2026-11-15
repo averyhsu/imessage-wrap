@@ -11,6 +11,8 @@ describe() {
     card-taco-2026) echo "The image friends receive, for the invented \"Taco Tuesday Crew\" chat, 2026: the site's own card (web/js/card.js) drawn by the app, 1080 x 1350." ;;
     card-hostile-name) echo "The same card with a hostile chat name and sender (direction overrides, a phone number, an address, control characters)." ;;
     card-long-name) echo "The same card with a very long chat name and sender name." ;;
+    status-1-two-chats) echo "Opening Threadback with two chats on: each with its last reply, Play the story and Turn off; Add a chat, Pause all, Quit, Check for updates." ;;
+    status-2-one-off-paused) echo "After turning one chat off and clicking Pause all." ;;
     story-1-playing) echo "Play the story: the bundled web story for the chosen chat, in its own window, on this Mac only." ;;
     story-2-next) echo "The story after pressing the right arrow key: the next slide." ;;
     onboarding-1-welcome) echo "First run, screen 1 of 3: what Threadback does. One button: Continue." ;;
@@ -99,7 +101,7 @@ main() {
       echo "| [\`$name\`]($name.jpg) | $(describe "$name") |"
     done
     echo ""
-    for file in "$stage"/download-*.jpg "$stage"/gatekeeper-*.jpg "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/story-*.jpg "$stage"/lifecycle-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
+    for file in "$stage"/download-*.jpg "$stage"/gatekeeper-*.jpg "$stage"/card-*.jpg "$stage"/onboarding-*.jpg "$stage"/story-*.jpg "$stage"/status-*.jpg "$stage"/lifecycle-*.jpg "$stage"/access-*.jpg "$stage"/automation-*.jpg "$stage"/contacts-*.jpg "$stage"/login-*.jpg "$stage"/system-*.jpg; do
       name="$(basename "$file" .jpg)"
       echo "### $name"
       echo ""

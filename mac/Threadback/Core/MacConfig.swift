@@ -11,6 +11,10 @@ enum MacConfig {
     /// shows exactly that. Set it to true once `storyBaseURL` serves the story.
     static let storySiteIsLive = false
 
+    /// Where a newer Threadback for Mac can be downloaded. "Check for updates" opens it in
+    /// the browser; the app makes no network requests of its own, ever.
+    static let downloadPage = URL(string: storyBaseURL + "mac/")!
+
     /// The commit the app was built from (CI passes THREADBACK_COMMIT to xcodebuild).
     static var commit: String {
         let value = Bundle.main.object(forInfoDictionaryKey: "ThreadbackCommit") as? String ?? ""

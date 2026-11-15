@@ -174,6 +174,58 @@ final class OnboardingUITests: ThreadbackUITestCase {
 
 /// The lifecycle: never running invisibly by surprise.
 final class LifecycleUITests: ThreadbackUITestCase {
+    /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
+    func reopen() {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
+        guard let url = running?.bundleURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        let done = expectation(description: "opened")
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            if let error { print("WRAPPED_NOTE reopen error: \(error)") }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 20)
+    }
+
+    /// More than one chat: Add a chat, two rows, turn one off, Pause all.
+    func test5_TwoChatsAddTurnOffPause() throws {
+        let app = try setUpFixture()
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        XCTAssertTrue(element(app, "chat.turnOn.0").waitForExistence(timeout: 10))
+        element(app, "chat.turnOn.0").click()
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let sheet = app.sheets.firstMatch
+        if sheet.waitForExistence(timeout: 10) { sheet.buttons["OK"].click() }
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(app, "status.addChat").waitForExistence(timeout: 15))
+        element(app, "status.addChat").click()
+        XCTAssertTrue(element(app, "chat.isOn.0").waitForExistence(timeout: 15), "the chooser marks the chat that is on")
+        element(app, "chat.turnOn.1").click()
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(app, "status.last.1").waitForExistence(timeout: 15), "two chats are listed")
+        shootWindow(app, "status-1-two-chats")
+        note("status with two chats: \(text(of: element(app, "status.access"))) | \(text(of: element(app, "status.last.0"))) | \(text(of: element(app, "status.about")))")
+        element(app, "status.turnOff.1").click()
+        XCTAssertTrue(element(app, "status.turnOffNote").waitForExistence(timeout: 10))
+        XCTAssertFalse(element(app, "status.last.1").exists, "one chat is left")
+        element(app, "status.pause").click()
+        sleep(1)
+        XCTAssertEqual(text(of: element(app, "status.title")), "Paused.")
+        shootWindow(app, "status-2-one-off-paused")
+        element(app, "status.quit").click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15))
+    }
+
     private func setUpFixture() throws -> XCUIApplication {
         guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
         return launch(["-TBResetOnboarding", "YES", "-TBDatabase", fixture + "/mac/chat.db",
@@ -225,18 +277,7 @@ final class LifecycleUITests: ThreadbackUITestCase {
         shootScreen("lifecycle-1-window-closed")
         note("lifecycle: with a chat on, after closing the window: state \(app.state.rawValue), windows \(app.windows.count)")
 
-        // Open it again the way Finder, Spotlight or Launchpad do: a reopen of the running app.
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
-        if let url = running?.bundleURL {
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            let done = expectation(description: "opened")
-            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-                if let error { print("WRAPPED_NOTE reopen error: \(error)") }
-                done.fulfill()
-            }
-            wait(for: [done], timeout: 20)
-        }
+        reopen()
         let title = element(app, "status.title")
         XCTAssertTrue(title.waitForExistence(timeout: 15), "opening Threadback again shows its window")
         shootWindow(app, "lifecycle-2-opened-again")

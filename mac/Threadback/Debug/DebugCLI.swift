@@ -26,6 +26,7 @@ enum DebugCLI {
             case "--tb-print-applescript": return try printAppleScript(args)
             case "--tb-probe": return probe(args)
             case "--tb-card-test": return try cardTest(args)
+            case "--tb-triggers": return try triggers(args)
             case "--tb-dmg-background":
                 let dir = URL(fileURLWithPath: args.value("--tb-dmg-background") ?? ".", isDirectory: true)
                 try DMGBackground.write(to: dir)
@@ -191,6 +192,22 @@ enum DebugCLI {
         }
         out("cards: \(cases.count - failures)/\(cases.count) passed")
         return failures == 0 ? 0 : 1
+    }
+
+    /// The command rule for a list of messages (a JSON array of strings): prints a JSON array
+    /// of [command, period] or null, for comparison with wrapped/mac/triggers.py.
+    static func triggers(_ args: Args) throws -> Int32 {
+        guard let file = args.value("--tb-triggers") else { throw EngineError(code: "usage", message: "--tb-triggers FILE.json") }
+        let year = Int(args.value("--year") ?? "") ?? Calendar(identifier: .gregorian).component(.year, from: Date())
+        let texts = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: file))) as? [String] ?? []
+        let engine = try ThreadbackEngine(bundle: .main)
+        let results: [Any] = texts.map { text in
+            guard let trigger = engine.parseTrigger(text, currentYear: year) else { return NSNull() }
+            return [trigger.command, trigger.period.map { $0 as Any } ?? NSNull()]
+        }
+        let data = try JSONSerialization.data(withJSONObject: results)
+        out(String(decoding: data, as: UTF8.self))
+        return 0
     }
 
     static func decodeLink(_ args: Args) throws -> Int32 {
