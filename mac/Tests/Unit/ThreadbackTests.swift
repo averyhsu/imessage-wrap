@@ -303,7 +303,7 @@ final class AgentTests: XCTestCase {
         XCTAssertEqual(try agent1.runOnce(), 0)
         try insert("/wrapped", chat: Fixture.tacoIdentifier)
         XCTAssertEqual(try agent1.runOnce(), 1)
-        XCTAssertEqual(first.sent.count, 2)
+        XCTAssertEqual(first.sent.count, MacConfig.storySiteIsLive ? 3 : 2)
         // A relaunch whose cursor is behind the command (as after a crash before the save).
         var state = AgentState.load(statePath)
         XCTAssertNotNil(state.answered[Fixture.tacoIdentifier])
