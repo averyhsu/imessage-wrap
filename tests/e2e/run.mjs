@@ -447,8 +447,8 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
     const seen = texts.join('\n') + '\n' + drawn;
     ok(!/native code|function\s*\w*\s*\(|\[object|undefined|NaN|Infinity|e\+\d/.test(seen), `id "${id}": nothing inherited or malformed is printed on a slide or the card`);
     await showSettled(spy.page, 3);
-    eq(await spy.page.locator('.slide.is-active .persona__emoji').innerText(), '💬', `id "${id}": the personality slide shows the neutral emoji`);
-    ok(drawn.includes('💬') && drawn.includes('The Night Owls'), `id "${id}": so does the share card, next to the title`);
+    eq(await spy.page.locator('.slide.is-active .persona__emoji').innerText(), '✨', `id "${id}": the personality slide shows the neutral emoji`);
+    ok(drawn.includes('✨') && drawn.includes('The Night Owls'), `id "${id}": so does the share card, next to the title`);
     ok(drawn.includes('9,999,999,999') && texts[1].includes('9,999,999,999'), `id "${id}": absurd totals are capped on the slide and on the card`);
     await showSettled(spy.page, 8);
     eq(await spy.page.locator('.slide.is-active .moty__tbs .tb').count(), 5, `id "${id}": an unknown tapback kind becomes a generic badge`);
