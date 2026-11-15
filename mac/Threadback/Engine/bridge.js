@@ -248,6 +248,27 @@
       return name ? Engine._internals.personLabel(name) : '';
     },
 
+    /**
+     * Stats for the group chat that has `chatId` (a chat.ROWID) among its rows. Unlike
+     * stats(), never falls back to matching a name: an id that is not there is an error.
+     */
+    statsById: function (token, infoJSON, chatId, optsJSON, shortNames) {
+      try {
+        var opts = JSON.parse(optsJSON || '{}');
+        var handle = handleFor(token, infoJSON);
+        var id = Number(chatId);
+        var listing = DB.listGroupChats(handle, { contacts: opts.contacts, me: opts.me });
+        var chat = null;
+        for (var i = 0; i < listing.chats.length && !chat; i++) {
+          if (listing.chats[i].chat_ids.indexOf(id) !== -1) chat = listing.chats[i];
+        }
+        if (!chat) throw coded('no_chat', 'that group chat is no longer in Messages');
+        var stats = DB.statsForChat(handle, chat, opts);
+        if (shortNames) stats = Engine.shortNames(stats, opts.me);
+        return Engine.canonicalJson(stats);
+      } catch (e) { return errorJSON(e); }
+    },
+
     shortNames: function (statsJSON, me) {
       try { return Engine.canonicalJson(Engine.shortNames(JSON.parse(statsJSON), me)); } catch (e) { return errorJSON(e); }
     },
