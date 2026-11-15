@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wrapped"
+version = "0.1.0"
+description = "Threadback: your group chat's year in review. Reads a Messages database locally and read-only (works with iMessage)."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = []          # the engine is standard library only
+
+[project.optional-dependencies]
+mac = ["pillow>=10"]       # the Mac helper renders the summary card
+test = ["pytest>=7"]
+
+[project.scripts]
+wrapped = "wrapped.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["wrapped*"]
+
+[tool.setuptools.package-data]
+"wrapped.mac" = ["assets/*", "assets/**/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/python", "tests/conformance"]
+python_files = ["test_*.py"]
+addopts = "-p no:cacheprovider"      # a test run leaves nothing behind in the checkout

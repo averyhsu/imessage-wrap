@@ -1,0 +1,265 @@
+{
+ "description": "Cross-language test vector for the link payload (docs/SCHEMA.md §5). Invented data. Every codec must decode `payload` to exactly `stats`; encoders need not produce byte-identical output.",
+ "stats": {
+  "v": 1,
+  "chat": {
+   "name": "Dinner Club 🍝",
+   "members": 7
+  },
+  "period": {
+   "label": "2026",
+   "start": "2026-01-01",
+   "end": "2026-11-10"
+  },
+  "totals": {
+   "messages": 48213,
+   "words": 251034,
+   "attachments": 3120,
+   "reactions": 9120,
+   "days_active": 301,
+   "longest_streak": 87
+  },
+  "by_hour": [
+   2492,
+   1725,
+   1102,
+   623,
+   335,
+   192,
+   383,
+   911,
+   1438,
+   1725,
+   1869,
+   2061,
+   2396,
+   2205,
+   1917,
+   1869,
+   2061,
+   2396,
+   2684,
+   2876,
+   3163,
+   3547,
+   3978,
+   4265
+  ],
+  "by_weekday": [
+   6075,
+   6219,
+   6461,
+   6653,
+   7521,
+   8293,
+   6991
+  ],
+  "by_month": [
+   3568,
+   3327,
+   4146,
+   3905,
+   4436,
+   5014,
+   6075,
+   5448,
+   4628,
+   5255,
+   2411,
+   0
+  ],
+  "busiest_day": {
+   "date": "2026-07-04",
+   "messages": 612
+  },
+  "personality": {
+   "id": "night_owls",
+   "title": "The Night Owls",
+   "blurb": "Peak hour: 11 PM. Sleep is a suggestion.",
+   "peak_hour": 23
+  },
+  "late_night": {
+   "messages": 6277,
+   "share": 0.1302,
+   "top": {
+    "name": "Dev",
+    "messages": 2134
+   }
+  },
+  "senders": [
+   {
+    "name": "Maya",
+    "messages": 11842,
+    "share": 0.2456,
+    "words": 52100,
+    "attachments": 702,
+    "late_night": 1130,
+    "reactions_given": 1502,
+    "reactions_received": 1904
+   },
+   {
+    "name": "Dev",
+    "messages": 9731,
+    "share": 0.2018,
+    "words": 46700,
+    "attachments": 515,
+    "late_night": 2134,
+    "reactions_given": 1260,
+    "reactions_received": 1433
+   },
+   {
+    "name": "Priya",
+    "messages": 8406,
+    "share": 0.1744,
+    "words": 41300,
+    "attachments": 941,
+    "late_night": 753,
+    "reactions_given": 1388,
+    "reactions_received": 1702
+   },
+   {
+    "name": "Jonah",
+    "messages": 6920,
+    "share": 0.1435,
+    "words": 35950,
+    "attachments": 388,
+    "late_night": 942,
+    "reactions_given": 1011,
+    "reactions_received": 1988
+   },
+   {
+    "name": "Tess",
+    "messages": 5377,
+    "share": 0.1115,
+    "words": 24800,
+    "attachments": 301,
+    "late_night": 565,
+    "reactions_given": 2240,
+    "reactions_received": 1021
+   },
+   {
+    "name": "Marcus",
+    "messages": 4102,
+    "share": 0.0851,
+    "words": 41200,
+    "attachments": 177,
+    "late_night": 502,
+    "reactions_given": 905,
+    "reactions_received": 640
+   },
+   {
+    "name": "Lena",
+    "messages": 1835,
+    "share": 0.0381,
+    "words": 8984,
+    "attachments": 96,
+    "late_night": 251,
+    "reactions_given": 814,
+    "reactions_received": 432
+   }
+  ],
+  "most_reacted": [
+   {
+    "sender": "Priya",
+    "reactions": 6,
+    "date": "2026-03-14",
+    "text": "Update: the “quick 5 minute recipe” has officially entered hour two",
+    "kinds": {
+     "laugh": 4,
+     "emphasize": 1,
+     "love": 1
+    }
+   },
+   {
+    "sender": "Jonah",
+    "reactions": 6,
+    "date": "2026-07-19",
+    "text": "I just waved back at someone who was not waving at me. Moving to a new city, goodbye forever",
+    "kinds": {
+     "laugh": 5,
+     "emphasize": 1
+    }
+   },
+   {
+    "sender": "Lena",
+    "reactions": 6,
+    "date": "2026-09-02",
+    "text": "I GOT THE JOB!!!",
+    "kinds": {
+     "love": 5,
+     "emphasize": 1
+    }
+   }
+  ],
+  "reactions": {
+   "by_kind": {
+    "love": 2189,
+    "like": 1550,
+    "dislike": 182,
+    "laugh": 2827,
+    "emphasize": 1186,
+    "question": 274,
+    "emoji": 912
+   },
+   "top_giver": {
+    "name": "Tess",
+    "count": 2240
+   },
+   "top_receiver": {
+    "name": "Jonah",
+    "count": 1988
+   }
+  },
+  "awards": [
+   {
+    "id": "yapper",
+    "emoji": "🗣️",
+    "title": "The Yapper",
+    "winner": "Maya",
+    "detail": "11,842 messages. Nobody asked."
+   },
+   {
+    "id": "lurker",
+    "emoji": "👻",
+    "title": "The Lurker",
+    "winner": "Lena",
+    "detail": "1,835 messages. Reads everything, says little."
+   },
+   {
+    "id": "night_owl",
+    "emoji": "🦉",
+    "title": "The Night Owl",
+    "winner": "Dev",
+    "detail": "2,134 messages after midnight."
+   },
+   {
+    "id": "comedian",
+    "emoji": "😂",
+    "title": "The Comedian",
+    "winner": "Jonah",
+    "detail": "Made the chat laugh 912 times."
+   },
+   {
+    "id": "hype",
+    "emoji": "📣",
+    "title": "The Hype Machine",
+    "winner": "Tess",
+    "detail": "Handed out 2,240 tapbacks."
+   },
+   {
+    "id": "novelist",
+    "emoji": "📚",
+    "title": "The Novelist",
+    "winner": "Marcus",
+    "detail": "10.0 words per message. A paragraph person."
+   }
+  ],
+  "meta": {
+   "generator": "wrapped/1",
+   "source": "demo",
+   "generated": "2026-11-11"
+  }
+ },
+ "payload": "fZfNjts2EMdfhdGZ6_JTonxr06JpkE0W7fZQBMGCtri2YllUJHpdd2Eg6K2Hoih6aFE0yCFAn6FA3yYv0DxCh7RsSV5vgD2syCH_P84MZ-jb6CYaUxxN59pF49uo1EsTjaPP87I0NXpYrCbow9uf30Q4WprlxNRNNE62OKpMndvMLyj0xBSwghEWg1XjdO3azzNC4Q8GTZnthyg9oySCHZx1umj8DkvTNHpm4H-hGOU4Wts6gy8mKeECR9o5PZ0vTelgkFNGcFQbPXW5LWEgDQOZ3jRXfuwG6DmBAxW2hD3dVePAeBGNlceebK7mdlVH4-dMpAzThElMKWE4ZhxzDh8wyhXHKaWYCq5aExWnmJGYYsbTGDNGvCVN7kzESmCmkhhzGsOGUiSYp4nCgsXyRZBfG7MAWCCISSJBl6Y4FrBBHEuOE8koVizlOE5TuluxtKWbgz2XsQJGlmBBBSikACEEj7EkVOCwmxQCtGKmsGRSYibgFMTvsmpy74sgfAvOcuYQouSMiBDdfRBiynYBbmypi9yFJbkPYJnP5u7KriFsEL_cFX6Xy7lBT_0EerabmBSregITF-B25L09RpSii_MR-qYwpkJ5gzRqVjMfHQjhKPJietEGhnEQLwDwKqgN8yNmSQIpNtc1KJMR5RA5SKSqn7jmZnAaSCixhS0byMGQvc8Ppud6owe2lCrBevszIeNDNkJkCDlKxsTr92EpIPWy82oG-VjCsPSG3XBtpgZmwKc0JWKL76VPE077QISqA5CIkztAksohkD_-KSAWk3uABOc9oIs6P3KSEiTuxyARokOC4x8jpYIOkRLI8xNEXKl7iMDLPaLHkJXzYcKmvgJ0RALu8Z6Iy1QeEwWlPlEq2CkiArfnnqAp1SO6BJIBkOTDNKW0A2JC3XHRrl71gGQsTwAxJu4LGmG0B3Su6-lqiCR8keuQiJK0FzV2B4n6EwyQyCkf-Rp0kigWpAf0xJRHN035GHU4XHU4KlXHRR9K6zCrJT0Bo6g4DSM420IVXFoogWHeD0Id2NWEXpb32kqMh2WSn1FfJp353ne3bys_OUYOit_713-9WuXTBZJomZcrZxAo55V5__oNmusG2evrfJrrotggOI2pTRaqInJrCxsu8jJrdn10NYMyD0cwywrW5T-Y0JgL61sa3Xp3HoD3l-AjwMkZTTvgr9DLVePQWoND0EQDrXaosUtjS4PWcwszDSptsMjLmZ9dmhE6t-HLWSjZpVmjKbQDjGbWZpONQde2NjfAc_cUcniKIXybDR9hT88I67N_-ewSXT76Aj1-9tmDBw8GesE7d-ReDLa_9W3UL-lWMKpS8G2-8PbSl4gsb9pPFYp6OAdT0G4He0PHx9Gr1a53gUESAmZf5uElEt41VUjIuteU2goxtavS7e5xa9jmaN92H9rWONQasNZrHW7H87YXb3RVBde34tGHt7-_---fX44683d7s3V40HVdLzNO5_7dBkUOuh7a380RemonNtsg3SxMNop85IIgdPXFkeCv_x6pPdnbHNTaWHdqGG5-T-xro7MG-SzauDmkGkYNvOQQPDtg15764ekxAPj7p_seIn2GXVM9IMCzj4sDAtLXcCfh5mZBoic5hduR5bocKP7x45Hiw87qILgP4UHyXGcm1Ar_ykYhtxBkC3I5YPQk55vKDOR-e3ck9wgs0DlUxrw0fck2ww6KjzRctgzZlUMM3oEEOV35a99XK-EmFHnjhop_Hru0s-rlUNtgurhCEUehgKPKu3Pn3RH6FFW61rNaV3O0e1ICgK_FsNAn_czAjtpZv-u69smafeJ_MTRQIaceIQM0-G7tzOB3BI222_8B",
+ "url": "https://averyhsu.github.io/imessage-wrap/#w1=fZfNjts2EMdfhdGZ6_JTonxr06JpkE0W7fZQBMGCtri2YllUJHpdd2Eg6K2Hoih6aFE0yCFAn6FA3yYv0DxCh7RsSV5vgD2syCH_P84MZ-jb6CYaUxxN59pF49uo1EsTjaPP87I0NXpYrCbow9uf30Q4WprlxNRNNE62OKpMndvMLyj0xBSwghEWg1XjdO3azzNC4Q8GTZnthyg9oySCHZx1umj8DkvTNHpm4H-hGOU4Wts6gy8mKeECR9o5PZ0vTelgkFNGcFQbPXW5LWEgDQOZ3jRXfuwG6DmBAxW2hD3dVePAeBGNlceebK7mdlVH4-dMpAzThElMKWE4ZhxzDh8wyhXHKaWYCq5aExWnmJGYYsbTGDNGvCVN7kzESmCmkhhzGsOGUiSYp4nCgsXyRZBfG7MAWCCISSJBl6Y4FrBBHEuOE8koVizlOE5TuluxtKWbgz2XsQJGlmBBBSikACEEj7EkVOCwmxQCtGKmsGRSYibgFMTvsmpy74sgfAvOcuYQouSMiBDdfRBiynYBbmypi9yFJbkPYJnP5u7KriFsEL_cFX6Xy7lBT_0EerabmBSregITF-B25L09RpSii_MR-qYwpkJ5gzRqVjMfHQjhKPJietEGhnEQLwDwKqgN8yNmSQIpNtc1KJMR5RA5SKSqn7jmZnAaSCixhS0byMGQvc8Ppud6owe2lCrBevszIeNDNkJkCDlKxsTr92EpIPWy82oG-VjCsPSG3XBtpgZmwKc0JWKL76VPE077QISqA5CIkztAksohkD_-KSAWk3uABOc9oIs6P3KSEiTuxyARokOC4x8jpYIOkRLI8xNEXKl7iMDLPaLHkJXzYcKmvgJ0RALu8Z6Iy1QeEwWlPlEq2CkiArfnnqAp1SO6BJIBkOTDNKW0A2JC3XHRrl71gGQsTwAxJu4LGmG0B3Su6-lqiCR8keuQiJK0FzV2B4n6EwyQyCkf-Rp0kigWpAf0xJRHN035GHU4XHU4KlXHRR9K6zCrJT0Bo6g4DSM420IVXFoogWHeD0Id2NWEXpb32kqMh2WSn1FfJp353ne3bys_OUYOit_713-9WuXTBZJomZcrZxAo55V5__oNmusG2evrfJrrotggOI2pTRaqInJrCxsu8jJrdn10NYMyD0cwywrW5T-Y0JgL61sa3Xp3HoD3l-AjwMkZTTvgr9DLVePQWoND0EQDrXaosUtjS4PWcwszDSptsMjLmZ9dmhE6t-HLWSjZpVmjKbQDjGbWZpONQde2NjfAc_cUcniKIXybDR9hT88I67N_-ewSXT76Aj1-9tmDBw8GesE7d-ReDLa_9W3UL-lWMKpS8G2-8PbSl4gsb9pPFYp6OAdT0G4He0PHx9Gr1a53gUESAmZf5uElEt41VUjIuteU2goxtavS7e5xa9jmaN92H9rWONQasNZrHW7H87YXb3RVBde34tGHt7-_---fX44683d7s3V40HVdLzNO5_7dBkUOuh7a380RemonNtsg3SxMNop85IIgdPXFkeCv_x6pPdnbHNTaWHdqGG5-T-xro7MG-SzauDmkGkYNvOQQPDtg15764ekxAPj7p_seIn2GXVM9IMCzj4sDAtLXcCfh5mZBoic5hduR5bocKP7x45Hiw87qILgP4UHyXGcm1Ar_ykYhtxBkC3I5YPQk55vKDOR-e3ck9wgs0DlUxrw0fck2ww6KjzRctgzZlUMM3oEEOV35a99XK-EmFHnjhop_Hru0s-rlUNtgurhCEUehgKPKu3Pn3RH6FFW61rNaV3O0e1ICgK_FsNAn_czAjtpZv-u69smafeJ_MTRQIaceIQM0-G7tzOB3BI222_8B"
+}

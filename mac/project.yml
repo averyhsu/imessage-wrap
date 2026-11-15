@@ -1,0 +1,140 @@
+# XcodeGen spec for "Threadback for Mac" (feasibility spike). Generate the project with:
+#   cd mac && ./scripts/prepare.sh && xcodegen generate
+# The generated ThreadbackMac.xcodeproj and mac/Generated/ are not committed.
+#
+# Reuse, not rewrite:
+#   - the stats engine is web/make/engine.js + db.js, run in JavaScriptCore (bundled as is)
+#   - the link codec, the recap summary and the config come from ios/Shared (Foundation only)
+#   - the text recap and the command rule are wrapped/mac/text.py + triggers.py, ported to
+#     JavaScript in Threadback/Engine/recap-text.js and checked against Python in CI
+name: ThreadbackMac
+
+options:
+  deploymentTarget:
+    macOS: "14.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    PRODUCT_DISPLAY_NAME: Threadback
+    GENERATE_INFOPLIST_FILE: "NO"
+    # No team: ad-hoc signed ("Sign to Run Locally"), like a build anyone can make.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    # The commit shown in the app's test report; CI passes THREADBACK_COMMIT=<sha>.
+    THREADBACK_COMMIT: local
+
+targets:
+  Threadback:
+    type: application
+    platform: macOS
+    sources:
+      - path: Threadback
+        excludes:
+          - "**/*.js"
+          - "Info.plist"
+          - "*.entitlements"
+          - "Card/*.html"
+      - path: Threadback/Engine/bridge.js
+        buildPhase: resources
+      - path: Threadback/Engine/recap-text.js
+        buildPhase: resources
+      # The shared JavaScript engine, unchanged.
+      - path: ../web/make/engine.js
+        buildPhase: resources
+      - path: ../web/make/db.js
+        buildPhase: resources
+      - path: ../web/js/vendor/fflate.min.js
+        buildPhase: resources
+      # Shared with the iOS app, unchanged (Foundation only).
+      - path: ../ios/Shared/RecapPayload.swift
+      - path: ../ios/Shared/RecapLink.swift
+      - path: ../ios/Shared/RecapSummary.swift
+      - path: ../ios/Shared/WrappedConfig.swift
+      - path: ../ios/Shared/DemoRecap.swift
+      - path: ../ios/Shared/Brand.xcassets
+      # App icon made from ios/App/.../AppIcon-1024.png by scripts/prepare.sh.
+      - path: Generated/AppIcon.xcassets
+      # The web story and the card page (scripts/prepare.sh), as the folder web/ in the app.
+      - path: Generated/web
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.threadback.mac
+        PRODUCT_NAME: Threadback
+        INFOPLIST_FILE: Threadback/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Threadback/Threadback.entitlements
+        # Hardened runtime, as notarization will require; Apple Events then need the
+        # com.apple.security.automation.apple-events entitlement (in the entitlements file).
+        ENABLE_HARDENED_RUNTIME: "YES"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks"
+        COMBINE_HIDPI_IMAGES: "YES"
+
+  # Logic tests: the engine, the agent and the renderer compiled straight into the test
+  # bundle (no host app to inject into, so the hardened runtime is not in the way).
+  ThreadbackTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: Tests/Unit
+      - path: Threadback/Engine
+        excludes:
+          - "**/*.js"
+      - path: Threadback/Core
+      - path: Threadback/Engine/bridge.js
+        buildPhase: resources
+      - path: Threadback/Engine/recap-text.js
+        buildPhase: resources
+      - path: ../web/make/engine.js
+        buildPhase: resources
+      - path: ../web/make/db.js
+        buildPhase: resources
+      - path: ../web/js/vendor/fflate.min.js
+        buildPhase: resources
+      - path: ../ios/Shared/RecapPayload.swift
+      - path: ../ios/Shared/RecapLink.swift
+      - path: ../ios/Shared/RecapSummary.swift
+      - path: ../ios/Shared/WrappedConfig.swift
+      - path: ../ios/Shared/DemoRecap.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.threadback.mac.tests
+        GENERATE_INFOPLIST_FILE: "YES"
+
+  ThreadbackUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: Tests/UI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.averyhsu.threadback.mac.uitests
+        GENERATE_INFOPLIST_FILE: "YES"
+        TEST_TARGET_NAME: Threadback
+    dependencies:
+      - target: Threadback
+
+schemes:
+  Threadback:
+    build:
+      targets:
+        Threadback: all
+        ThreadbackTests: [test]
+        ThreadbackUITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - name: ThreadbackTests
+        - name: ThreadbackUITests
+    archive:
+      config: Release

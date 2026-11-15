@@ -1,0 +1,579 @@
+# "Threadback for Mac" feasibility spike (mac/): builds the menu-bar app ad-hoc signed on a
+# macOS 26 runner, compares its stats and text with the Python tools byte for byte, makes a
+# dry-run reply, compiles its AppleScript, screenshots the onboarding, and runs the permission
+# experiments (Open panel instead of Full Disk Access, the Automation prompt, the login item).
+# Every result is written to docs/screenshots/mac/MAC-APP-RESULTS.txt on the branch.
+#
+# Nothing here sends a message: the app's sender refuses to run when CI is set, the dry runs
+# use a recording sender, and the AppleScript is compiled, never run.
+name: Mac app
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "mac/**"
+      - ".github/workflows/mac-app.yml"
+      - "web/make/engine.js"
+      - "web/make/db.js"
+      - "web/js/**"
+      - "web/css/**"
+      - "web/index.html"
+      - "web/assets/**"
+      - "ios/Shared/RecapPayload.swift"
+      - "ios/Shared/RecapLink.swift"
+      - "ios/Shared/RecapSummary.swift"
+      - "ios/Shared/WrappedConfig.swift"
+      - "ios/Shared/DemoRecap.swift"
+      - "ios/Shared/Brand.xcassets/**"
+      - "tests/fixtures/build_fixture.py"
+  workflow_dispatch:
+
+concurrency:
+  group: mac-app-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  # contents: the step that commits docs/screenshots/mac/. actions: read, so the job can
+  # download its own artifacts the way a browser does (the download check).
+  contents: write
+  actions: read
+
+jobs:
+  app:
+    name: Build, compare, screenshot, experiment (macOS 26)
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      TZ: America/Los_Angeles
+      WRAPPED_ME: Amara
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Folders
+        run: |
+          WORK="$RUNNER_TEMP/tb"
+          {
+            echo "WORK=$WORK"
+            echo "OUT=$WORK/out"
+            echo "RES=$WORK/out/results"
+            echo "SHOTS=$WORK/out/screenshots"
+            echo "REPORTS=$WORK/reports"
+            echo "FX=$WORK/fx"
+            echo "EXPECTED=$WORK/expected"
+            echo "DERIVED=$WORK/DerivedData"
+            echo "APP=$WORK/DerivedData/Build/Products/Debug/Threadback.app"
+            echo "BIN=$WORK/DerivedData/Build/Products/Debug/Threadback.app/Contents/MacOS/Threadback"
+          } >> "$GITHUB_ENV"
+          mkdir -p "$WORK/out/results" "$WORK/out/screenshots" "$WORK/reports" "$WORK/expected" "$WORK/out/logs"
+
+      - name: What this runner is (SIP, TCC, the Messages folder)
+        run: |
+          {
+            echo "== Runner"
+            sw_vers | tr '\n' ' '; echo
+            echo "arch $(uname -m); user $(whoami) ($(id -u)); HOME=$HOME"
+            xcodebuild -version | tr '\n' ' '; echo
+            echo "csrutil status: $(csrutil status 2>&1 | tr '\n' ' ')"
+            echo "csrutil authenticated-root: $(csrutil authenticated-root status 2>&1 | tr '\n' ' ')"
+            echo "this shell: pid $$, parents: $(ps -o comm= -p $PPID 2>/dev/null) <- $(ps -o comm= -p $(ps -o ppid= -p $PPID | tr -d ' ') 2>/dev/null)"
+            echo "~/Library/Messages before anything ran:"
+            ls -la@ "$HOME/Library/Messages" 2>&1 | head -20
+            echo "system TCC.db (Full Disk Access, Apple Events, Accessibility, Contacts rows), read with sudo:"
+            sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+              "SELECT service, client, auth_value, auth_reason FROM access WHERE service IN ('kTCCServiceSystemPolicyAllFiles','kTCCServiceAppleEvents','kTCCServiceAccessibility','kTCCServicePostEvent','kTCCServiceAddressBook','kTCCServiceScreenCapture','kTCCServiceDeveloperTool') ORDER BY service, client" 2>&1 | head -60
+            echo "user TCC.db:"
+            sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+              "SELECT service, client, auth_value, indirect_object_identifier FROM access ORDER BY service, client" 2>&1 | head -40
+            echo "tccutil: $(tccutil 2>&1 | head -3 | tr '\n' ' ')"
+          } 2>&1 | tee "$RES/01-runner.txt"
+
+      - name: Install XcodeGen and Pillow (for the Python helper's own preview)
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+          HOMEBREW_NO_ENV_HINTS: "1"
+        run: |
+          brew install xcodegen create-dmg
+          xcodegen --version
+          /usr/bin/python3 -m venv "$WORK/venv"
+          "$WORK/venv/bin/python" -m pip install --quiet "pillow>=10"
+
+      - name: Invented fixture and the Python outputs to compare with
+        run: |
+          PY="$WORK/venv/bin/python"
+          "$PY" tests/fixtures/build_fixture.py "$FX" > /dev/null
+          AB="$FX/mac/AddressBook"
+          DB="$FX/mac/chat.db"
+          # id | chat | me | tz | period | contacts | short names
+          cat > "$WORK/cases.txt" <<'EOF'
+          taco-2026|1|Amara|America/Los_Angeles|2026|1|1
+          bookclub-all-berlin-nocontacts|3|Amara|Europe/Berlin|all|0|1
+          longname-2026-tokyo-fullnames|5|Amara|Asia/Tokyo|2026|1|0
+          bookclub-by-name-all|Book Club|Amara|America/Los_Angeles|all|1|1
+          unnamed-2025-newyork-empty|4|Amara|America/New_York|2025|1|1
+          EOF
+          "$PY" - "$WORK/cases.txt" "$EXPECTED/cases.json" <<'EOF'
+          import json, sys
+          cases = []
+          for line in open(sys.argv[1]):
+              line = line.strip()
+              if not line:
+                  continue
+              i, chat, me, tz, period, contacts, short = line.split("|")
+              cases.append({"id": i, "chat": chat, "me": me, "tz": tz, "period": period,
+                            "contacts": contacts == "1", "short": short == "1"})
+          json.dump(cases, open(sys.argv[2], "w"), indent=1)
+          EOF
+          while IFS='|' read -r id chat me tz period contacts short; do
+            id="$(echo "$id" | tr -d ' ')"; [ -z "$id" ] && continue
+            args=(--db "$DB" --me "$me" --tz "$tz" --compact)
+            if [ "$period" = "all" ]; then args+=(--all-time); else args+=(--year "$period"); fi
+            if [ "$contacts" = "1" ]; then args+=(--contacts "$AB"); else args+=(--no-contacts); fi
+            if [ "$short" = "0" ]; then args+=(--full-names); fi
+            "$PY" -m wrapped stats "$chat" "${args[@]}" > "$EXPECTED/$id.json"
+            echo "python: $id -> $(wc -c < "$EXPECTED/$id.json" | tr -d ' ') bytes"
+          done < "$WORK/cases.txt"
+          # The Python helper's own dry-run preview of the same chat. The app sends no link while
+          # the story site is not live (MacConfig.storySiteIsLive), so its replies are compared
+          # with the helper run with --no-link; the link variant is compared separately.
+          "$PY" -m wrapped.mac preview --db "$DB" --contacts "$AB" --me Amara --chat taco --year 2026 --no-link --out "$WORK/py-preview" | tee "$WORK/py-preview.txt"
+          PYDIR="$(dirname "$(find "$WORK/py-preview" -name recap.txt | head -1)")"
+          cp "$PYDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"
+          "$PY" -m wrapped.mac preview --db "$DB" --contacts "$AB" --me Amara --chat taco --year 2026 --out "$WORK/py-preview-link" > /dev/null
+          PYDIR="$(dirname "$(find "$WORK/py-preview-link" -name recap.txt | head -1)")"
+          cp "$PYDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt"
+          cp "$PYDIR/link.txt" "$EXPECTED/link-taco-2026.txt"
+          echo "--- no link ---"; cat "$EXPECTED/recap-taco-2026.txt"
+          echo "--- with link ---"; cat "$EXPECTED/recap-taco-2026-link.txt"
+
+      - name: Generate the Xcode project
+        run: |
+          mac/scripts/prepare.sh
+          cd mac && xcodegen generate && xcodebuild -list -project ThreadbackMac.xcodeproj
+
+      - name: Build (Debug, ad-hoc signed, no team)
+        run: |
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/build.log" build-for-testing \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -configuration Debug \
+            -destination "platform=macOS" -derivedDataPath "$DERIVED" THREADBACK_COMMIT="${GITHUB_SHA::7}"
+          grep -E "\.swift:[0-9]+:[0-9]+: warning:" "$OUT/logs/build.log" | sed -E 's#^.*/mac/#mac/#' | awk '!seen[$0]++' | cut -c1-250 | head -n 30 || true
+
+      - name: "Proof 1: the bundle"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Proof 1: the app bundle (Debug)"
+            echo "bundle: $(du -sh "$APP" | cut -f1) ($(du -sk "$APP" | cut -f1) KB); executable $(du -h "$BIN" | cut -f1); archs: $(lipo -archs "$BIN")"
+            ls "$APP/Contents/Resources" | tr '\n' ' '; echo
+            codesign -dvv "$APP" 2>&1 | grep -E "Identifier|Format|Signature|TeamIdentifier|flags|Runtime" || true
+            echo "entitlements:"; codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | grep -E "<key>|<true/>" || codesign -d --entitlements - "$APP" 2>&1 | tail -5
+            echo "Info.plist: LSUIElement=$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP/Contents/Info.plist") NSAppleEventsUsageDescription=\"$(/usr/libexec/PlistBuddy -c 'Print :NSAppleEventsUsageDescription' "$APP/Contents/Info.plist")\""
+            echo "NSContactsUsageDescription=\"$(/usr/libexec/PlistBuddy -c 'Print :NSContactsUsageDescription' "$APP/Contents/Info.plist" 2>&1)\""
+            echo "Gatekeeper assessment (spctl): $(spctl -a -vv -t exec "$APP" 2>&1 | tr '\n' ' ')"
+          } 2>&1 | tee "$RES/02-bundle.txt"
+
+      - name: "Proof 2: stats byte-identical to python3 -m wrapped stats (app command line)"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Proof 2: stats from the app (JavaScriptCore + system SQLite) vs python3 -m wrapped stats --compact"
+            PASS=0; TOTAL=0
+            while IFS='|' read -r id chat me tz period contacts short; do
+              id="$(echo "$id" | tr -d ' ')"; [ -z "$id" ] && continue
+              args=(--db "$FX/mac/chat.db" --me "$me" --tz "$tz")
+              if [ "$period" = "all" ]; then args+=(--all-time); else args+=(--year "$period"); fi
+              if [ "$contacts" = "1" ]; then args+=(--contacts "$FX/mac/AddressBook"); else args+=(--no-contacts); fi
+              if [ "$short" = "0" ]; then args+=(--full-names); fi
+              START=$(perl -MTime::HiRes=time -e 'print time')
+              "$BIN" --tb-stats "$chat" "${args[@]}" > "$WORK/swift-$id.json"
+              END=$(perl -MTime::HiRes=time -e 'print time')
+              TOTAL=$((TOTAL + 1))
+              if cmp -s "$WORK/swift-$id.json" "$EXPECTED/$id.json"; then
+                PASS=$((PASS + 1))
+                echo "IDENTICAL $id: $(wc -c < "$WORK/swift-$id.json" | tr -d ' ') bytes, sha256 $(shasum -a 256 < "$WORK/swift-$id.json" | cut -c1-16), $(perl -e "printf '%.2f', $END - $START") s"
+              else
+                echo "DIFFERENT $id"; cmp "$WORK/swift-$id.json" "$EXPECTED/$id.json" || true
+                head -c 400 "$WORK/swift-$id.json"; echo
+              fi
+            done < "$WORK/cases.txt"
+            echo "RESULT: $PASS/$TOTAL byte-identical"
+            echo "chat list from the app:"; "$BIN" --tb-chats --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara
+          } 2>&1 | tee "$RES/03-parity.txt"
+
+      - name: "Proof 3: a reply without Terminal (dry run) vs the Python helper"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Proof 3: dry-run reply vs the Python helper for the same chat"
+            echo "-- as the app ships now (story site not live: image and text, no link) vs python -m wrapped.mac preview --no-link"
+            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --year 2026 --out "$WORK/swift-preview"
+            SWDIR="$(dirname "$(find "$WORK/swift-preview" -name recap.txt | head -1)")"
+            echo "files: $(ls "$SWDIR" | tr '\n' ' ')"
+            if cmp -s "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt"; then echo "TEXT IDENTICAL to the Python helper's recap.txt (--no-link)"; else echo "TEXT DIFFERS"; diff "$SWDIR/recap.txt" "$EXPECTED/recap-taco-2026.txt" || true; fi
+            if [ -z "$(tr -d '[:space:]' < "$SWDIR/link.txt")" ]; then echo "NO LINK in the reply (link.txt is empty)"; else echo "A LINK WAS PRODUCED although the story site is not live"; exit 1; fi
+            echo "--- recap.txt (app) ---"; cat "$SWDIR/recap.txt"
+            echo "-- with the link switched on (--link), as when the site is live, vs the helper's default"
+            "$BIN" --tb-preview --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --year 2026 --link --out "$WORK/swift-preview-link" > /dev/null
+            SWLDIR="$(dirname "$(find "$WORK/swift-preview-link" -name recap.txt | head -1)")"
+            if cmp -s "$SWLDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt"; then echo "TEXT WITH LINK IDENTICAL to the Python helper's recap.txt"; else echo "TEXT WITH LINK DIFFERS"; diff "$SWLDIR/recap.txt" "$EXPECTED/recap-taco-2026-link.txt" || true; fi
+            SL="$(cat "$SWLDIR/link.txt")"; PL="$(cat "$EXPECTED/link-taco-2026.txt")"
+            echo "link lengths: app ${#SL}, python ${#PL}; same string: $([ "$SL" = "$PL" ] && echo yes || echo no)"
+            "$WORK/venv/bin/python" -c "import sys; from wrapped import payload; print(payload.canonical_json(payload.stats_from_url(sys.argv[1])))" "$SL" > "$WORK/link-app.json"
+            "$WORK/venv/bin/python" -c "import sys; from wrapped import payload; print(payload.canonical_json(payload.stats_from_url(sys.argv[1])))" "$PL" > "$WORK/link-py.json"
+            if cmp -s "$WORK/link-app.json" "$WORK/link-py.json"; then echo "LINK PAYLOADS DECODE TO IDENTICAL STATS (decoded by Python)"; else echo "LINK PAYLOADS DIFFER"; fi
+            "$BIN" --tb-decode-link "$PL" > /dev/null
+            CARD="$(find "$SWDIR" -name '*.png' | head -1)"
+            echo "card: $(basename "$CARD"), $(sips -g pixelWidth -g pixelHeight "$CARD" | tail -2 | tr -s ' ' | tr '\n' ' ')"
+            cp "$CARD" "$SHOTS/card-taco-2026.png"
+
+            echo "-- agent pass, as mac.yml does for the Python helper: start, a /wrapped 2026 arrives, answer once"
+            for who in app py; do mkdir -p "$WORK/agent-$who"; cp "$FX"/mac/chat.db* "$WORK/agent-$who/"; done
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
+            "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$WORK/agent-app/chat.db" "/wrapped 2026"
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out" | tee "$WORK/agent-app/second.txt"
+            "$BIN" --tb-agent-once --db "$WORK/agent-app/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles \
+              --chat taco --state "$WORK/agent-app/state.json" --out "$WORK/agent-app/out"
+            run_py() {
+              "$WORK/venv/bin/python" -m wrapped.mac agent --db "$WORK/agent-py/chat.db" --contacts "$FX/mac/AddressBook" --me Amara \
+                --chat taco --dry-run --once --yes --no-link --out "$WORK/agent-py/out" --state "$WORK/agent-py/state.json" --no-log
+            }
+            run_py > /dev/null
+            "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$WORK/agent-py/chat.db" "/wrapped 2026"
+            run_py | tail -2
+            A="$(find "$WORK/agent-app/out" -name recap.txt | head -1)"; P="$(find "$WORK/agent-py/out" -name recap.txt | head -1)"
+            if [ -n "$A" ] && cmp -s "$A" "$P"; then echo "AGENT TEXT IDENTICAL (app vs Python helper with --no-link, both answering the same typed /wrapped 2026)"; else echo "AGENT TEXT DIFFERS"; diff "$A" "$P" || true; fi
+          } 2>&1 | tee "$RES/04-dry-run.txt"
+
+      - name: "The card friends receive: the site's card for every fixture chat and hostile names"
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          {
+            echo "== The card (web/js/card.js drawn by WebKit inside the app, 1080 x 1350)"
+            "$BIN" --tb-card-test "$WORK/cards" --db "$FX/mac/chat.db" --contacts "$FX/mac/AddressBook" --me Amara --tz America/Los_Angeles
+            "$BIN" --tb-card-test "$WORK/cards-evil" --db "$FX/evil/chat.db" --contacts "$FX/evil/AddressBook-v22.abcddb" --me Amara --tz UTC
+            cp "$WORK/cards/card-hostile-name.png" "$SHOTS/card-hostile-name.png"
+            cp "$WORK/cards/card-long-name.png" "$SHOTS/card-long-name.png"
+          } 2>&1 | tee "$RES/04b-card.txt"
+
+      - name: "Proof 4: the app's AppleScript compiles against the real Messages dictionary (never run)"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Proof 4: osacompile of the exact script the app embeds"
+            "$BIN" --tb-print-applescript "$WORK/applescript"
+            cd "$WORK/applescript"
+            osacompile -o send.scpt send.applescript && echo "send.applescript: COMPILED"
+            osacompile -o count-chats.scpt count-chats.applescript && echo "count-chats.applescript: COMPILED"
+            if osacompile -o control.scpt control-wrong-app.applescript 2> control.err; then
+              echo "CONTROL COMPILED (the check proves nothing)"; exit 1
+            fi
+            echo "control (same handler told to Finder) failed to compile, as it must: $(head -1 control.err)"
+            echo "--- as compiled ---"; osadecompile send.scpt
+          } 2>&1 | tee "$RES/05-applescript.txt"
+
+      - name: Unit tests (engine parity, recap text, agent rules, dry run, card)
+        if: ${{ !cancelled() }}
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_EXPECTED: ${{ env.EXPECTED }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/unit.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" \
+            -derivedDataPath "$DERIVED" -only-testing:ThreadbackTests -resultBundlePath "$OUT/Unit.xcresult" | tee "$RES/06-unit.txt"
+
+      - name: "Proof 6a: the app reads ~/Library/Messages with nothing granted"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Proof 6a: direct read, before any grant"
+            echo "-- from this shell (TCC blames the runner, not the app):"
+            "$BIN" --tb-probe "$HOME/Library/Messages" --report "$REPORTS/probe-cli-before.json" | grep -E "folder.exists|folder.list|chat.db.posix|sqlite" || true
+            echo "-- the app launched by LaunchServices (open), so it is its own responsible process:"
+            open -n -W "$APP" --args -TBProbe direct -TBProbeTag before-messages -TBReportDir "$REPORTS" &
+            OPENPID=$!; for i in $(seq 1 40); do kill -0 $OPENPID 2>/dev/null || break; sleep 1; done; kill $OPENPID 2>/dev/null || true
+            cat "$REPORTS/probe-direct-before-messages.json" 2>/dev/null || echo "no report written"
+
+            echo "-- open Messages once (not signed in) to see whether it creates ~/Library/Messages"
+            open -g -a Messages || true
+            sleep 20
+            screencapture -x "$SHOTS/system-1-messages-first-launch.png" 2>&1 || echo "screencapture failed"
+            [ -s "$SHOTS/system-1-messages-first-launch.png" ] || { echo "screencapture wrote nothing"; rm -f "$SHOTS/system-1-messages-first-launch.png"; }
+            ls -la@ "$HOME/Library/Messages" 2>&1 | head -20
+            killall Messages 2>/dev/null || true
+            sleep 3
+            if [ -f "$HOME/Library/Messages/chat.db" ]; then
+              echo "MESSAGES CREATED ~/Library/Messages/chat.db itself: $(ls -la "$HOME/Library/Messages/chat.db")"
+              echo "messages-created" > "$WORK/messages-db-origin.txt"
+            else
+              echo "No chat.db after launching Messages: planting the invented fixture there (cp from this shell)"
+              mkdir -p "$HOME/Library/Messages" && cp "$FX"/mac/chat.db "$FX"/mac/chat.db-wal "$FX"/mac/chat.db-shm "$HOME/Library/Messages/" && echo "planted" || echo "PLANTING FAILED (this shell may not write there)"
+              ls -la@ "$HOME/Library/Messages" 2>&1 | head
+              echo "planted-fixture" > "$WORK/messages-db-origin.txt"
+            fi
+            echo "-- again, with the file present: from this shell"
+            "$BIN" --tb-probe "$HOME/Library/Messages" --report "$REPORTS/probe-cli-after.json" | grep -E "folder.exists|folder.list|chat.db.posix|chat.db-wal.posix|sqlite" || true
+            echo "-- again, the app launched by LaunchServices:"
+            open -n -W "$APP" --args -TBProbe direct -TBProbeTag file-present -TBReportDir "$REPORTS" &
+            OPENPID=$!; for i in $(seq 1 40); do kill -0 $OPENPID 2>/dev/null || break; sleep 1; done; kill $OPENPID 2>/dev/null || true
+            cat "$REPORTS/probe-direct-file-present.json" 2>/dev/null || echo "no report written"
+          } 2>&1 | tee "$RES/07-direct.txt"
+
+      - name: Allow UI testing
+        if: ${{ !cancelled() }}
+        run: |
+          sudo automationmodetool enable-automationmode-without-authentication || true
+          automationmodetool 2>&1 | head -3 || true
+
+      - name: "Proof 5: onboarding screenshots (fixture data)"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_SHOTS: ${{ env.SHOTS }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/onboarding.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+            -only-testing:ThreadbackUITests/OnboardingUITests -resultBundlePath "$OUT/Onboarding.xcresult" | tee "$RES/08-onboarding.txt"
+
+      - name: "Lifecycle: never running invisibly (window, Dock, Quit, reopen)"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/lifecycle.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+            -only-testing:ThreadbackUITests/LifecycleUITests -resultBundlePath "$OUT/Lifecycle.xcresult" | tee "$RES/08b-lifecycle.txt"
+
+      - name: "Proof 6b: the Open panel grant, then a relaunch through the bookmark"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 12
+        env:
+          TEST_RUNNER_THREADBACK_SHOTS: ${{ env.SHOTS }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          {
+            echo "== Proof 6b"
+            echo "messages database origin: $(cat "$WORK/messages-db-origin.txt" 2>/dev/null)"
+            STATUS=0
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/access1.log" test-without-building \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+              -only-testing:ThreadbackUITests/AccessUITests/test1_FolderGrantThroughOpenPanel -resultBundlePath "$OUT/Access1.xcresult" || STATUS=$?
+            echo "-- report written by the app right after the panel:"; cat "$REPORTS/probe-panel.json" 2>/dev/null || echo "none"
+            echo "-- xattrs on the folder now (com.apple.macl = the Open-panel consent):"; xattr -l "$HOME/Library/Messages" 2>&1 | head; ls -la@ "$HOME/Library/Messages" 2>&1 | head -8
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/access2.log" test-without-building \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+              -only-testing:ThreadbackUITests/AccessUITests/test2_BookmarkRestoresAccessAfterRelaunch -resultBundlePath "$OUT/Access2.xcresult" || STATUS=$?
+            echo "-- report after relaunch, through the stored bookmark:"; cat "$REPORTS/probe-bookmark-relaunch.json" 2>/dev/null || echo "none"
+            echo "-- and a plain direct read by a fresh launch (no bookmark used):"
+            open -n -W "$APP" --args -TBProbe direct -TBProbeTag after-panel -TBReportDir "$REPORTS" &
+            OPENPID=$!; for i in $(seq 1 40); do kill -0 $OPENPID 2>/dev/null || break; sleep 1; done; kill $OPENPID 2>/dev/null || true
+            cat "$REPORTS/probe-direct-after-panel.json" 2>/dev/null || echo "no report written"
+            exit $STATUS
+          } 2>&1 | tee "$RES/09-panel.txt"
+
+      - name: "Proof 7: the Automation prompt (harmless events only)"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 10
+        env:
+          TEST_RUNNER_THREADBACK_SHOTS: ${{ env.SHOTS }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          {
+            echo "== Proof 7"
+            STATUS=0
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/automation.log" test-without-building \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+              -only-testing:ThreadbackUITests/SystemPromptUITests/testAutomationPrompt -resultBundlePath "$OUT/Automation.xcresult" || STATUS=$?
+            echo "-- report:"; cat "$REPORTS/automation-ui.json" 2>/dev/null || echo "none"
+            echo "-- user TCC.db AppleEvents rows now:"
+            sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" "SELECT service, client, auth_value, indirect_object_identifier FROM access WHERE service='kTCCServiceAppleEvents'" 2>&1 | head
+            killall Messages 2>/dev/null || true
+            echo "== Contacts prompt (optional names)"
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/contacts.log" test-without-building \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+              -only-testing:ThreadbackUITests/SystemPromptUITests/testContactsPrompt -resultBundlePath "$OUT/Contacts.xcresult" || true
+            cat "$REPORTS/contacts-ui.json" 2>/dev/null || echo "none"
+            exit $STATUS
+          } 2>&1 | tee "$RES/10-automation.txt"
+
+      - name: "Proof 8: login item (SMAppService.mainApp)"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          TEST_RUNNER_THREADBACK_SHOTS: ${{ env.SHOTS }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          {
+            echo "== Proof 8"
+            STATUS=0
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/login.log" test-without-building \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+              -only-testing:ThreadbackUITests/SystemPromptUITests/testLoginItem -resultBundlePath "$OUT/Login.xcresult" || STATUS=$?
+            echo "-- report:"; cat "$REPORTS/login-item-ui.json" 2>/dev/null || echo "none"
+            echo "-- background task management database (sfltool dumpbtm), entries for Threadback:"
+            sudo sfltool dumpbtm 2>&1 | grep -i -B3 -A10 "threadback" | head -40 || echo "(none found)"
+            exit $STATUS
+          } 2>&1 | tee "$RES/11-login-item.txt"
+
+      - name: Release build, universal (arm64 + x86_64)
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          {
+            echo "== Release build (universal)"
+            ios/scripts/ci-xcodebuild.sh "$OUT/logs/release.log" build \
+              -project mac/ThreadbackMac.xcodeproj -scheme Threadback -configuration Release -destination "generic/platform=macOS" \
+              -derivedDataPath "$WORK/release-dd" ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO THREADBACK_COMMIT="${GITHUB_SHA::7}" > /dev/null
+            REL="$WORK/release-dd/Build/Products/Release/Threadback.app"
+            echo "Release bundle: $(du -sh "$REL" | cut -f1); archs: $(lipo -archs "$REL/Contents/MacOS/Threadback")"
+            count_in() { { find "$1" -type f \( -perm -u+x -o -name "*.dylib" \) -exec strings -a {} + | grep -c -F -- "$2"; } || true; }
+            for MARKER in "--tb-stats" "TBProbe"; do
+              echo "debug-only marker '$MARKER': Debug bundle $(count_in "$APP" "$MARKER"), Release bundle $(count_in "$REL" "$MARKER")"
+            done
+            echo "Release signature: $(codesign -dvv "$REL" 2>&1 | grep -E 'Signature|flags' | tr '\n' ' ')"
+            echo "Release entitlements:"; codesign -d --entitlements - --xml "$REL" 2>/dev/null | plutil -convert xml1 -o - - 2>/dev/null | grep -E "<key>" || true
+            echo "Gatekeeper on the Release app: $(spctl -a -vv -t exec "$REL" 2>&1 | tr '\n' ' ')"
+            mkdir -p "$OUT/download" "$OUT/download-debug"
+            ditto -c -k --keepParent "$REL" "$OUT/download/Threadback-for-Mac.zip"
+            ditto -c -k --keepParent "$APP" "$OUT/download-debug/Threadback-debug-with-probes.zip"
+            echo "commit in the Release app: $(/usr/libexec/PlistBuddy -c 'Print :ThreadbackCommit' "$REL/Contents/Info.plist")"
+            mac/scripts/make-dmg.sh "$REL" "$BIN" "$OUT/download/Threadback-for-Mac.dmg"
+            echo "disk image: Threadback-for-Mac.dmg ($(du -h "$OUT/download/Threadback-for-Mac.dmg" | cut -f1))"
+            echo "zipped for download: artifact Threadback-for-Mac -> Threadback-for-Mac.zip ($(du -h "$OUT/download/Threadback-for-Mac.zip" | cut -f1)); artifact Threadback-debug-with-probes ($(du -h "$OUT/download-debug/Threadback-debug-with-probes.zip" | cut -f1))"
+          } 2>&1 | tee "$RES/12-release.txt"
+
+      # The owner's download: ONE file, the ditto zip of the app, not re-zipped by GitHub
+      # (archive: false), so the browser saves Threadback-for-Mac.zip and one double-click
+      # (or Safari by itself) gives Threadback.app. The artifact is named after the file.
+      # The download, checked as the owner gets it (quarantined, opened, expanded), before
+      # anything is published. A failure here stops the run: nothing broken is published.
+      - name: "The download, checked before publishing: disk image window, app, zip"
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          chmod +x mac/scripts/*.sh
+          mac/scripts/ci-browser-download-check.sh --file "$OUT/download/Threadback-for-Mac.dmg" "$OUT/download/Threadback-for-Mac.zip" 2>&1 | tee "$RES/13-download.txt"
+
+      # Public downloads, no sign-in: the rolling pre-release "mac-preview" for the work
+      # branch, a new release marked latest for main. Only when every check above passed.
+      - name: "Publish to the Releases page"
+        id: release
+        if: ${{ success() && github.event_name == 'push' && (github.ref_name == 'main' || startsWith(github.ref_name, 'claude/')) }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          mac/scripts/ci-release.sh 2>&1 | tee "$RES/15-release.txt"
+
+      - name: "The download, checked again from the Releases page, as a browser gets it"
+        if: ${{ steps.release.outcome == 'success' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DMG_URL: ${{ steps.release.outputs.dmg_url }}
+          ZIP_URL: ${{ steps.release.outputs.zip_url }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -o pipefail
+          if ! mac/scripts/ci-browser-download-check.sh --url "$DMG_URL" "$ZIP_URL" 2>&1 | tee -a "$RES/15-release.txt"; then
+            if [ "$GITHUB_REF_NAME" = "main" ]; then
+              echo "the published download does not open into a valid app: removing release $TAG" | tee -a "$RES/15-release.txt"
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+            fi
+            exit 1
+          fi
+
+      - name: "What macOS shows on the first open (Gatekeeper), photographed"
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 8
+        run: |
+          set -o pipefail
+          mac/scripts/ci-gatekeeper-photos.sh "$WORK/release-dd/Build/Products/Release/Threadback.app" "$SHOTS" 2>&1 | tee "$RES/14-gatekeeper.txt"
+
+      - name: Collect results
+        if: ${{ !cancelled() }}
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # The UI-test runner cannot write outside its container, so the screenshots come out
+          # of the result bundles: each bundle into its own folder, named images only.
+          for b in "$OUT"/*.xcresult; do
+            d="$WORK/att/$(basename "$b" .xcresult)"
+            mkdir -p "$d"
+            xcrun xcresulttool export attachments --path "$b" --output-path "$d" > /dev/null 2>&1 || true
+          done
+          "$WORK/venv/bin/python" - "$WORK/att" "$SHOTS" <<'EOF'
+          import json, os, shutil, sys
+          root, dst = sys.argv[1], sys.argv[2]
+          prefixes = ("onboarding-", "access-", "automation-", "contacts-", "login-item-", "lifecycle-", "story-")
+          for sub in sorted(os.listdir(root)):
+              folder = os.path.join(root, sub)
+              try:
+                  manifest = json.load(open(os.path.join(folder, "manifest.json")))
+              except Exception:
+                  continue
+              for test in manifest:
+                  for a in test.get("attachments", []):
+                      name = a.get("suggestedHumanReadableName", "")
+                      base = name.split("_0_")[0] if "_0_" in name else os.path.splitext(name)[0]
+                      exported = a.get("exportedFileName", "")
+                      if base.startswith(prefixes) and exported.lower().endswith((".png", ".jpeg", ".jpg")):
+                          target = os.path.join(dst, base + ".png")
+                          if not os.path.exists(target):
+                              shutil.copy(os.path.join(folder, exported), target)
+                              print("exported", base, "from", sub)
+          EOF
+          {
+            echo "Threadback for Mac: feasibility spike results"
+            echo "Run:    $RUN_URL"
+            echo "Commit: $GITHUB_SHA"
+            echo "All data is invented (tests/fixtures/build_fixture.py). Nothing was sent anywhere."
+            echo ""
+            for f in "$RES"/*.txt; do cat "$f"; echo ""; done
+            echo "== Notes printed by tests"
+            cat "$OUT"/logs/*.log 2>/dev/null | grep -o "WRAPPED_NOTE.*" | awk '!seen[$0]++' | cut -c1-900
+            echo ""
+            echo "== Test verdicts"
+            cat "$OUT"/logs/*.log 2>/dev/null | grep -E "Test Case .* (passed|failed|skipped)|Executed [0-9]+ test" | sed -E 's/^[[:space:]]+//' | awk '!seen[$0]++'
+          } > "$SHOTS/MAC-APP-RESULTS.txt"
+          cat "$SHOTS/MAC-APP-RESULTS.txt"
+          ls -la "$SHOTS"
+
+      - name: Publish screenshots and results to the branch
+        if: ${{ !cancelled() && github.ref_type == 'branch' }}
+        env:
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: mac/scripts/ci-publish-screenshots.sh
+
+      - name: Upload logs and reports
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-app-logs
+          retention-days: 3
+          path: |
+            ${{ env.OUT }}/logs
+            ${{ env.REPORTS }}
+            ${{ env.SHOTS }}
+          if-no-files-found: warn

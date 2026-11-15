@@ -1,0 +1,22 @@
+{
+  "name": "imessage-wrap",
+  "private": true,
+  "description": "Wrapped for iMessage group chats: web story, in-browser analyzer and tests",
+  "scripts": {
+    "test": "node --test \"tests/js/**/*.test.js\"",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "serve": "npx http-server web -p 4173 -c-1 --silent",
+    "assets": "node tests/e2e/make-assets.mjs",
+    "record": "node tests/e2e/record.mjs",
+    "test:make": "node tests/e2e/make/run.mjs",
+    "test:mac-guide": "node tests/e2e/mac-guide.mjs",
+    "shots": "node tests/e2e/run.mjs --only=share,landing,shots --update-screenshots",
+    "shots:make": "node tests/e2e/make/run.mjs --only=shots --update-screenshots",
+    "shots:mac-guide": "node tests/e2e/mac-guide.mjs --only=shots --update-screenshots"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0",
+    "sql.js": "1.13.0",
+    "http-server": "14.1.1"
+  }
+}

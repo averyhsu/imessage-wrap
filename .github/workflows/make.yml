@@ -1,0 +1,95 @@
+# "Make your own" page (web/make/): the whole flow in headless Chromium, against invented
+# Messages databases built at test time, compared with the Python command-line tool.
+# Checks: chat.db + -wal, iPhone backups (also encrypted), pasted exports, the sample chat,
+# quotes opt-in, renaming, error messages, keyboard use, four viewports, zero foreign requests.
+name: Make page
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'web/**'
+      - 'wrapped/**'
+      - 'tests/e2e/make/**'
+      - 'tests/e2e/lib.mjs'
+      - 'tests/js/make-*.test.js'
+      - 'tests/fixtures/**'
+      - 'package*.json'
+      - '.github/workflows/make.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Several agents push to the same branch: let a run finish instead of cancelling it on
+# every push (GitHub keeps only the newest queued run per group).
+concurrency:
+  group: make-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: End-to-end in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: |
+          # Preferred: the browser plus its system packages and fonts. That needs the Ubuntu
+          # package mirrors, and when a runner cannot resolve them apt retries for many
+          # minutes. So probe first and fall back to the browser alone (the hosted image
+          # already carries the shared libraries Chromium needs).
+          if timeout 20 getent hosts azure.archive.ubuntu.com >/dev/null || timeout 20 getent hosts archive.ubuntu.com >/dev/null; then
+            if timeout 300 npx playwright install --with-deps chromium; then
+              timeout 120 sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji \
+                || echo "::warning::extra fonts unavailable; screenshots use fallback fonts"
+              exit 0
+            fi
+            sudo pkill -x apt-get || true
+          fi
+          echo "::warning::Ubuntu package mirrors are unreachable; installing Chromium without --with-deps"
+          if ! npx playwright install chromium; then
+            echo "::warning::could not download Chromium; using the Chrome that ships with the runner image"
+            echo "PW_CHANNEL=chrome" >> "$GITHUB_ENV"
+          fi
+
+      - name: Unit tests for the page (brand block, CSP, sample chat, worker)
+        run: node --test tests/js/make-*.test.js
+
+      - name: End-to-end tests
+        run: npm run test:make
+
+      - name: The test run left the repository as it found it
+        if: always()
+        run: |
+          dirty="$(git status --porcelain)"
+          if [ -n "$dirty" ]; then echo "$dirty"; echo "::error::the tests changed tracked files or left new ones behind"; exit 1; fi
+          leftovers="$(git status --porcelain --untracked-files=all --ignored | grep -E '\.(db|sqlite|sqlite3|db-wal|db-shm)$' || true)"
+          if [ -n "$leftovers" ]; then echo "$leftovers"; echo "::error::test databases were written inside the repository"; exit 1; fi
+
+      - name: Upload screenshots
+        if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 3
+          name: make-screenshots
+          path: test-results/make-screenshots/
+          if-no-files-found: warn

@@ -1,0 +1,143 @@
+name: engine
+
+# The stats engines (Python package `wrapped`, in-browser web/make/engine.js)
+# and the tests that keep them identical. All data is invented and generated
+# at test time; no database is ever committed.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'wrapped/**'
+      - 'web/make/**'
+      - 'tests/fixtures/**'
+      - 'tests/python/**'
+      - 'tests/conformance/**'
+      - 'tests/engine-js/**'
+      - 'tests/vectors/**'
+      - 'docs/SCHEMA.md'
+      - 'pyproject.toml'
+      - 'package*.json'
+      - '.github/workflows/engine.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+
+jobs:
+  linux:
+    name: Python ${{ matrix.python }} + Node 22 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Python 3.9 is the oldest supported version (and what macOS ships
+          # as /usr/bin/python3); it is no longer built for the newest image.
+          - python: '3.9'
+            os: ubuntu-24.04
+          - python: '3.13'
+            os: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install test tools
+        run: |
+          python -m pip install --quiet pytest
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build the invented fixture once
+        run: |
+          python tests/fixtures/build_fixture.py "$RUNNER_TEMP/fixture"
+          echo "WRAPPED_FIXTURE_DIR=$RUNNER_TEMP/fixture" >> "$GITHUB_ENV"
+      - name: Python engine tests (pytest)
+        run: python -m pytest tests/python -q
+      - name: Python engine tests again without pytest
+        run: python -m unittest discover -s tests/python
+      - name: JavaScript engine tests
+        run: node --test tests/engine-js/*.test.js
+      - name: Conformance (both engines, byte-identical JSON)
+        run: python -m pytest tests/conformance -q
+      - name: The tests left nothing behind in the checkout
+        run: |
+          left="$(git status --porcelain --ignored | grep -v '^!! node_modules/$' || true)"
+          if [ -n "$left" ]; then
+            echo "The test runs created or changed these files in the repository:"
+            echo "$left"
+            exit 1
+          fi
+      - name: The package installs and the console script runs
+        run: |
+          python -m pip install --quiet .
+          cd "$RUNNER_TEMP"
+          wrapped --version
+          wrapped chats --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts
+          wrapped chats --db "$WRAPPED_FIXTURE_DIR/evil/chat.db" --no-contacts
+          wrapped link "Book Club" --year 2026 --tz America/Los_Angeles \
+            --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts
+          wrapped stats "Book Club" --year 2026 --tz America/Los_Angeles --full-names --compact \
+            --db "$WRAPPED_FIXTURE_DIR/mac/chat.db" --no-contacts > /dev/null
+
+  macos:
+    name: macOS Python + real NSArchiver format
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      PYTHON: /usr/bin/python3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Versions
+        run: |
+          sw_vers
+          /usr/bin/python3 --version
+          /usr/bin/python3 -c "import sqlite3; print('SQLite', sqlite3.sqlite_version)"
+          node --version
+          swift --version
+      - name: Archive real attributed strings with NSArchiver
+        run: |
+          swift tests/conformance/real_typedstream.swift "$RUNNER_TEMP/real_typedstream.json"
+          echo "WRAPPED_REAL_TYPEDSTREAM=$RUNNER_TEMP/real_typedstream.json" >> "$GITHUB_ENV"
+      - name: Install test tools
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Python engine tests under the system Python (includes the real-format check)
+        run: /usr/bin/python3 -m unittest discover -s tests/python
+      - name: JavaScript engine tests (includes the real-format check)
+        run: node --test --test-reporter=dot tests/engine-js/*.test.js
+      - name: Conformance (both engines, byte-identical JSON)
+        run: /usr/bin/python3 -m unittest discover -s tests/conformance
+      - name: The tests left nothing behind in the checkout
+        run: |
+          left="$(git status --porcelain --ignored | grep -v '^!! node_modules/$' || true)"
+          if [ -n "$left" ]; then
+            echo "The test runs created or changed these files in the repository:"
+            echo "$left"
+            exit 1
+          fi
+      - name: What the decoder makes of the real samples
+        if: always()
+        run: /usr/bin/python3 tests/conformance/describe_typedstream.py "$RUNNER_TEMP/real_typedstream.json"
+      - name: Keep the real samples
+        if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-typedstream-samples
+          path: ${{ runner.temp }}/real_typedstream.json
+          if-no-files-found: ignore
+          retention-days: 3

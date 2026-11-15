@@ -1,0 +1,72 @@
+# ── Never commit private data ────────────────────────────────────────────────
+# Real Messages databases (Mac chat.db, iPhone-backup sms.db) and anything
+# derived from them. Test fixtures are generated at test time from invented data.
+chat.db
+chat.db-*
+sms.db
+sms.db-*
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+Manifest.plist
+Manifest.db
+# iPhone backup files by their hashed names (sms.db, its -wal, the address book)
+3d0d7e5fb2ce288813306e4d4636395e047a3d28
+cd47480f213dba9bc38ee792775d17e3f5a73a59
+31bb7ba8914766d4ba40d6dfb6113c8b614be442
+# Address books and message exports
+*.abcddb
+*.abcddb-*
+*.sqlitedb
+*.sqlitedb-*
+*.csv
+*.tsv
+# Generated stats / recaps from real chats, including the tools' default outputs
+stats.json
+*_stats.json
+*-stats.json
+wrapped-output/
+out/
+recap-*.png
+recap-*.json
+recap.txt
+link.txt
+threadback-preview/
+threadback-card*.png
+threadback-*-20[0-9][0-9].png
+threadback-*-all-time.png
+# Secrets
+.env
+.env.*
+*.pem
+*.p12
+*.mobileprovision
+*.key
+secrets.*
+
+# ── Tooling noise ────────────────────────────────────────────────────────────
+.DS_Store
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+node_modules/
+test-results/
+playwright-report/
+.build/
+DerivedData/
+xcuserdata/
+*.xcodeproj/
+*.xcworkspace/
+*.xcresult/
+*.ipa
+*.dSYM/
+
+# Local agent worktrees / tool state
+.claude/

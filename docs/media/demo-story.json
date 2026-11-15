@@ -1,0 +1,67 @@
+{
+  "fps": 30,
+  "width": 780,
+  "height": 1688,
+  "slides": [
+    {
+      "id": "cover",
+      "start": 0,
+      "seconds": 5.2
+    },
+    {
+      "id": "total",
+      "start": 5.2,
+      "seconds": 6.5
+    },
+    {
+      "id": "clock",
+      "start": 11.7,
+      "seconds": 7
+    },
+    {
+      "id": "persona",
+      "start": 18.7,
+      "seconds": 7.6
+    },
+    {
+      "id": "late",
+      "start": 26.3,
+      "seconds": 6.5
+    },
+    {
+      "id": "week",
+      "start": 32.8,
+      "seconds": 6.5
+    },
+    {
+      "id": "year",
+      "start": 39.3,
+      "seconds": 6.5
+    },
+    {
+      "id": "senders",
+      "start": 45.8,
+      "seconds": 7.5
+    },
+    {
+      "id": "moty",
+      "start": 53.3,
+      "seconds": 8
+    },
+    {
+      "id": "taps",
+      "start": 61.3,
+      "seconds": 7
+    },
+    {
+      "id": "awards",
+      "start": 68.3,
+      "seconds": 8.7
+    },
+    {
+      "id": "sum",
+      "start": 77,
+      "seconds": 4.2
+    }
+  ]
+}

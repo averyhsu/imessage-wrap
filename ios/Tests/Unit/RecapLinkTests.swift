@@ -1,0 +1,294 @@
+import XCTest
+@testable import Wrapped
+
+/// Link parsing (both forms), which links are accepted as recap links, link building, and
+/// the length budget with its trim ladder (docs/SCHEMA.md §5).
+final class RecapLinkTests: XCTestCase {
+    private let base = "https://averyhsu.github.io/imessage-wrap/"
+
+    // MARK: Parsing
+
+    func testParsesTheVectorURL() throws {
+        let vector = try PayloadVector.load()
+        let url = try XCTUnwrap(URL(string: vector.url))
+        XCTAssertEqual(RecapLink.payload(from: url), vector.payload)
+        XCTAssertEqual(RecapLink.recap(from: url)?.summary.totalMessages, 48213)
+    }
+
+    func testParsesFragmentForm() throws {
+        let url = try XCTUnwrap(URL(string: base + "#w1=abc-_123"))
+        XCTAssertEqual(RecapLink.payload(from: url), "abc-_123")
+    }
+
+    func testParsesQueryForm() throws {
+        let url = try XCTUnwrap(URL(string: base + "?w1=abc-_123"))
+        XCTAssertEqual(RecapLink.payload(from: url), "abc-_123")
+    }
+
+    func testParsesTheAppScheme() throws {
+        let url = try XCTUnwrap(URL(string: "threadback://recap#w1=abc-_123"))
+        XCTAssertEqual(RecapLink.payload(from: url), "abc-_123")
+        let query = try XCTUnwrap(URL(string: "threadback://recap?w1=xyz"))
+        XCTAssertEqual(RecapLink.payload(from: query), "xyz")
+    }
+
+    func testFragmentWinsOverQuery() throws {
+        let url = try XCTUnwrap(URL(string: base + "?w1=fromquery#w1=fromfragment"))
+        XCTAssertEqual(RecapLink.payload(from: url), "fromfragment")
+    }
+
+    func testParsesAroundOtherParameters() throws {
+        let fragment = try XCTUnwrap(URL(string: base + "#utm=1&w1=abc&x=2"))
+        XCTAssertEqual(RecapLink.payload(from: fragment), "abc")
+        let query = try XCTUnwrap(URL(string: base + "index.html?embed=ios&w1=abc&demo=0"))
+        XCTAssertEqual(RecapLink.payload(from: query), "abc")
+        let embedded = try XCTUnwrap(URL(string: "file:///tmp/web/index.html?embed=ios#w1=abc"))
+        XCTAssertEqual(RecapLink.payload(from: embedded), "abc")
+    }
+
+    func testLinksWithoutAPayload() throws {
+        XCTAssertNil(RecapLink.payload(from: try XCTUnwrap(URL(string: base))))
+        XCTAssertNil(RecapLink.payload(from: try XCTUnwrap(URL(string: base + "?demo=1"))))
+        XCTAssertNil(RecapLink.payload(from: try XCTUnwrap(URL(string: base + "#w1="))))
+        XCTAssertNil(RecapLink.payload(from: try XCTUnwrap(URL(string: base + "#xw1=abc"))))
+        XCTAssertNil(RecapLink.recap(from: try XCTUnwrap(URL(string: base + "#w1=abc"))), "not a decodable recap")
+    }
+
+    func testFindsLinksInsidePastedText() throws {
+        let vector = try PayloadVector.load()
+        let text = "look at this \(base)#w1=abc-_123, lol (see also <https://example.com/a?b=1>)."
+        XCTAssertEqual(
+            RecapLink.links(inText: text).map { $0.absoluteString },
+            [base + "#w1=abc-_123", "https://example.com/a?b=1"]
+        )
+        XCTAssertTrue(RecapLink.links(inText: "no link here, just w1 and = signs").isEmpty)
+        XCTAssertEqual(
+            RecapLink.links(inText: String(repeating: "https://example.com/x ", count: 50)).count,
+            20,
+            "only the first few links of a long text are looked at"
+        )
+
+        XCTAssertEqual(RecapLink.recap(inText: "Our year: \(vector.url)\nopen it!")?.summary.chatName, "Dinner Club 🍝")
+        XCTAssertNil(RecapLink.recap(inText: "no link here"))
+        // A recap payload on some other site is not a recap link; the real one after it is.
+        let elsewhere = "https://example.com/#w1=\(vector.payload)"
+        XCTAssertNil(RecapLink.recap(inText: elsewhere))
+        XCTAssertEqual(RecapLink.recap(inText: "\(elsewhere) and \(vector.url)")?.payload, vector.payload)
+    }
+
+    // MARK: Which links are accepted
+
+    func testAcceptsOnlyTheAppSchemeAndTheStoryPage() throws {
+        let payload = DemoRecap.payload
+        var accepted = [
+            "https://averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/?w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/index.html#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap#w1=\(payload)",
+            "https://averyhsu.github.io:443/imessage-wrap/#w1=\(payload)",
+            "threadback://recap#w1=\(payload)",
+            "threadback://recap?w1=\(payload)",
+            "threadback://recap/#w1=\(payload)",
+            "THREADBACK://recap#w1=\(payload)"
+        ]
+        // The host is not case sensitive (built from the configured story address).
+        let storyAddress = try XCTUnwrap(URLComponents(string: WrappedConfig.baseURLString))
+        let shoutedHost = try XCTUnwrap(storyAddress.host).uppercased()
+        accepted.append("https://\(shoutedHost)\(storyAddress.path)#w1=\(payload)")
+        for text in accepted {
+            let url = try XCTUnwrap(URL(string: text), text)
+            XCTAssertTrue(RecapLink.isRecapLink(url), "should be accepted: \(text.prefix(70))")
+            XCTAssertEqual(RecapLink.recap(from: url), DemoRecap.recap, "should decode: \(text.prefix(70))")
+        }
+
+        let refused = [
+            "http://averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://example.com/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io.example.com/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io@example.com/imessage-wrap/#w1=\(payload)",
+            "https://someone:secret@averyhsu.github.io/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io:8443/imessage-wrap/#w1=\(payload)",
+            "https://averyhsu.github.io/#w1=\(payload)",
+            "https://averyhsu.github.io/another-project/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/make/#w1=\(payload)",
+            "https://averyhsu.github.io/imessage-wrap/%2e%2e/another-project/#w1=\(payload)",
+            "threadback://other#w1=\(payload)",
+            "threadback://recap/extra#w1=\(payload)",
+            "threadback:recap#w1=\(payload)",
+            "imessagewrapped://recap#w1=\(payload)",
+            "file:///tmp/web/index.html?embed=ios#w1=\(payload)",
+            "ftp://averyhsu.github.io/imessage-wrap/#w1=\(payload)"
+        ]
+        for text in refused {
+            guard let url = URL(string: text) else {
+                continue
+            }
+            XCTAssertFalse(RecapLink.isRecapLink(url), "should be refused: \(text.prefix(70))")
+            XCTAssertNil(RecapLink.recap(from: url), "should not decode: \(text.prefix(70))")
+        }
+    }
+
+    /// The scheme the code accepts is the one the app registers (both come from the
+    /// `APP_URL_SCHEME` build setting and `WrappedConfig.appURLScheme`).
+    func testTheAppRegistersTheSchemeTheCodeAccepts() throws {
+        XCTAssertEqual(WrappedConfig.appURLScheme, "threadback")
+        let types = try XCTUnwrap(Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]])
+        var schemes: [String] = []
+        for type in types {
+            schemes.append(contentsOf: (type["CFBundleURLSchemes"] as? [String]) ?? [])
+        }
+        XCTAssertEqual(schemes, [WrappedConfig.appURLScheme])
+    }
+
+    // MARK: Building
+
+    func testDefaultStoryURLIsTheVectorURL() throws {
+        let vector = try PayloadVector.load()
+        XCTAssertEqual(WrappedConfig.baseURLString, base)
+        XCTAssertEqual(RecapLink.storyURL(payload: vector.payload, form: .fragment)?.absoluteString, vector.url)
+    }
+
+    func testQueryFormStoryURL() throws {
+        let url = try XCTUnwrap(RecapLink.storyURL(payload: "abc-_123", form: .query))
+        XCTAssertEqual(url.absoluteString, base + "?w1=abc-_123")
+        XCTAssertEqual(RecapLink.payload(from: url), "abc-_123")
+    }
+
+    func testAppURLRoundTrip() throws {
+        let url = try XCTUnwrap(RecapLink.appURL(payload: DemoRecap.payload))
+        XCTAssertEqual(url.scheme, "threadback")
+        XCTAssertEqual(url.host, "recap")
+        XCTAssertEqual(RecapLink.recap(from: url), DemoRecap.recap)
+    }
+
+    func testBundledStoryPageExistsAndCarriesThePayload() throws {
+        let location = try XCTUnwrap(
+            RecapLink.bundledStoryLocation(payload: DemoRecap.payload),
+            "web/index.html is missing from the app bundle (run ios/scripts/sync-web.sh before xcodegen)"
+        )
+        XCTAssertTrue(location.url.isFileURL)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: location.directory.appendingPathComponent("index.html").path))
+        XCTAssertEqual(location.directory.lastPathComponent, "web")
+        let components = try XCTUnwrap(URLComponents(url: location.url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.queryItems?.first?.name, "embed")
+        XCTAssertEqual(components.queryItems?.first?.value, "ios")
+        XCTAssertEqual(components.fragment, "w1=" + DemoRecap.payload)
+        XCTAssertEqual(RecapLink.payload(from: location.url), DemoRecap.payload)
+
+        // Without a recap: the page a web view is warmed up with, which then waits.
+        let idle = try XCTUnwrap(RecapLink.bundledStoryLocation(payload: nil))
+        XCTAssertNil(idle.url.fragment)
+        XCTAssertEqual(idle.url.query, "embed=ios")
+        XCTAssertEqual(idle.url.path, location.url.path)
+        // The bundled page is never itself a recap link.
+        XCTAssertNil(RecapLink.recap(from: location.url))
+    }
+
+    // MARK: Length budget
+
+    func testShortLinksAreNotTouched() throws {
+        let vector = try PayloadVector.load()
+        let fitted = try RecapLinkBuilder.fit(payload: vector.payload)
+        XCTAssertEqual(fitted.trimSteps, 0)
+        XCTAssertEqual(fitted.payload, vector.payload)
+        XCTAssertEqual(fitted.url.absoluteString, vector.url)
+        XCTAssertLessThanOrEqual(fitted.url.absoluteString.count, 4800)
+    }
+
+    func testEachTrimStepDoesWhatTheContractSays() throws {
+        var stats = LargeRecap.stats()
+
+        RecapLinkBuilder.applyTrimStep(1, to: &stats)
+        let awardsAfter1 = try XCTUnwrap(stats["awards"] as? [[String: Any]])
+        XCTAssertEqual(awardsAfter1.count, 6)
+        XCTAssertTrue(awardsAfter1.allSatisfy { $0["detail"] == nil && $0["title"] != nil })
+
+        RecapLinkBuilder.applyTrimStep(2, to: &stats)
+        let reactedAfter2 = try XCTUnwrap(stats["most_reacted"] as? [[String: Any]])
+        XCTAssertEqual(reactedAfter2.count, 3)
+        for entry in reactedAfter2 {
+            let text = try XCTUnwrap(entry["text"] as? String)
+            XCTAssertEqual(text.count, 61)
+            XCTAssertTrue(text.hasSuffix("…"))
+        }
+
+        RecapLinkBuilder.applyTrimStep(3, to: &stats)
+        XCTAssertEqual((stats["senders"] as? [Any])?.count, 8)
+
+        RecapLinkBuilder.applyTrimStep(4, to: &stats)
+        XCTAssertEqual((stats["most_reacted"] as? [Any])?.count, 1)
+
+        RecapLinkBuilder.applyTrimStep(5, to: &stats)
+        XCTAssertNil(stats["awards"])
+
+        RecapLinkBuilder.applyTrimStep(6, to: &stats)
+        XCTAssertEqual((stats["senders"] as? [Any])?.count, 5)
+
+        // Everything else is left alone.
+        XCTAssertEqual((stats["by_hour"] as? [Any])?.count, 24)
+        XCTAssertEqual((stats["totals"] as? [String: Any])?["messages"] as? Int, 123456)
+    }
+
+    func testShortQuotesAreNotTruncated() {
+        let entry: [String: Any] = ["text": "short and sweet", "reactions": 3]
+        var stats: [String: Any] = ["most_reacted": [entry]]
+        RecapLinkBuilder.applyTrimStep(2, to: &stats)
+        let entries = stats["most_reacted"] as? [[String: Any]]
+        XCTAssertEqual(entries?.first?["text"] as? String, "short and sweet")
+    }
+
+    func testOversizedRecapIsTrimmedIntoTheBudget() throws {
+        let payload = try RecapPayload.encode(object: LargeRecap.stats())
+        let untrimmed = try XCTUnwrap(RecapLink.storyURL(payload: payload))
+        XCTAssertGreaterThan(untrimmed.absoluteString.count, 4800, "the fixture must start over budget")
+
+        let fitted = try RecapLinkBuilder.fit(payload: payload)
+        XCTAssertGreaterThanOrEqual(fitted.trimSteps, 1)
+        XCTAssertLessThanOrEqual(fitted.url.absoluteString.count, 4800)
+        XCTAssertEqual(RecapLink.payload(from: fitted.url), fitted.payload)
+
+        let recap = try Recap(payload: fitted.payload)
+        XCTAssertEqual(recap.summary.chatName, "The Extremely Long Group Chat Name")
+        XCTAssertEqual(recap.summary.totalMessages, 123456)
+        XCTAssertEqual(recap.summary.topSenders.count, 3)
+        print("WRAPPED_NOTE trim: \(untrimmed.absoluteString.count) characters fit in \(fitted.url.absoluteString.count) after \(fitted.trimSteps) step(s)")
+    }
+
+    func testLadderStopsAtTheFirstStepThatFits() throws {
+        let payload = try RecapPayload.encode(object: LargeRecap.stats())
+
+        // Link length after each cumulative step, computed the same way `fit` does.
+        var stats = try RecapPayload.decodeObject(payload)
+        var lengths: [Int] = []
+        for step in 1...RecapLinkBuilder.trimStepCount {
+            RecapLinkBuilder.applyTrimStep(step, to: &stats)
+            let trimmed = try RecapPayload.encode(object: stats)
+            lengths.append(try XCTUnwrap(RecapLink.storyURL(payload: trimmed)).absoluteString.count)
+        }
+        print("WRAPPED_NOTE ladder lengths: \(lengths)")
+
+        for (offset, limit) in lengths.enumerated() {
+            let expectedStep = (lengths.firstIndex { $0 <= limit } ?? offset) + 1
+            let fitted = try RecapLinkBuilder.fit(payload: payload, limit: limit)
+            XCTAssertEqual(fitted.trimSteps, expectedStep, "limit \(limit)")
+            XCTAssertLessThanOrEqual(fitted.url.absoluteString.count, limit)
+        }
+
+        let smallest = try XCTUnwrap(lengths.min())
+        XCTAssertThrowsError(try RecapLinkBuilder.fit(payload: payload, limit: smallest - 1)) { error in
+            guard case RecapPayloadError.linkTooLong(_, let limit)? = error as? RecapPayloadError else {
+                XCTFail("expected linkTooLong, got \(error)")
+                return
+            }
+            XCTAssertEqual(limit, smallest - 1)
+        }
+    }
+
+    func testQueryFormIsTrimmedToo() throws {
+        let payload = try RecapPayload.encode(object: LargeRecap.stats())
+        let fitted = try RecapLinkBuilder.fit(payload: payload, form: .query)
+        XCTAssertLessThanOrEqual(fitted.url.absoluteString.count, 4800)
+        XCTAssertNotNil(fitted.url.query)
+        XCTAssertNil(fitted.url.fragment)
+    }
+}

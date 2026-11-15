@@ -1,0 +1,94 @@
+# Web story: unit tests (codec, normalize, formatting) and the Playwright end-to-end run
+# (every slide, the robustness matrix, embed bridge, file:// + CSP, zero foreign requests),
+# and the Mac app's download page (the walkthrough, devices, download states, layout).
+name: Web story
+
+on:
+  push:
+    branches:
+      - main
+      - 'claude/**'
+    paths:
+      - 'web/**'
+      - 'tests/js/**'
+      - 'tests/e2e/**'
+      - 'package*.json'
+      - '.github/workflows/web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Several agents push to the same branch: let a run finish instead of cancelling it on
+# every push (GitHub keeps only the newest queued run per group).
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Unit + end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: |
+          # Preferred: the browser plus its system packages and fonts. That needs the Ubuntu
+          # package mirrors, and when a runner cannot resolve them apt retries for many
+          # minutes. So probe first and fall back to the browser alone (the hosted image
+          # already carries the shared libraries Chromium needs).
+          if timeout 20 getent hosts azure.archive.ubuntu.com >/dev/null || timeout 20 getent hosts archive.ubuntu.com >/dev/null; then
+            if timeout 300 npx playwright install --with-deps chromium; then
+              timeout 120 sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji \
+                || echo "::warning::extra fonts unavailable; screenshots use fallback fonts"
+              exit 0
+            fi
+            sudo pkill -x apt-get || true
+          fi
+          echo "::warning::Ubuntu package mirrors are unreachable; installing Chromium without --with-deps"
+          if ! npx playwright install chromium; then
+            echo "::warning::could not download Chromium; using the Chrome that ships with the runner image"
+            echo "PW_CHANNEL=chrome" >> "$GITHUB_ENV"
+          fi
+
+      - name: Unit tests
+        run: npm test
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Mac app download page (web/mac/)
+        run: npm run test:mac-guide
+
+      - name: The test run left tracked files alone
+        run: |
+          # Screenshots go to test-results/ (git-ignored). Only `npm run shots` may rewrite
+          # docs/screenshots/web/.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::npm test / the end-to-end runs modified or created files in the repository:"
+            git status --porcelain
+            exit 1
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 3
+          name: web-screenshots
+          path: |
+            test-results/web-screenshots/
+            test-results/mac-guide-screenshots/
+          if-no-files-found: warn

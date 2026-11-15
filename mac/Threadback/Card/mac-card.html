@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  Threadback for Mac: draws the site's own share card (web/js/card.js, unchanged) in an
+  offscreen web view and hands the PNG back to the app. Copied next to the bundled story
+  (web/) by mac/scripts/prepare.sh, so the paths below are the story's own files.
+  Nothing is fetched: every file is in the app.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="css/base.css">
+<style>html, body { margin: 0; background: #07070c; }</style>
+</head>
+<body>
+<canvas id="card" width="1080" height="1350"></canvas>
+<script src="js/config.js"></script>
+<script src="js/format.js"></script>
+<script src="js/normalize.js"></script>
+<script src="js/glyphs.js"></script>
+<script src="js/card.js"></script>
+<script>
+(function () {
+  'use strict';
+  // The card's footer names the site and says "made on device". On the Mac the app says
+  // where it was made instead, and names no site while the story site is not live. The
+  // card itself is unchanged: its two footer strings are swapped as they are drawn.
+  var swaps = {};
+  var draw = CanvasRenderingContext2D.prototype.fillText;
+  CanvasRenderingContext2D.prototype.fillText = function (text, x, y, maxWidth) {
+    if (Object.prototype.hasOwnProperty.call(swaps, text)) text = swaps[text];
+    return maxWidth === undefined ? draw.call(this, text, x, y) : draw.call(this, text, x, y, maxWidth);
+  };
+  var site = WrappedConfig.BASE_URL.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+  window.ThreadbackCard = {
+    /** stats JSON (short names) -> "data:image/png;base64,..." (1080 x 1350). */
+    render: function (statsJSON, siteIsLive) {
+      swaps = { '  ·  made on device': '  ·  made on this Mac, nothing uploaded' };
+      if (!siteIsLive) swaps[site] = '';
+      return WrappedCard.ready().then(function () {
+        var stats = WrappedData.normalize(JSON.parse(statsJSON));
+        var canvas = WrappedCard.render(stats, { canvas: document.getElementById('card') });
+        return canvas.toDataURL('image/png');
+      });
+    }
+  };
+})();
+</script>
+</body>
+</html>

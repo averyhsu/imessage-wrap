@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+<!-- Locked down: same-origin files only, no inline code, no outbound requests of any kind.
+     'wasm-unsafe-eval' lets the bundled SQLite (WebAssembly) run; connect-src 'self' is for
+     fetching that one .wasm file; frame-src 'self' is for the preview of the story.
+     worker-src is blob: and nothing else, on purpose: a worker started from a file's own
+     address would not be bound by this policy (a <meta> policy does not reach it), while a
+     worker started from a blob: inherits it. The worker that reads the database is
+     therefore held to these same rules. See make.js and worker.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src blob:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+
+<!-- ════════════════════════════════════════════════════════════════════════════════════
+     BRAND + ADDRESS. The one place in this file that names the product and the public
+     URL (the page copy takes the name from ../js/config.js at run time).
+     tests/js/make-site.test.js fails if this block and config.js drift apart.
+     ════════════════════════════════════════════════════════════════════════════════════ -->
+<!-- brand:start -->
+<title>Threadback: make your own recap</title>
+<meta name="application-name" content="Threadback">
+<meta name="apple-mobile-web-app-title" content="Threadback">
+<meta property="og:site_name" content="Threadback">
+<link rel="canonical" href="https://averyhsu.github.io/imessage-wrap/make/">
+<meta property="og:url" content="https://averyhsu.github.io/imessage-wrap/make/">
+<meta property="og:image" content="https://averyhsu.github.io/imessage-wrap/assets/og.png">
+<!-- brand:end -->
+
+<meta name="description" content="Turn a group chat into a tap-through recap on your own device. Add your Messages history, pick a chat and get one link to send. Nothing is uploaded.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Make a recap of your group chat">
+<meta property="og:description" content="Add your Messages history, pick a chat, get one link to send. It all happens in your browser.">
+<meta name="twitter:card" content="summary_large_image">
+
+<meta name="theme-color" content="#07070c">
+<meta name="color-scheme" content="dark">
+<meta name="format-detection" content="telephone=no, date=no, address=no, email=no">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="../assets/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="../assets/apple-touch-icon.png" sizes="180x180">
+
+<link rel="stylesheet" href="../css/base.css">
+<link rel="stylesheet" href="make.css">
+</head>
+<body>
+<div class="mk" id="page">
+  <div class="mk-sky" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <header class="mk-top">
+    <a class="mk-brand" href="../" aria-label="Home">
+      <img class="mk-brand__mark" src="../assets/favicon.svg" alt="" width="34" height="34">
+      <span class="mk-brand__name" data-brand></span>
+    </a>
+    <a class="mk-top__link" href="../?demo=1">Play the demo</a>
+  </header>
+
+  <main class="mk-main" id="maker">
+    <section class="mk-hero" aria-labelledby="hero-title">
+      <div class="mk-hero__copy">
+        <p class="mk-eyebrow">Make your own</p>
+        <h1 class="mk-h1" id="hero-title">Turn your group chat into <span class="mk-pop">one link.</span></h1>
+        <p class="mk-lede">Add your Messages history, pick a group chat, and get a recap the whole chat can tap through. It is all worked out in this browser tab: nothing is uploaded, because there is nowhere to upload it to.</p>
+        <ul class="mk-chips">
+          <li><span class="mk-ico" data-icon="lock"></span>Stays on this device</li>
+          <li><span class="mk-ico" data-icon="check"></span>No sign-up</li>
+          <li><span class="mk-ico" data-icon="check"></span>Nothing to install</li>
+        </ul>
+      </div>
+      <!-- Decoration: what the result looks like in the chat. -->
+      <div class="mk-art" aria-hidden="true">
+        <p class="mk-art__in">ok but who actually talks the most in here</p>
+        <div class="mk-art__out">
+          <img src="../assets/og.png" alt="" width="1200" height="630">
+          <span class="mk-art__meta"><b>Your group chat, in review</b><span data-host></span></span>
+          <span class="mk-art__tb"><span class="mk-ico" data-icon="love"></span></span>
+        </div>
+        <p class="mk-art__in mk-art__in--2">oh no</p>
+        <span class="mk-art__typing"><i></i><i></i><i></i></span>
+      </div>
+    </section>
+
+    <ol class="mk-rail" id="rail" aria-label="Steps">
+      <li class="is-current" data-rail="1"><i></i><span><b>1</b> Add</span></li>
+      <li data-rail="2"><i></i><span><b>2</b> Choose</span></li>
+      <li data-rail="3"><i></i><span><b>3</b> Tune</span></li>
+      <li data-rail="4"><i></i><span><b>4</b> Share</span></li>
+    </ol>
+
+    <p class="sr-only" id="status" role="status" aria-live="polite"></p>
+
+    <!-- ── 1. Add your messages ─────────────────────────────────────────────────────── -->
+    <section class="mk-step mk-step--1 is-active" id="step-source" aria-labelledby="h-source">
+      <header class="mk-step__head">
+        <span class="mk-step__n" aria-hidden="true"><b>1</b><span class="mk-ico" data-icon="check"></span></span>
+        <h2 class="mk-step__title" id="h-source" tabindex="-1">Add your messages</h2>
+      </header>
+
+      <div class="mk-step__done" id="source-done" hidden>
+        <p class="mk-bubble" id="source-summary"></p>
+        <p class="mk-bubble__meta"><span id="source-meta">Read on this device. Nothing was uploaded.</span> <button type="button" class="mk-linkbtn" id="start-over">Start over</button></p>
+        <ul class="mk-notes" id="source-notes"></ul>
+      </div>
+
+      <div class="mk-step__body" id="source-body">
+        <p class="mk-step__intro">Choose where your Messages history lives. This page reads the files right here in your browser; they are never sent anywhere.</p>
+
+        <div class="mk-tabs" role="tablist" aria-label="Where your messages are">
+          <button type="button" class="mk-tab" role="tab" id="tab-mac" aria-controls="panel-mac" aria-selected="true">
+            <span class="mk-ico" data-icon="laptop"></span>
+            <span class="mk-tab__t">A Mac</span>
+            <span class="mk-tab__s">that is signed in to Messages</span>
+          </button>
+          <button type="button" class="mk-tab" role="tab" id="tab-backup" aria-controls="panel-backup" aria-selected="false" tabindex="-1">
+            <span class="mk-ico" data-icon="phone"></span>
+            <span class="mk-tab__t">An iPhone backup</span>
+            <span class="mk-tab__s">on a Mac or a Windows PC</span>
+          </button>
+          <button type="button" class="mk-tab" role="tab" id="tab-paste" aria-controls="panel-paste" aria-selected="false" tabindex="-1">
+            <span class="mk-ico" data-icon="clipboard"></span>
+            <span class="mk-tab__t">Paste or export file</span>
+            <span class="mk-tab__s">from a Shortcut or an export app</span>
+          </button>
+        </div>
+
+        <p class="mk-touch"><span class="mk-ico" data-icon="info"></span><span>On a phone or tablet? A Messages history cannot be read from here. Open this page on your Mac, or on the computer that holds your iPhone backup. On this device you can paste an export or try the sample.</span></p>
+
+        <!-- What is happening, or what went wrong: right where the files were added. -->
+        <div class="mk-work" id="work-source" hidden></div>
+        <div class="mk-alert" id="error-source" role="alert" hidden></div>
+
+        <!-- Mac -->
+        <div class="mk-panel" role="tabpanel" id="panel-mac" aria-labelledby="tab-mac">
+          <div class="mk-drop" id="drop-mac">
+            <span class="mk-drop__icon mk-ico" data-icon="database"></span>
+            <p class="mk-drop__title">Drop <b>chat.db</b> and <b>chat.db-wal</b> here</p>
+            <p class="mk-drop__hot" aria-hidden="true">Let go to add them</p>
+            <p class="mk-drop__or">or</p>
+            <button type="button" class="mk-btn mk-btn--primary" id="pick-mac">Choose files</button>
+            <input type="file" id="input-mac" multiple hidden>
+          </div>
+          <div class="mk-how">
+            <h3 class="mk-how__title">Where to find them</h3>
+            <ol>
+              <li>In Finder, open the <b>Go</b> menu and choose <b>Go to Folder…</b></li>
+              <li>Type <span class="mk-path"><code>~/Library/Messages</code><button type="button" class="mk-copy" data-copy="~/Library/Messages" aria-label="Copy this folder path"><span class="mk-ico" data-icon="copy"></span></button></span> and press Return.</li>
+              <li>Drag <b>chat.db</b> and <b>chat.db-wal</b> from that folder onto the box above.</li>
+            </ol>
+            <p class="mk-tip">Prefer the <b>Choose files</b> button? In the window that opens, press <kbd>⌘</kbd> <kbd>⇧</kbd> <kbd>G</kbd>, type the same folder, and select both files.</p>
+            <p class="mk-tip">Why two files: <b>chat.db-wal</b> holds your newest messages. Without it the last few days can be missing.</p>
+            <details class="mk-more">
+              <summary>Show names instead of phone numbers (optional)</summary>
+              <p>A Mac keeps contact names in a separate place. Go to <span class="mk-path"><code>~/Library/Application Support/AddressBook</code><button type="button" class="mk-copy" data-copy="~/Library/Application Support/AddressBook" aria-label="Copy this folder path"><span class="mk-ico" data-icon="copy"></span></button></span> and add every file whose name ends in <b>.abcddb</b> (look inside the <b>Sources</b> folders too), together with the two files above or afterwards.</p>
+              <p>You can also skip this: step 3 lets you type the names yourself.</p>
+            </details>
+          </div>
+        </div>
+
+        <!-- iPhone backup -->
+        <div class="mk-panel" role="tabpanel" id="panel-backup" aria-labelledby="tab-backup" hidden>
+          <div class="mk-drop" id="drop-backup">
+            <span class="mk-drop__icon mk-ico" data-icon="folder"></span>
+            <p class="mk-drop__title">Drop your iPhone backup folder here</p>
+            <p class="mk-drop__hot" aria-hidden="true">Let go to add it</p>
+            <p class="mk-drop__or">or</p>
+            <div class="mk-drop__btns">
+              <button type="button" class="mk-btn mk-btn--primary" id="pick-backup-folder">Choose backup folder</button>
+              <button type="button" class="mk-btn" id="pick-backup-files">Choose the two files</button>
+            </div>
+            <input type="file" id="input-backup-folder" webkitdirectory hidden>
+            <input type="file" id="input-backup-files" multiple hidden>
+          </div>
+          <div class="mk-how">
+            <h3 class="mk-how__title">How to get a backup this page can read</h3>
+            <ol>
+              <li>Connect the iPhone to a computer and back it up there: with <b>Finder</b> on a Mac, with <b>Apple Devices</b> (or iTunes) on Windows. Leave <b>Encrypt local backup</b> unticked.</li>
+              <li>Open the folder that holds your backups:
+                <span class="mk-os"><b>Mac</b> <span class="mk-path"><code>~/Library/Application Support/MobileSync/Backup</code><button type="button" class="mk-copy" data-copy="~/Library/Application Support/MobileSync/Backup" aria-label="Copy the Mac folder path"><span class="mk-ico" data-icon="copy"></span></button></span></span>
+                <span class="mk-os"><b>Windows</b> <span class="mk-path"><code>%USERPROFILE%\Apple\MobileSync\Backup</code><button type="button" class="mk-copy" data-copy="%USERPROFILE%\Apple\MobileSync\Backup" aria-label="Copy the Windows folder path"><span class="mk-ico" data-icon="copy"></span></button></span></span>
+                <span class="mk-os"><b>Windows, older iTunes</b> <span class="mk-path"><code>%APPDATA%\Apple Computer\MobileSync\Backup</code><button type="button" class="mk-copy" data-copy="%APPDATA%\Apple Computer\MobileSync\Backup" aria-label="Copy the older Windows folder path"><span class="mk-ico" data-icon="copy"></span></button></span></span>
+              </li>
+              <li>Inside is a folder with a long name made of letters and numbers. Drop it on the box above, or pick it with <b>Choose backup folder</b>.</li>
+            </ol>
+            <p class="mk-tip">Your browser may ask whether to “upload” the folder. That is its word for letting this page read the files. They stay on your computer.</p>
+            <p class="mk-tip">Quicker for a big backup: use <b>Choose the two files</b> and pick <code class="mk-code">3d/3d0d7e5f…3d28</code> (your messages) and <code class="mk-code">31/31bb7ba8…e442</code> (contact names, optional) from inside that folder.</p>
+            <p class="mk-tip">When you are done, delete the backup or switch its encryption back on.</p>
+          </div>
+        </div>
+
+        <!-- Paste / export -->
+        <div class="mk-panel" role="tabpanel" id="panel-paste" aria-labelledby="tab-paste" hidden>
+          <div class="mk-paste">
+            <p class="mk-paste__lead">Have a list of messages from the iPhone Shortcut or an export app? Paste it here, or choose the file. <span class="mk-badge">Experimental</span></p>
+            <div class="mk-paste__bar">
+              <button type="button" class="mk-btn mk-btn--primary" id="paste-btn"><span class="mk-ico" data-icon="clipboard"></span>Paste</button>
+              <button type="button" class="mk-btn" id="pick-export">Choose a file</button>
+              <input type="file" id="input-export" hidden>
+            </div>
+            <label class="sr-only" for="paste-text">Exported messages</label>
+            <textarea class="mk-textarea" id="paste-text" rows="7" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="#dates&#10;2026-03-14T21:41:07-07:00&#10;2026-03-14T21:41:30-07:00&#10;#senders&#10;Maya&#10;Dev"></textarea>
+            <p class="mk-paste__note" id="paste-note" hidden></p>
+            <div class="mk-paste__foot">
+              <button type="button" class="mk-btn mk-btn--primary" id="paste-go" disabled>Read these messages</button>
+            </div>
+          </div>
+          <div class="mk-how">
+            <details class="mk-more">
+              <summary>What can I paste?</summary>
+              <p>Each message needs a date and who sent it; the text is optional. Any of these shapes works:</p>
+              <ul class="mk-formats">
+                <li><b>Two lists</b> (what the Shortcut makes): a line <code class="mk-code">#dates</code>, one date per line, then a line <code class="mk-code">#senders</code> and one name per line. An empty name means you sent it.</li>
+                <li><b>One message per line</b>: <code class="mk-code">{"date": "…", "sender": "…", "text": "…"}</code></li>
+                <li><b>A JSON list</b> of the same items.</li>
+                <li><b>A spreadsheet file</b> (CSV or TSV) with a header row naming the date, sender and text columns.</li>
+              </ul>
+              <p>Tapbacks and photos are not part of an export, so those parts of the recap stay empty.</p>
+            </details>
+          </div>
+        </div>
+
+        <p class="mk-sample">
+          <span>Just looking?</span>
+          <button type="button" class="mk-linkbtn mk-linkbtn--strong" id="try-sample"><span class="mk-ico" data-icon="sparkle"></span>Try it with sample data</button>
+          <span class="mk-sample__note">An invented group chat, so you can walk through every step.</span>
+        </p>
+      </div>
+    </section>
+
+    <!-- ── 2. Choose the chat ───────────────────────────────────────────────────────── -->
+    <section class="mk-step mk-step--2 is-locked" id="step-chat" aria-labelledby="h-chat">
+      <header class="mk-step__head">
+        <span class="mk-step__n" aria-hidden="true"><b>2</b><span class="mk-ico" data-icon="check"></span></span>
+        <h2 class="mk-step__title" id="h-chat" tabindex="-1">Choose the chat</h2>
+        <p class="mk-step__next">Your group chats, busiest first</p>
+      </header>
+
+      <div class="mk-step__done" id="chat-done" hidden>
+        <p class="mk-bubble" id="chat-summary"></p>
+        <p class="mk-bubble__meta"><span id="chat-meta"></span> <button type="button" class="mk-linkbtn" id="change-chat">Choose another chat</button></p>
+      </div>
+
+      <div class="mk-step__body" id="chat-body" hidden>
+        <p class="mk-diag" id="diag"></p>
+        <div class="mk-work" id="work-chat" hidden></div>
+        <div class="mk-alert" id="error-chat" role="alert" hidden></div>
+        <div class="mk-search" id="chat-search-wrap" hidden>
+          <span class="mk-ico" data-icon="search"></span>
+          <label class="sr-only" for="chat-search">Search your group chats</label>
+          <input type="search" id="chat-search" placeholder="Search your group chats" autocomplete="off" spellcheck="false">
+        </div>
+        <ul class="mk-chats" id="chats"></ul>
+        <p class="mk-empty" id="chats-empty" hidden>No group chat matches that search.</p>
+      </div>
+    </section>
+
+    <!-- ── 3. Tune it ───────────────────────────────────────────────────────────────── -->
+    <section class="mk-step mk-step--3 is-locked" id="step-tune" aria-labelledby="h-tune">
+      <header class="mk-step__head">
+        <span class="mk-step__n" aria-hidden="true"><b>3</b><span class="mk-ico" data-icon="check"></span></span>
+        <h2 class="mk-step__title" id="h-tune" tabindex="-1">Tune it</h2>
+        <p class="mk-step__next">The period, and what everyone is called</p>
+      </header>
+
+      <div class="mk-step__body" id="tune-body" hidden>
+        <div class="mk-tune">
+          <div class="mk-tune__col">
+            <div class="mk-field mk-me" id="me-field">
+              <label class="mk-field__label" for="me-name">Your name in the recap</label>
+              <input class="mk-input" type="text" id="me-name" maxlength="40" placeholder="First name" autocomplete="given-name" autocapitalize="words" spellcheck="false" aria-describedby="me-error me-hint">
+              <p class="mk-field__hint is-error" id="me-error" hidden>Type your first name. Everyone who opens the recap sees your messages under it.</p>
+              <p class="mk-field__hint" id="me-hint"></p>
+              <label class="mk-check"><input type="checkbox" id="me-as-me"><span>Leave me as “Me”</span></label>
+            </div>
+
+            <fieldset class="mk-field">
+              <legend class="mk-field__label">Which period?</legend>
+              <div class="mk-seg" id="period">
+                <label><input type="radio" name="period" value="year" checked><span><b>This year</b><small id="period-year"></small></span></label>
+                <label><input type="radio" name="period" value="last"><span><b>Last year</b><small id="period-last"></small></span></label>
+                <label><input type="radio" name="period" value="all"><span><b>All time</b><small>everything</small></span></label>
+                <label><input type="radio" name="period" value="custom"><span><b>Custom</b><small>pick dates</small></span></label>
+              </div>
+              <div class="mk-range" id="range" hidden>
+                <label for="period-start">From<input class="mk-input" type="date" id="period-start"></label>
+                <label for="period-end">To<input class="mk-input" type="date" id="period-end"></label>
+              </div>
+              <p class="mk-field__hint" id="period-hint"></p>
+            </fieldset>
+
+            <div class="mk-field">
+              <label class="mk-field__label" for="chat-name">Chat name</label>
+              <input class="mk-input" type="text" id="chat-name" maxlength="80" autocomplete="off" spellcheck="false">
+              <p class="mk-field__hint" id="chat-name-hint">The title of the recap.</p>
+            </div>
+
+            <details class="mk-more" id="advanced">
+              <summary>Advanced: time zone</summary>
+              <p>Hours and dates are counted in this time zone. It was detected from your device; change it only if the chat lives somewhere else.</p>
+              <label class="sr-only" for="tz">Time zone</label>
+              <select class="mk-input" id="tz"></select>
+            </details>
+          </div>
+
+          <div class="mk-tune__col">
+            <div class="mk-field">
+              <h3 class="mk-field__label" id="people-label">Who’s who</h3>
+              <p class="mk-field__hint" id="people-hint">Names appear in the recap exactly as written here. Give two people the same name to count them as one.</p>
+              <div class="mk-unnamed" id="unnamed-box" hidden>
+                <p class="mk-unnamed__text"><span class="mk-ico" data-icon="people"></span><span id="unnamed-hint"></span></p>
+                <div class="mk-unnamed__add" id="contacts-row">
+                  <button type="button" class="mk-btn mk-btn--small" id="add-contacts">Add your contacts file</button>
+                  <input type="file" id="input-contacts" multiple hidden>
+                  <details class="mk-where" id="contacts-where">
+                    <summary>Where is it?</summary>
+                    <p id="contacts-where-mac">In Finder, choose <b>Go to Folder…</b> from the <b>Go</b> menu and open <span class="mk-path"><code>~/Library/Application Support/AddressBook</code><button type="button" class="mk-copy" data-copy="~/Library/Application Support/AddressBook" aria-label="Copy this folder path"><span class="mk-ico" data-icon="copy"></span></button></span>. Add every file whose name ends in <b>.abcddb</b>, and look inside the <b>Sources</b> folders too: a Mac keeps one for each account.</p>
+                    <p id="contacts-where-backup" hidden>In the same backup folder, open the folder called <b>31</b> and add the file whose name starts with <code class="mk-code">31bb7ba8</code>.</p>
+                  </details>
+                </div>
+                <div class="mk-work" id="work-tune" hidden></div>
+                <p class="mk-unnamed__note" id="contacts-note" hidden></p>
+                <p class="mk-unnamed__small" id="unnamed-privacy">The numbers next to the fields are only there to help you tell people apart. They never go into the recap.</p>
+              </div>
+              <ul class="mk-people" id="people" aria-labelledby="people-label"></ul>
+              <p class="mk-names" id="names-row" hidden><span id="names-note"></span> <button type="button" class="mk-linkbtn" id="first-names">Use first names only</button></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mk-alert" id="error-tune" role="alert" hidden></div>
+        <div class="mk-step__cta" id="create-row">
+          <button type="button" class="mk-btn mk-btn--primary mk-btn--big" id="create">Create recap</button>
+          <span class="mk-step__cta-note">You will see everything before anything is shared.</span>
+        </div>
+        <p class="mk-live" id="live-note" hidden>Changes here update the recap below.</p>
+      </div>
+    </section>
+
+    <!-- ── 4. Your recap ────────────────────────────────────────────────────────────── -->
+    <section class="mk-step mk-step--4 is-locked" id="step-recap" aria-labelledby="h-recap">
+      <header class="mk-step__head">
+        <span class="mk-step__n" aria-hidden="true"><b>4</b><span class="mk-ico" data-icon="check"></span></span>
+        <h2 class="mk-step__title" id="h-recap" tabindex="-1">Your recap</h2>
+        <p class="mk-step__next">A preview, what the link holds, and the link</p>
+      </header>
+
+      <div class="mk-step__body" id="recap-body" hidden>
+        <div class="mk-work" id="work-recap" hidden></div>
+        <div class="mk-alert" id="error-recap" role="alert" hidden></div>
+
+        <div class="mk-recap" id="recap" hidden>
+          <div class="mk-recap__preview">
+            <div class="mk-phone"><iframe id="preview" title="Preview of your recap"></iframe></div>
+            <p class="mk-recap__cap">Exactly what the link shows: this is what everyone in the chat will see. Tap it to skip ahead.</p>
+            <button type="button" class="mk-btn mk-btn--small" id="replay"><span class="mk-ico" data-icon="replay"></span>Play again</button>
+          </div>
+
+          <div class="mk-recap__side">
+            <h3 class="mk-recap__title" id="recap-title"></h3>
+            <p class="mk-recap__facts" id="recap-facts"></p>
+
+            <div class="mk-thread" id="thread">
+              <div class="mk-thread__say">
+                <p class="mk-guide">Paste the link on its own line in the group chat. Everyone can open it, no app needed.</p>
+                <p class="mk-thread__meta" id="link-meta"></p>
+              </div>
+              <a class="mk-card" id="open-card" target="_blank" rel="noopener" aria-label="Open the story in a new tab">
+                <img src="../assets/og.png" alt="" width="1200" height="630">
+                <span class="mk-card__meta"><b>Your group chat, in review</b><span data-host></span></span>
+              </a>
+            </div>
+
+            <div class="mk-actions">
+              <button type="button" class="mk-btn mk-btn--primary mk-btn--big" id="copy"><span class="mk-ico" data-icon="link"></span><span id="copy-label">Copy link</span></button>
+              <button type="button" class="mk-btn mk-btn--big" id="share" hidden><span class="mk-ico" data-icon="share"></span>Share…</button>
+              <a class="mk-btn mk-btn--big" id="open" target="_blank" rel="noopener"><span class="mk-ico" data-icon="play"></span>Open story</a>
+            </div>
+            <label class="sr-only" for="link">The link to send</label>
+            <input class="mk-linkfield" type="text" id="link" readonly spellcheck="false">
+            <p class="mk-trim" id="trim" hidden></p>
+
+            <section class="mk-inside" aria-labelledby="inside-title">
+              <h3 class="mk-inside__title" id="inside-title">What goes in the link</h3>
+              <p class="mk-inside__lead">The link is the recap: everything is packed into the link itself, and anyone who has it can read it. This is all of it.</p>
+              <ul class="mk-inside__list" id="inside-list"></ul>
+
+              <div class="mk-quotes" id="quotes-box" hidden>
+                <label class="mk-switch">
+                  <input type="checkbox" id="quotes" role="switch">
+                  <span class="mk-switch__track" aria-hidden="true"></span>
+                  <span class="mk-switch__text">Include the text of these messages in the link</span>
+                </label>
+                <p class="mk-quotes__note" id="quotes-note"></p>
+                <ol class="mk-quotes__list" id="quotes-list"></ol>
+              </div>
+
+              <details class="mk-more" id="raw">
+                <summary>See the exact data</summary>
+                <pre class="mk-raw" id="raw-json" tabindex="0"></pre>
+              </details>
+            </section>
+          </div>
+        </div>
+
+        <div class="mk-step__foot">
+          <button type="button" class="mk-btn mk-btn--small" id="another">Choose another chat</button>
+          <button type="button" class="mk-btn mk-btn--small" id="restart">Start over</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="mk-foot">
+    <p><span data-brand></span> is an independent project; the source is public on GitHub. It is not affiliated with or endorsed by Apple. iMessage is a trademark of Apple Inc.</p>
+    <p><a href="../mac/">Get the Mac app</a> · <a href="https://github.com/averyhsu/imessage-wrap" rel="noopener">Source on GitHub</a></p>
+  </footer>
+</div>
+
+<noscript>
+  <p class="mk-noscript">This page needs JavaScript to read your messages. Everything runs on your device; nothing is uploaded.</p>
+</noscript>
+
+<!-- Classic scripts, in dependency order. The heavy work (SQLite and the counting) runs in
+     worker.js; this page only needs the link codec and the file-sorting helpers. -->
+<script src="../js/vendor/fflate.min.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/glyphs.js"></script>
+<script src="engine.js"></script>
+<script src="db.js"></script>
+<script src="make.js"></script>
+</body>
+</html>

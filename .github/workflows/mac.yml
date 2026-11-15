@@ -1,0 +1,215 @@
+# The Mac helper (wrapped/mac): tests on a real macOS runner, the AppleScript compiled
+# against the real Messages scripting dictionary, the installer run for real, and a
+# dry-run pass of the agent that uploads the card it produced.
+#
+# What this can NOT show: a send. Messages is not signed in on a runner, and nothing in
+# this workflow ever asks Messages to send (the AppleScript is compiled, never run).
+name: Mac helper
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "wrapped/**"
+      - "pyproject.toml"
+      - "install.sh"
+      - "tests/mac/**"
+      - "tests/fixtures/**"
+      - "docs/MAC.md"
+      - ".github/workflows/mac.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: mac-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: macOS 26 (system Python, osacompile, installer, dry run)
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"   # with -p no:cacheprovider: the tests leave the checkout untouched
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: What this machine is
+        run: |
+          # WORK is the scratch folder for every later step (the runner context is not
+          # available in job-level env, so it is exported here).
+          WORK="$RUNNER_TEMP/threadback"
+          echo "WORK=$WORK" >> "$GITHUB_ENV"
+          sw_vers
+          echo "system python: $(/usr/bin/python3 --version 2>&1) at /usr/bin/python3"
+          echo "python3 on PATH: $(command -v python3) $(python3 --version 2>&1)"
+          xcode-select -p
+          ls -la /usr/bin/osascript /usr/bin/osacompile
+          ls -la "/System/Library/Fonts/Apple Color Emoji.ttc" || true
+          mkdir -p "$WORK"
+
+      - name: Test environment on the system Python
+        run: |
+          /usr/bin/python3 -m venv "$WORK/venv"
+          "$WORK/venv/bin/python" -m pip install --quiet --upgrade pip
+          "$WORK/venv/bin/python" -m pip install --quiet "pillow>=10" "pytest>=7"
+          "$WORK/venv/bin/python" -c "import sys, PIL; from PIL import features; print(sys.version); print('Pillow', PIL.__version__, 'raqm', features.check('raqm'))"
+
+      - name: Tests (pytest)
+        run: |
+          set -o pipefail
+          "$WORK/venv/bin/python" -m pytest tests/mac -v -rs -p no:cacheprovider 2>&1 | tee "$WORK/pytest.txt"
+
+      - name: Tests again with plain unittest
+        env:
+          THREADBACK_TEST_OFFLINE: "1"   # the installer end-to-end already ran above
+        run: |
+          set -o pipefail
+          "$WORK/venv/bin/python" -m unittest discover -s tests/mac 2>&1 | tee "$WORK/unittest.txt"
+
+      - name: Compile the AppleScript against the real Messages dictionary (compile only)
+        run: |
+          "$WORK/venv/bin/python" tests/mac/ci_fixture.py applescript "$WORK/applescript"
+          cd "$WORK/applescript"
+          osacompile -o send.scpt send.applescript
+          osacompile -o list-chats.scpt list-chats.applescript
+          echo "--- send.applescript as compiled ---"
+          osadecompile send.scpt
+          echo "--- list-chats.applescript as compiled ---"
+          osadecompile list-chats.scpt
+          # Control: addressed to an app that has no 'chat' class, the same script must fail
+          # to compile. If it compiled, the check above would prove nothing.
+          if osacompile -o control.scpt control-wrong-app.applescript 2>control.err; then
+            echo "::error::the control script compiled, so the compile check is not validating terminology"
+            exit 1
+          fi
+          echo "control failed to compile, as it should:"
+          cat control.err
+
+      - name: Install with install.sh into a temporary HOME (system Python)
+        env:
+          THREADBACK_PYTHON: /usr/bin/python3
+        run: |
+          export HOME="$WORK/home"
+          mkdir -p "$HOME" "$WORK/src"
+          # install from a copy, so pip's build folders never land in the checkout
+          cp -R wrapped pyproject.toml README.md "$WORK/src/"
+          THREADBACK_SOURCE="$WORK/src" bash install.sh
+          "$HOME/.local/bin/wrapped" --help
+          "$HOME/.local/bin/threadback" --version
+          "$HOME/.local/bin/threadback" agent --help
+          # run it twice: installing over an existing install must work
+          THREADBACK_SOURCE="$WORK/src" bash install.sh >/dev/null
+          "$HOME/.local/bin/wrapped" --help >/dev/null
+
+      - name: Dry-run agent pass with the installed command (sends nothing)
+        run: |
+          export HOME="$WORK/home"
+          BIN="$HOME/.local/bin/wrapped"
+          DB="$("$WORK/venv/bin/python" tests/mac/ci_fixture.py build "$WORK/fixture")"
+          CONTACTS="$WORK/fixture/mac/AddressBook"
+          "$BIN" doctor --db "$DB"
+          "$BIN" chats --db "$DB" --contacts "$CONTACTS"
+          run_agent() {
+            "$BIN" agent --db "$DB" --contacts "$CONTACTS" --chat "taco" \
+              --dry-run --once --out "$WORK/dry-run" --state "$WORK/state.json" --no-log
+          }
+          run_agent                      # first pass: nothing to do, starts from "now"
+          "$WORK/venv/bin/python" tests/mac/ci_fixture.py command "$DB" "/wrapped 2026"
+          run_agent | tee "$WORK/second-pass.txt"
+          grep -q "Done: 1 command(s) answered." "$WORK/second-pass.txt"
+          CARD="$(find "$WORK/dry-run" -name '*.png' | head -1)"
+          test -n "$CARD"
+          "$WORK/venv/bin/python" -c "import sys; from PIL import Image; im = Image.open(sys.argv[1]); print(sys.argv[1], im.size); assert im.size == (1080, 1350)" "$CARD"
+          echo "--- recap.txt ---"
+          cat "$(dirname "$CARD")/recap.txt"
+          echo "--- link.txt (first 120 characters) ---"
+          cut -c1-120 "$(dirname "$CARD")/link.txt"
+          run_agent >"$WORK/third-pass.txt"
+          grep -q "Done: 0 command(s) answered." "$WORK/third-pass.txt"   # not answered twice
+          "$BIN" preview --db "$DB" --contacts "$CONTACTS" --chat "book" --all-time --out "$WORK/preview"
+          "$BIN" send-test --db "$DB" --contacts "$CONTACTS" --chat "taco" --dry-run
+
+      - name: Render sample cards on macOS
+        run: |
+          "$WORK/venv/bin/python" tests/mac/render_samples.py "$WORK/samples"
+
+      - name: Uninstall leaves nothing behind
+        run: |
+          export HOME="$WORK/home"
+          bash install.sh --uninstall
+          test ! -e "$HOME/.threadback"
+          test ! -e "$HOME/.local/bin/wrapped"
+          test ! -e "$HOME/.local/bin/threadback"
+
+      - name: Nothing was written into the checkout
+        run: |
+          left="$(git status --porcelain --ignored)"
+          if [ -n "$left" ]; then
+            echo "::error::the tests or the installer wrote into the repository:"
+            echo "$left"
+            exit 1
+          fi
+          echo "checkout untouched"
+
+      - name: Evidence (what this run actually showed)
+        if: always()
+        run: |
+          {
+            echo "macOS $(sw_vers -productVersion), system $(/usr/bin/python3 --version 2>&1)"
+            "$WORK/venv/bin/python" -c "import PIL; from PIL import features; print('Pillow', PIL.__version__, '| raqm shaping:', features.check('raqm'))" || true
+            echo "pytest: $(tail -1 "$WORK/pytest.txt" 2>/dev/null)"
+            grep -E "^SKIPPED" "$WORK/pytest.txt" 2>/dev/null || true
+            echo "unittest: $(grep -E "^Ran [0-9]+ tests" "$WORK/unittest.txt" 2>/dev/null) $(tail -1 "$WORK/unittest.txt" 2>/dev/null)"
+            echo "osacompile: $(ls "$WORK/applescript" 2>/dev/null | tr '\n' ' ')"
+            echo "control (must not compile): $(cat "$WORK/applescript/control.err" 2>/dev/null | head -2 | tr '\n' ' ')"
+            echo "dry run: $(grep -E "card=" "$WORK/second-pass.txt" 2>/dev/null)"
+            echo "No step in this workflow asks Messages to send; the AppleScript is compiled, never run."
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the cards
+        if: always()
+        # Artifacts are a convenience: a full artifact store must not fail the run.
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: mac-helper-cards
+          path: |
+            ${{ runner.temp }}/threadback/dry-run
+            ${{ runner.temp }}/threadback/preview
+            ${{ runner.temp }}/threadback/samples
+          if-no-files-found: warn
+          retention-days: 3
+
+  linux:
+    name: Linux (same tests, no Messages)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Test environment
+        run: |
+          python3 --version
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet --upgrade pip
+          "$RUNNER_TEMP/venv/bin/python" -m pip install --quiet "pillow>=10" "pytest>=7"
+          if command -v shellcheck >/dev/null; then shellcheck install.sh; fi
+
+      - name: Tests
+        run: |
+          "$RUNNER_TEMP/venv/bin/python" -m pytest tests/mac -v -rs -p no:cacheprovider
+          left="$(git status --porcelain --ignored)"
+          if [ -n "$left" ]; then
+            echo "::error::the tests wrote into the repository:"
+            echo "$left"
+            exit 1
+          fi
