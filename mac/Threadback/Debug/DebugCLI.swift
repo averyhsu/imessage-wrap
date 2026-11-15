@@ -192,6 +192,29 @@ enum DebugCLI {
             }
         }
         out("cards: \(cases.count - failures)/\(cases.count) passed")
+
+        // Recovery: macOS ends the web view's process; the next card loads a fresh page.
+        if let first = cases.first?.1 {
+            WebCard.shared.simulateCrash()
+            do {
+                let png = try WebCard.shared.png(statsJSON: first)
+                let problem = WebCard.check(png)
+                if problem != nil { failures += 1 }
+                out("\(problem == nil ? "OK  " : "FAIL") card after a WebKit process crash: \(png.count) bytes, \(WebCard.shared.lastMilliseconds) ms\(problem.map { ", \($0)" } ?? "")")
+            } catch {
+                failures += 1
+                out("FAIL card after a WebKit process crash: \(error)")
+            }
+            // A page that does not load in time: the reply still gets the native card.
+            WebCard.shared.simulateCrash()
+            WebCard.shared.loadTimeout = 0.001
+            let native = try? WebCard.shared.cardOrNative(statsJSON: first)
+            WebCard.shared.loadTimeout = 10
+            let size = native.flatMap { NSBitmapImageRep(data: $0) }.map { "\($0.pixelsWide)x\($0.pixelsHigh)" } ?? "none"
+            let fellBack = native != nil && WebCard.shared.usedNative == 1
+            if !fellBack { failures += 1 }
+            out("\(fellBack ? "OK  " : "FAIL") a page that does not load falls back to the native card (\(size))")
+        }
         return failures == 0 ? 0 : 1
     }
 

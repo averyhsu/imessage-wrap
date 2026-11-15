@@ -8,6 +8,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Only the app's own files: no network, no frames, nothing else. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' file: 'unsafe-inline'; style-src 'self' file: 'unsafe-inline'; font-src 'self' file: data:; img-src 'self' file: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
 <link rel="stylesheet" href="css/base.css">
 <style>html, body { margin: 0; background: #07070c; }</style>
 </head>
