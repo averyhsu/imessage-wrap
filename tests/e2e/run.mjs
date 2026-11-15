@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
 import { fixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -82,6 +82,7 @@ async function open(opts = {}) {
     const allowed = opts.fileOrigin ? url.startsWith('file://') : url.startsWith(origin + '/');
     if (!allowed) foreign.push(url);
   });
+  await context.addInitScript(COVER_TEXT);
   if (opts.init) await context.addInitScript(opts.init);
   if (opts.wideFont) {
     // Stand-in for devices whose system font is wider than SF/Inter (needs bypassCSP).
@@ -97,7 +98,7 @@ async function open(opts = {}) {
     });
   }
   const page = await context.newPage();
-  page.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
+  page.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(page, m.text())) problems.push('console: ' + m.text()); });
   page.on('pageerror', (e) => problems.push('pageerror: ' + e.message));
   page.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
   return { context, page, problems, foreign, requests, close: () => context.close() };
@@ -107,6 +108,23 @@ const link = (stats, prefix = '') => server.url + prefix + '#w1=' + Codec.encode
 const state = (page) => page.evaluate(() => ({ index: WrappedStory.index, total: WrappedStory.total, time: WrappedStory.time, paused: WrappedStory.isPaused(), ids: WrappedStory.slideIds }));
 const wait = (page, ms) => page.waitForTimeout(ms);
 const visibleText = (page) => page.evaluate(() => document.body.innerText);
+
+/**
+ * The chat name as the cover shows it: its innerText. The name is set as one inline-block
+ * per word, and where such a line wraps WebKit's innerText leaves out the space between the
+ * two words (Chromium and Firefox keep it). There, and only when the rendered words are the
+ * same, the name is read from the element's text instead.
+ */
+const COVER_TEXT = `window.__coverText = (el) => {
+  const inner = el.innerText, text = el.textContent.replace(/\\s+/g, ' ').trim();
+  if (${JSON.stringify(BROWSER)} !== 'webkit' || inner === text || inner.replace(/\\s+/g, '') !== text.replace(/\\s+/g, '')) return inner;
+  return text;
+};`;
+async function coverName(page) {
+  const [inner, shown] = await page.locator('.slide.is-active .cover__name').evaluate((el) => [el.innerText, window.__coverText(el)]);
+  if (inner !== shown) note("WebKit's innerText drops the space between inline-block words where a line wraps; the cover name is read from its text (same rendered words)");
+  return shown;
+}
 
 // ── 1. the demo plays through ──────────────────────────────────────────────────────────
 await section('play', 'Demo plays through every slide at 390×844', async () => {
@@ -203,7 +221,7 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   await kb.page.evaluate(() => { WrappedStory.goTo(2); WrappedStory.pause(); });
   const stops = [];
   for (let i = 0; i < 6; i++) {
-    await kb.page.keyboard.press('Tab');
+    await kb.page.keyboard.press(tabKey());
     const stop = await kb.page.evaluate(() => {
       const el = document.activeElement;
       if (!el || el === document.body || !el.closest('#story')) return null;
@@ -216,7 +234,7 @@ await section('play', 'Demo plays through every slide at 390×844', async () => 
   }
   eq(stops.map((x) => x.label), ['Pause', 'Close', 'Previous slide', 'Next slide'], 'tab order on a slide: the visible controls first, then Previous / Next');
   ok(stops.every((x) => x.shown && x.w >= 30 && x.h >= 30), `every focus stop is visible and a reasonable size when focused (${JSON.stringify(stops)})`);
-  await kb.page.keyboard.press('Shift+Tab');
+  await kb.page.keyboard.press(tabKey(true));
   eq(await kb.page.evaluate(() => document.activeElement.textContent), 'Next slide', 'Shift+Tab walks back through the same stops');
   await kb.page.keyboard.press('Enter');
   eq((await state(kb.page)).index, 3, 'the focusable "Next slide" button works from the keyboard');
@@ -256,7 +274,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   // The cross-language vector, exactly as another component would send it.
   await page.goto(server.url + '#w1=' + vector.payload);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), vector.stats.chat.name, 'vector link renders the chat name on the cover');
+  eq(await coverName(page), vector.stats.chat.name, 'vector link renders the chat name on the cover');
   ok((await page.locator('.head__name').innerText()).includes('Dinner Club'), 'chat name in the header');
   ok((await page.locator('.slide.is-active .cover__label').innerText()).includes('2026 in review'), 'cover says "<label> in review"');
   ok((await page.title()).includes('Dinner Club'), 'document title carries the chat name');
@@ -266,7 +284,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await page.goto(link(custom));
   await page.reload();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), custom.chat.name, 'fragment link renders its own chat name');
+  eq(await coverName(page), custom.chat.name, 'fragment link renders its own chat name');
 
   // Changing the part after the # on an open page (a second link pasted into the same tab)
   // plays the new recap, and starts it once: the browser reports that change twice.
@@ -278,7 +296,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + vector.payload);
   await page.waitForFunction((name) => {
     const el = document.querySelector('.slide.is-active .cover__name');
-    return el && el.innerText === name;
+    return el && window.__coverText(el) === name;
   }, vector.stats.chat.name);
   await page.waitForTimeout(300);
   eq(await page.evaluate(() => window.__starts), 1, 'a new recap in the address starts the story once');
@@ -289,13 +307,13 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   const sentBefore = s.requests.filter((u) => u.includes('w1=')).length;
   await page.goto(server.url + '?utm=x&w1=' + duoPayload);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'query-string link renders the chat name');
+  eq(await coverName(page), 'me & u', 'query-string link renders the chat name');
   ok(!(await state(page)).ids.includes('awards'), 'a slide without data is skipped (no awards for two people)');
   const moved = await page.evaluate(() => ({ search: location.search, hash: location.hash }));
   eq(moved, { search: '?utm=x', hash: '#w1=' + duoPayload }, 'a ?w1= recap is moved into the #fragment (other parameters stay)');
   await page.reload();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'the story survives a reload from the fragment');
+  eq(await coverName(page), 'me & u', 'the story survives a reload from the fragment');
   eq(s.requests.filter((u) => u.includes('w1=')).length - sentBefore, 1, 'only the first request ever carried the recap; the reload did not');
   await grant(s.context, ['clipboard-read', 'clipboard-write']);
   await page.evaluate(() => WrappedStory.goTo(WrappedStory.total - 1));
@@ -308,7 +326,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
 
   // Pasting another link into the same tab swaps the story.
   await page.evaluate((hash) => { location.hash = hash; }, '#w1=' + Codec.encode(fixtures.tiny));
-  await page.waitForFunction((name) => { const el = document.querySelector('.slide.is-active .cover__name'); return el && el.innerText === name; }, fixtures.tiny.chat.name);
+  await page.waitForFunction((name) => { const el = document.querySelector('.slide.is-active .cover__name'); return el && window.__coverText(el) === name; }, fixtures.tiny.chat.name);
   ok(true, 'changing the fragment loads the new recap');
 
   // Copy link gives back a link that decodes to the same stats.
@@ -346,7 +364,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   ok(await page.locator('#play-recap').isVisible(), 'after closing a recap the landing page offers to play it again');
   await page.locator('#play-recap').click();
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), vector.stats.chat.name, '"Play your recap again" restarts it');
+  eq(await coverName(page), vector.stats.chat.name, '"Play your recap again" restarts it');
 
   eq(s.problems, [], 'no console errors with valid links');
   eq(s.foreign, [], 'zero foreign requests with valid links');
@@ -569,7 +587,7 @@ await section('embed', 'Embed mode (?embed=ios) talks to the native bridge', asy
   ok(await page.locator('.landing').isHidden(), 'and still shows no landing page');
   await page.evaluate((stats) => WrappedApp.load(stats), fixtures.duo);
   await waitForStory(page);
-  eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'WrappedApp.load(stats) plays a recap handed over by native');
+  eq(await coverName(page), 'me & u', 'WrappedApp.load(stats) plays a recap handed over by native');
   eq((await messages())[0].type, 'ready', 'and announces ready');
 
   // A damaged payload inside the app reports an error instead of a blank screen.
@@ -686,7 +704,7 @@ await section('matrix', `Robustness: ${Object.keys(fixtures).length} recaps × $
       await waitForStory(page);
       const st = await state(page);
       const normal = Data.normalize(stats);
-      eq(await page.locator('.slide.is-active .cover__name').innerText(), normal.chat.name, `[${vpName}] ${name}: cover shows the chat name`);
+      eq(await coverName(page), normal.chat.name, `[${vpName}] ${name}: cover shows the chat name`);
       if (wideFont && name === 'demo') {
         const family = await page.evaluate(() => getComputedStyle(document.querySelector('.total__facts .bubble')).fontFamily);
         ok(/^"?DejaVu Sans/.test(family), `[${vpName}] the wide font override is in effect (${family})`);
@@ -943,7 +961,7 @@ await section('landing', 'Landing page', async () => {
       fs.mkdirSync(SHOTS, { recursive: true });
       // Freeze the floating hero pieces so the committed screenshot does not change run to run.
       await page.evaluate(() => { document.getAnimations().forEach((a) => { a.pause(); a.currentTime = 0; }); });
-      await page.screenshot({ path: path.join(SHOTS, vpName.startsWith('desktop') ? 'landing-desktop.png' : 'landing-mobile.png'), fullPage: true });
+      await shoot(page, () => page.screenshot({ path: path.join(SHOTS, vpName.startsWith('desktop') ? 'landing-desktop.png' : 'landing-mobile.png'), fullPage: true }));
     }
     // "Play the demo" starts the story in place, and Back returns.
     await page.locator('#play-demo').click();
@@ -1098,7 +1116,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   for (let i = 0; i < ids.length; i++) {
     await showSettled(page, i);
     const file = path.join(SHOTS, `${String(i + 1).padStart(2, '0')}-${ids[i]}.png`);
-    await page.screenshot({ path: file });
+    await shoot(page, () => page.screenshot({ path: file }));
     files.push(file);
     eq(pngSize(fs.readFileSync(file)), { width: 780, height: 1688 }, `${path.basename(file)} is 780×1688 (390×844 @2x)`);
   }
@@ -1107,7 +1125,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   // Suspense frames: the typing indicator before the cover and the personality reveal.
   for (const [i, ms, name] of [[0, 900, 'typing-cover'], [3, 1500, 'typing-personality']]) {
     await page.evaluate(([index, t]) => { WrappedStory.goTo(index); WrappedStory.seek(t); return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); }, [i, ms]);
-    await page.screenshot({ path: path.join(SHOTS, `moment-${name}.png`) });
+    await shoot(page, () => page.screenshot({ path: path.join(SHOTS, `moment-${name}.png`) }));
     ok(await page.locator('.slide.is-active .typing').first().isVisible(), `${name}: the typing indicator is on screen at ${ms} ms`);
   }
   await page.evaluate(() => WrappedStory.resume());
@@ -1119,7 +1137,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   await e.page.goto(link(vector.stats, '?embed=ios'));
   await waitForStory(e.page);
   await showSettled(e.page, 11);
-  await e.page.screenshot({ path: path.join(SHOTS, 'embed-12-sum.png') });
+  await shoot(e.page, () => e.page.screenshot({ path: path.join(SHOTS, 'embed-12-sum.png') }));
   await e.close();
 
   // Desktop: the phone-sized stage on its backdrop.
@@ -1131,7 +1149,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   await d.page.goto(server.url + '?demo=1');
   await waitForStory(d.page);
   await showSettled(d.page, 3); // (showSettled switches the colour transitions off, so the backdrop is already there)
-  await d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') });
+  await shoot(d.page, () => d.page.screenshot({ path: path.join(SHOTS, 'desktop-04-persona.png') }));
   const stage = await d.page.locator('.stage').boundingBox();
   eq([stage.width, stage.height, stage.x, stage.y], [392, 700, 524, 30], 'desktop shows a centred phone-sized stage on whole pixels');
   ok(await d.page.locator('.story__arrow--next').isVisible(), 'desktop has arrow buttons');
@@ -1148,7 +1166,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
   const strip = [];
   for (const [id, file] of [['senders', 'default-08-senders.png'], ['moty', 'default-09-moty.png'], ['sum', null]]) {
     await showSettled(dflt.page, dIds.indexOf(id));
-    const png = await dflt.page.screenshot(file ? { path: path.join(SHOTS, file) } : {});
+    const png = await shoot(dflt.page, () => dflt.page.screenshot(file ? { path: path.join(SHOTS, file) } : {}));
     eq(pngSize(png), { width: 780, height: 1688 }, `default recap: ${id} slide captured`);
     strip.push(png);
   }

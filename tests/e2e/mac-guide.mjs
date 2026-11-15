@@ -17,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, startServer, launch, contextOptions } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, tabKey, shoot, screenshotNoise, startServer, launch, contextOptions } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Config = require(path.join(WEB, 'js/config.js'));
@@ -118,7 +118,7 @@ async function open(opts = {}) {
     await context.route('**/mac/mac-config.js', (route) => route.fulfill({ status: 200, contentType: 'text/javascript; charset=utf-8', body }));
   }
   const page = await context.newPage();
-  context.on('console', (m) => { if (m.type() === 'error') problems.push('console: ' + m.text()); });
+  context.on('console', (m) => { if (m.type() === 'error' && !screenshotNoise(m.page(), m.text())) problems.push('console: ' + m.text()); });
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
   context.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
   await page.goto(PAGE);
@@ -279,7 +279,7 @@ await section('keyboard', 'Keyboard only: Tab to "I did this", Enter or Space, f
   });
   for (let n = 1; n < STEPS; n++) {
     let presses = 0;
-    while (!(await focused()).startsWith(`step-${n} mg-btn`) && presses < 60) { await page.keyboard.press('Tab'); presses++; }
+    while (!(await focused()).startsWith(`step-${n} mg-btn`) && presses < 60) { await page.keyboard.press(tabKey()); presses++; }
     ok(presses < 60, `step ${n}: "I did this" is reachable with Tab (${presses} presses)`);
     await page.keyboard.press(n % 2 ? 'Enter' : 'Space');
     await page.waitForFunction((i) => window.WrappedMacGuide.state().current === i, n + 1);
@@ -288,7 +288,7 @@ await section('keyboard', 'Keyboard only: Tab to "I did this", Enter or Space, f
     ok(visible, `step ${n + 1}: the focused heading is on screen`);
   }
   // The first Tab from the heading reaches something inside the step, not the next step.
-  await page.keyboard.press('Tab');
+  await page.keyboard.press(tabKey());
   ok((await focused()).startsWith('step-5'), `Tab from the heading stays inside the open step (${await focused()})`);
   // "Show all steps" with the keyboard.
   await page.focus('#show-all');
@@ -481,7 +481,7 @@ await section('shots', 'Screenshots of every step, phone and desktop', async () 
     const clip = selector
       ? await page.locator(selector).evaluate((el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top + scrollY, width: r.width, height: r.height }; })
       : undefined;
-    await page.screenshot({ path: file, fullPage: true, clip, animations: 'disabled' });
+    await shoot(page, () => page.screenshot({ path: file, fullPage: true, clip, animations: 'disabled' }));
   };
   const slugs = ['1-applications', '2-first-open', '3-open-anyway', '4-setup', '5-done'];
   for (const [size, viewport] of [['desktop', VIEWPORTS['desktop-1440']], ['phone', VIEWPORTS['phone-390']]]) {

@@ -29,8 +29,11 @@ const TYPES = {
   '.ico': 'image/x-icon',
 };
 
-/** Serve web/ on 127.0.0.1 at a free port. Returns { url, close, hits }. */
-export async function startServer(dir = WEB) {
+/**
+ * Serve web/ on 127.0.0.1 at a free port. Returns { url, close, hits }.
+ * `rewrite(file, body)` may change a file on its way out (a test's control experiment).
+ */
+export async function startServer(dir = WEB, { rewrite } = {}) {
   const hits = [];
   const server = http.createServer((req, res) => {
     let pathname;
@@ -40,7 +43,8 @@ export async function startServer(dir = WEB) {
     if (!file.startsWith(dir)) { res.writeHead(403).end('Forbidden'); return; }
     if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html');
     if (!fs.existsSync(file)) { res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found'); return; }
-    const body = fs.readFileSync(file);
+    let body = fs.readFileSync(file);
+    if (rewrite) body = Buffer.from(rewrite(file, body));
     res.writeHead(200, {
       'content-type': TYPES[path.extname(file).toLowerCase()] || 'application/octet-stream',
       'content-length': body.length,
@@ -117,6 +121,37 @@ export function contextOptions(options) {
 /** context.grantPermissions() limited to what this engine can grant. */
 export function grant(context, permissions) {
   return context.grantPermissions(grantable(permissions));
+}
+
+/**
+ * The key that moves focus to the next control. WebKit on macOS follows the system
+ * setting Safari ships with: Tab stops only at text fields and Option+Tab at every control.
+ * Option+Tab is what a Safari keyboard user presses, so that is the key pressed there.
+ */
+export const TAB_ALL = process.platform === 'darwin' && BROWSER === 'webkit';
+export function tabKey(shift = false) {
+  if (!TAB_ALL) return shift ? 'Shift+Tab' : 'Tab';
+  note('macOS WebKit: Tab skips buttons, links and checkboxes (as in Safari by default); pressing Option+Tab');
+  return shift ? 'Alt+Shift+Tab' : 'Alt+Tab';
+}
+
+/**
+ * Take a screenshot. Before every screenshot Playwright's WebKit appends <style>body {}</style>
+ * to the page (to bring CSS animations in step). A page with a strict style-src refuses it and
+ * says so on the console. shoot() marks the time it takes, and screenshotNoise() recognises
+ * exactly that refusal inside that window, so it is not mistaken for the page's own doing.
+ */
+const shooting = new WeakMap();
+export async function shoot(page, take) {
+  if (BROWSER !== 'webkit') return take();
+  note("Playwright's WebKit adds an inline <style> before each screenshot; the page's CSP refusal of it is not counted against the page");
+  shooting.set(page, Infinity);
+  try { return await take(); } finally { shooting.set(page, Date.now() + 1000); }
+}
+export function screenshotNoise(page, text) {
+  if (BROWSER !== 'webkit' || !page || !(Date.now() <= (shooting.get(page) || 0))) return false;
+  return /^Refused to apply a stylesheet because its hash, its nonce, or 'unsafe-inline' does not appear in the style-src directive of the Content Security Policy\.$/.test(text)
+    || text === 'CSP violation: style-src-elem inline';
 }
 
 /** A request the browser cut short on purpose (navigation away), in this engine's words. */
