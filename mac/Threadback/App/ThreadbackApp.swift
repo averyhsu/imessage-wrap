@@ -13,9 +13,21 @@ enum Entry {
         // One copy per user: a second one (another copy, or a second launch) shows the
         // running copy's window and leaves, so a /wrapped is never answered twice.
         if !SingleInstance.isExperiment && !SingleInstance.claim() {
+            Trace.note("second copy: another copy holds the lock; showed it and quit without touching settings")
             exit(0)
         }
+        Trace.note("launch: lock \(SingleInstance.lock.isHeld ? "held" : "not taken (experiment)")")
         ThreadbackApp.main()
+    }
+}
+
+/// Debug builds only: one line per lifecycle event in the unified log ("TBTRACE"), which CI
+/// prints after the lifecycle tests. Release builds log nothing.
+enum Trace {
+    static func note(_ text: @autoclosure () -> String) {
+        #if DEBUG
+        NSLog("TBTRACE pid %d: %@", getpid(), text())
+        #endif
     }
 }
 
@@ -134,6 +146,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var observers: [NSObjectProtocol] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        for (name, what) in [(NSWindow.willBeginSheetNotification, "begins"), (NSWindow.didEndSheetNotification, "ended")] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { note in
+                let window = note.object as? NSWindow
+                Trace.note("a sheet \(what) on \(window?.identifier?.rawValue ?? "a window"); sheets now \(window?.sheets.count ?? -1)")
+            })
+        }
+        #endif
+        Trace.note("finished launching: chat on \(model.chatIsOn), told about the menu bar \(UserDefaults.standard.bool(forKey: toldKey))")
         observers.append(NotificationCenter.default.addObserver(forName: .showOnboarding, object: nil, queue: .main) { [weak self] _ in
             self?.showOnboarding()
         })
@@ -162,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     /// Opened again while running (Finder, Spotlight, Launchpad, Dock): always a window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        Trace.note("reopen: visible windows \(flag), sheets on the window \(window?.sheets.count ?? 0)")
         if model.chatIsOn { showStatus() } else { showOnboarding() }
         return true
     }
@@ -232,17 +254,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: Closing the window
 
     private let toldKey = "toldAboutMenuBar"
+    /// The menu-bar notice is on screen or waiting to be: a second close request must not add
+    /// another one (AppKit queues sheets, and a queued one appears later, over whatever the
+    /// window shows then).
+    private var noticePending = false
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard model.chatIsOn, !UserDefaults.standard.bool(forKey: toldKey) else { return true }
+        let told = UserDefaults.standard.bool(forKey: toldKey)
+        Trace.note("close asked: chat on \(model.chatIsOn), told \(told), notice pending \(noticePending), sheets on the window \(sender.sheets.count)")
+        if noticePending { return false }          // the notice is up: its buttons decide
+        guard model.chatIsOn, !told else { return true }
         // The first time with a chat on: say where Threadback goes before the window closes.
+        // Once per install: it counts as told as soon as it is shown.
+        UserDefaults.standard.set(true, forKey: toldKey)
+        noticePending = true
         let alert = NSAlert()
         alert.messageText = "Threadback keeps answering from the menu bar."
         alert.informativeText = "To stop it, open Threadback again (from Applications) and click Turn off or Quit Threadback."
         alert.addButton(withTitle: "OK")
         alert.addButton(withTitle: "Quit Threadback")
         alert.beginSheetModal(for: sender) { response in
-            UserDefaults.standard.set(true, forKey: self.toldKey)
+            self.noticePending = false
+            Trace.note("menu-bar notice answered: \(response == .alertSecondButtonReturn ? "Quit" : "OK")")
             if response == .alertSecondButtonReturn {
                 NSApp.terminate(nil)
             } else {
@@ -253,6 +286,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        Trace.note("window closes: chat on \(model.chatIsOn)")
         if model.chatIsOn {
             NSApp.setActivationPolicy(.accessory)  // the menu-bar item stays, the Dock icon goes
         } else {

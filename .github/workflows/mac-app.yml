@@ -411,9 +411,36 @@ jobs:
           TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
         run: |
           set -o pipefail
+          date '+%Y-%m-%d %H:%M:%S' > "$WORK/lifecycle-start.txt"
           ios/scripts/ci-xcodebuild.sh "$OUT/logs/lifecycle.log" test-without-building \
             -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
             -only-testing:ThreadbackUITests/LifecycleUITests -resultBundlePath "$OUT/Lifecycle.xcresult" | tee "$RES/08b-lifecycle.txt"
+
+      # The two-chat walk (two closes, two sheets, reopen) five more times in a row: a flaky
+      # sheet shows up here, not by luck in one run.
+      - name: "Lifecycle: the two-chat walk, five times in a row"
+        if: ${{ !cancelled() }}
+        timeout-minutes: 12
+        env:
+          TEST_RUNNER_THREADBACK_FIXTURE: ${{ env.FX }}
+          TEST_RUNNER_THREADBACK_REPORTS: ${{ env.REPORTS }}
+        run: |
+          set -o pipefail
+          ios/scripts/ci-xcodebuild.sh "$OUT/logs/lifecycle-repeat.log" test-without-building \
+            -project mac/ThreadbackMac.xcodeproj -scheme Threadback -destination "platform=macOS" -derivedDataPath "$DERIVED" \
+            -only-testing:ThreadbackUITests/LifecycleUITests/test5_TwoChatsAddTurnOffPause \
+            -test-iterations 5 -run-tests-until-failure -resultBundlePath "$OUT/LifecycleRepeat.xcresult" | tee "$RES/08c-lifecycle-repeat.txt"
+
+      # What the app itself recorded during the lifecycle tests (Debug builds only): every
+      # launch, close request, sheet and reopen, with the process id.
+      - name: "Lifecycle: the app's own trace"
+        if: ${{ !cancelled() }}
+        run: |
+          {
+            echo "== Lifecycle trace (TBTRACE lines from the Debug app, since $(cat "$WORK/lifecycle-start.txt" 2>/dev/null))"
+            sudo log show --style compact --info --start "$(cat "$WORK/lifecycle-start.txt")" \
+              --predicate 'eventMessage CONTAINS "TBTRACE"' 2>&1 | grep -F "TBTRACE" | sed -E 's/^[0-9-]+ ([0-9:.]+) .*TBTRACE /\1 /' | tail -400
+          } 2>&1 | tee "$RES/08d-lifecycle-trace.txt"
 
       - name: "Proof 6b: the Open panel grant, then a relaunch through the bookmark"
         if: ${{ !cancelled() }}

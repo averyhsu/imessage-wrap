@@ -140,9 +140,13 @@ final class AppModel: ObservableObject {
     var watcherOn: Bool { watcher?.isWatching ?? false }
 
     init() {
-        if DebugOptions.flag("TBResetOnboarding") {
+        // Only the copy that holds the single-instance lock may reset the settings it shares
+        // with every other copy (a probe launch takes no lock and never resets).
+        let reset = DebugOptions.flag("TBResetOnboarding") && SingleInstance.lock.isHeld
+        if reset {
             for key in Key.all { defaults.removeObject(forKey: key) }
         }
+        Trace.note("settings: reset \(reset), told about the menu bar \(defaults.bool(forKey: "toldAboutMenuBar"))")
         ownerName = defaults.string(forKey: Key.ownerName) ?? ""
         if let data = defaults.data(forKey: Key.approved), let chats = try? JSONDecoder().decode([ChatRef].self, from: data) {
             approved = chats
