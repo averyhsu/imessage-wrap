@@ -1,7 +1,7 @@
 # Threadback
 
-**Your group chat's year in review.** Like Spotify Wrapped, for iMessage group chats: one
-person makes the recap, drops a link in the chat, and everyone taps through the same story.
+**Your group chat's year in review.** Like Spotify Wrapped, for iMessage group chats: someone
+types `/wrapped`, the recap arrives in the thread, and everyone taps through the same story.
 
 <p align="center">
   <img src="docs/media/demo-story.gif" width="300" alt="The recap playing: a cover, the message count, the 24-hour clock, the chat's personality, the busiest month, the message of the year and the awards">
@@ -32,7 +32,7 @@ The site is live: **https://averyhsu.github.io/imessage-wrap/**
 | | What | Needs |
 |---|------|-------|
 | **[Watch the demo](https://averyhsu.github.io/imessage-wrap/?demo=1)** | The full story with an invented chat. | A browser. |
-| **[Get the Mac app](https://averyhsu.github.io/imessage-wrap/mac/)** | Turn it on for a group chat once; after that anyone in the chat types `/wrapped` and your Mac replies in the thread with a recap card, a short summary and the link to the story. Set up by clicking: no Terminal. | A Mac (macOS 14 or later) signed in to Messages. The app is not signed through Apple's paid program, so the first open takes one detour through System Settings; the page walks you through it. |
+| **[Get the Mac app](https://averyhsu.github.io/imessage-wrap/mac/)** | The main way to use it. One person in the chat turns it on for that chat once; after that anyone in the chat types `/wrapped` and that Mac replies in the thread with a recap card, a short summary and the link to the story. Set up by clicking: no Terminal. | A Mac (macOS 14 or later) signed in to Messages, awake when someone asks. The app is not signed through Apple's paid program, so the first open takes one detour through System Settings; the page walks you through it. |
 | **[Make one in the browser](https://averyhsu.github.io/imessage-wrap/make/)** | Drop in your Messages database (from a Mac, or from an iPhone backup on a Mac or PC), pick a chat, get a link to send. | A computer that has your messages. Nothing is installed or uploaded. |
 | **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight would need Apple's paid developer program. [Guide](ios/README.md) |
 
@@ -68,7 +68,7 @@ real Messages app in the iOS Simulator, driven by the test suite
 
 ## Where your messages go: nowhere
 
-- **Counted on your device.** The browser page, the Mac helper and the command-line tool all
+- **Counted on your device.** The Mac app, the browser page and the command-line tool all
   read your history locally. There is no server and no account; the site is a folder of
   static files.
 - **The link is the recap.** The numbers are compressed into the part of the link after the
@@ -87,10 +87,11 @@ Messages can only see the one message you tapped. So no single app can do the wh
 Threadback splits it:
 
 1. **One person computes the recap** where the history can be read: on a Mac
-   (`~/Library/Messages/chat.db`), or from an iPhone backup, in the browser or with the
-   command-line tool. With only an iPhone there is one possible route, through Apple's
-   Shortcuts app; it is written up as an [experiment](docs/SHORTCUT.md) and has not been
-   run on a real phone yet.
+   (`~/Library/Messages/chat.db`), with the Mac app, in the browser or with the
+   command-line tool; or from an iPhone backup in the browser. Messages has no way to add a
+   command either, so `/wrapped` is that person's Mac noticing the word and answering. With
+   only an iPhone there is one possible route, through Apple's Shortcuts app; it is written
+   up as an [experiment](docs/SHORTCUT.md) and has not been run on a real phone yet.
 2. **The recap travels as a link.** No backend, nothing to keep running.
 3. **Everyone watches the same story**, in the browser, or natively in the Messages app
    drawer with the iPhone app.
@@ -101,12 +102,13 @@ is in [docs/DECISIONS.md](docs/DECISIONS.md) and the notes behind it in
 
 ## What is proven and what is not
 
-Everything was built and tested without a real iPhone or Mac at hand: on Linux, and on
-GitHub's macOS runners for the Apple parts. The web pages were driven in Chromium only, not
-Safari. [STATUS.md](STATUS.md) lists exactly what has
-been seen working, what has only been tested against invented data, and a two-minute
-checklist for the things only a real device can confirm (above all: sending into a real
-group chat).
+Almost everything was built and tested without a real iPhone or Mac at hand: on Linux, and
+on GitHub's macOS runners for the Apple parts. The one exception is the Mac app, which its
+owner set up by clicking on their own Mac and which answered `/wrapped` in a real group
+chat. That is one Mac on one version of macOS. The web pages were driven in Chromium only,
+not Safari. [STATUS.md](STATUS.md) lists exactly what has been seen working, what has only
+been tested against invented data, and short checks for the things only a real device can
+confirm.
 
 ## For developers
 
@@ -114,8 +116,8 @@ group chat).
 web/            the story player and landing page (plain HTML/CSS/JS, no build step)
 web/make/       the in-browser maker: SQLite in WebAssembly + the JavaScript stats engine
 wrapped/        the Python stats engine and command-line tool
-wrapped/mac/    the Mac helper (/wrapped): card image, text recap, AppleScript sending
-mac/            prototype of the same helper as a native menu-bar app (Swift)
+wrapped/mac/    the command-line Mac helper the app grew out of (Python)
+mac/            the Mac app: a menu-bar app that answers /wrapped (Swift; project made by XcodeGen)
 ios/            the iPhone app and its Messages extension (Swift; project made by XcodeGen)
 tests/          unit, conformance and end-to-end tests; invented fixtures built at test time
 docs/           the shared contract (SCHEMA.md), decisions, research, guides, screenshots
@@ -145,8 +147,10 @@ wrapped link "Dinner Club" --year 2026     # print the recap link; add --quotes 
 ```
 
 CI runs on every push: the web story and maker on Linux, both engines on Linux and macOS
-(including a check against text archived by Apple's own code), the Mac helper on macOS, and
-the iPhone app in the iOS Simulator.
+(including a check against text archived by Apple's own code), the Mac app and the
+command-line helper on macOS, and the iPhone app in the iOS Simulator. A push to `main`
+that changes `web/` republishes the site, and one that changes the Mac app publishes a new
+download on the [Releases page](https://github.com/averyhsu/imessage-wrap/releases).
 
 ## Names and trademarks
 
