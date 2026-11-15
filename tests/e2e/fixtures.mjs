@@ -21,22 +21,29 @@ function split(total, weights) {
   return parts;
 }
 
-/** A complete, internally consistent v1 recap. */
-export function makeStats({ name = 'Dinner Club 🍝', members = 7, total = 48213, label = '2026', names = NAMES, quotes = true } = {}) {
+/**
+ * A complete, internally consistent v1 recap. The shape options (hours, week, months,
+ * senderWeights, …) default to the profile every older fixture was built with.
+ */
+export function makeStats({
+  name = 'Dinner Club 🍝', members = 7, total = 48213, label = '2026', names = NAMES, quotes = true,
+  hours = HOUR_PROFILE, week = WEEK_PROFILE, months = MONTH_PROFILE, start = '2026-01-01', end = '2026-11-10',
+  senderWeights = null, lateWeights = null, kindWeights = [24, 17, 2, 31, 13, 3, 10], reactionRate = 0.19, wordsPerMessage = 5.2,
+} = {}) {
   const who = names.slice(0, members);
-  const weights = who.map((_, i) => Math.pow(0.78, i) * 100);
+  const weights = senderWeights ? senderWeights.slice(0, members) : who.map((_, i) => Math.pow(0.78, i) * 100);
   const messages = split(total, weights);
-  const byHour = split(total, HOUR_PROFILE);
+  const byHour = split(total, hours);
   const lateTotal = byHour.slice(0, 5).reduce((a, b) => a + b, 0);
-  const lateBy = split(lateTotal, who.map((_, i) => (i === 1 ? 5 : 1)));
-  const reactions = Math.round(total * 0.19);
+  const lateBy = split(lateTotal, lateWeights ? lateWeights.slice(0, members) : who.map((_, i) => (i === 1 ? 5 : 1)));
+  const reactions = Math.round(total * reactionRate);
   const given = split(reactions, who.map((_, i) => 3 + ((i * 7) % 5)));
   const received = split(reactions, who.map((_, i) => 3 + ((i * 3) % 4)));
-  const words = Math.round(total * 5.2);
+  const words = Math.round(total * wordsPerMessage);
   const wordsBy = split(words, weights);
   const attachments = Math.round(total * 0.065);
   const attBy = split(attachments, weights);
-  const kinds = split(reactions, [24, 17, 2, 31, 13, 3, 10]);
+  const kinds = split(reactions, kindWeights);
   const senders = who.map((n, i) => ({
     name: n, messages: messages[i], share: round4(messages[i] / total), words: wordsBy[i], attachments: attBy[i],
     late_night: lateBy[i], reactions_given: given[i], reactions_received: received[i],
@@ -49,11 +56,11 @@ export function makeStats({ name = 'Dinner Club 🍝', members = 7, total = 4821
   const stats = {
     v: 1,
     chat: { name, members },
-    period: { label, start: '2026-01-01', end: '2026-11-10' },
+    period: { label, start, end },
     totals: { messages: total, words, attachments, reactions, days_active: Math.min(301, total), longest_streak: Math.min(87, total) },
     by_hour: byHour,
-    by_weekday: split(total, WEEK_PROFILE),
-    by_month: split(total, MONTH_PROFILE),
+    by_weekday: split(total, week),
+    by_month: split(total, months),
     busiest_day: { date: '2026-07-04', messages: Math.max(1, Math.round(total * 0.0127)) },
     personality: { id: 'night_owls', title: 'The Night Owls', blurb: 'Peak hour: 9 PM. Sleep is a suggestion.', peak_hour: 21 },
     late_night: { messages: lateTotal, share: round4(lateTotal / total), top: lateTotal > 0 ? lateTop : null },
@@ -232,6 +239,74 @@ export const fixtures = {
   demo: clone(vector.stats),
   tiny, huge, nightHuge, astronomical, duo, dozen, longName, unbroken, emojiName, intl, rtl, masked, defaultRecap, quietNoKinds, bare, sparse, noQuotes, zeroNight, legacy,
 };
+
+// One recap per shape of chat the slides' copy is matched to (web/js/insights.js), so every
+// headline and supporting line is laid out at the smallest and the largest screen. The
+// comment on each says which pattern it is built to hit on each slide; run.mjs checks
+// that, and that together with the recaps above they reach every pattern.
+
+// The case that started it: most messages at 11 AM, almost nothing after midnight. A full
+// calendar year that ended loud in December, a near-tie at the top, hearts, few tapbacks
+// and long messages.
+const elevenAm = makeStats({
+  name: 'Saturday Hikers', members: 5, total: 6400, label: '2025', start: '2025-01-01', end: '2025-12-31',
+  hours: [1, 0, 0, 0, 0, 1, 4, 8, 12, 16, 20, 40, 22, 14, 10, 10, 9, 8, 7, 6, 5, 3, 2, 1], // clock: clockwork (11 AM); late: asleep
+  week: [8, 8, 8, 9, 12, 30, 25], // weekend_chat
+  months: [4, 4, 5, 6, 6, 8, 8, 7, 6, 5, 5, 40], // one_month (December)
+  senderWeights: [100, 98, 60, 40, 20], // photo_finish
+  reactionRate: 0.02, // taps: rare
+  wordsPerMessage: 14, // total: long_texts
+});
+elevenAm.most_reacted[0].kinds = { love: 4, laugh: 1, emphasize: 1 }; // moty: hearts
+elevenAm.personality = { id: 'morning_meeting', title: 'The Morning Meeting', blurb: 'Peak hour: 11 AM. This could not have been an email.', peak_hour: 11 };
+
+// Round the clock and on weekdays only; three quiet months before September, measured
+// against a year that ends on Nov 10 (December is after the end, not a quiet month).
+const roundTheClock = makeStats({
+  name: 'Night Desk', members: 8, total: 22000,
+  hours: [5, 5, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5], // clock: open_all_hours; late: no_sleep
+  week: [20, 20, 20, 20, 20, 3, 2], // weekdays_only
+  months: [0, 1, 0, 30, 30, 30, 30, 30, 80, 30, 20, 0], // quiet_then (3 quiet months, then September)
+  senderWeights: [100, 45, 30, 20, 15, 10, 8, 5], // runaway
+  kindWeights: [30, 8, 1, 29, 6, 2, 4], // taps: neck_and_neck (hearts and laughs)
+  wordsPerMessage: 3.1, // total: short_texts
+});
+roundTheClock.most_reacted[0].kinds = { emphasize: 4, love: 1, like: 1 }; // moty: emphasis
+roundTheClock.personality = { id: 'always_on', title: 'The Always-On Group Chat', blurb: 'Peak hour: 7 AM. There is no off switch.', peak_hour: 7 };
+
+// Wednesdays, a busy start to the year, one person doing most of the talking, and a
+// tapback for more than every other message.
+const wednesdays = makeStats({
+  name: 'Wednesday Pottery', members: 4, total: 3100, wordsPerMessage: 6,
+  hours: [1, 1, 0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 5, 5, 4, 4, 4, 5, 6, 8, 9, 8, 6, 3], // late: occasional
+  week: [12, 12, 32, 12, 12, 10, 10], // one_day (Wednesday)
+  months: [30, 28, 25, 22, 20, 6, 4, 3, 3, 2, 1, 0], // loud_start
+  senderWeights: [120, 50, 30, 15], // one_voice
+  reactionRate: 0.6, // taps: reacts_to_everything
+});
+wednesdays.most_reacted[0].kinds = { laugh: 2, love: 2, like: 2 }; // moty: mixed
+wednesdays.personality = { id: 'dinner_table', title: 'The Dinner Table', blurb: 'Peak hour: 8 PM. Phones out, forks down.', peak_hour: 20 };
+
+// Two rush hours, every day alike, a year that built up, and six people who all chipped in.
+const evenKeel = makeStats({
+  name: 'Book Club Reunion', members: 6, total: 9000,
+  hours: [1, 0, 0, 0, 0, 1, 4, 9, 12, 8, 4, 3, 3, 3, 3, 3, 4, 6, 9, 11, 12, 7, 3, 1], // clock: two_rush_hours; late: asleep
+  week: [14, 14, 15, 15, 16, 14, 14], // every_day
+  months: [2, 2, 3, 3, 4, 6, 10, 14, 18, 22, 16, 0], // loud_finish
+  senderWeights: [20, 19, 18, 17, 16, 15], // even
+});
+evenKeel.personality = { id: 'early_birds', title: 'The Early Birds', blurb: 'Peak hour: 8 AM. Texting before coffee is a choice.', peak_hour: 8 };
+
+// A year that does not start in January (June to May) and stays level, with a period
+// label that is not a year, and the busiest hour at midnight.
+const steadyYear = makeStats({
+  name: 'Steady Eddies', members: 3, total: 15000, label: 'Our first year', start: '2025-06-01', end: '2026-05-31',
+  hours: [30, 8, 5, 3, 2, 1, 1, 2, 3, 4, 4, 4, 5, 5, 5, 5, 5, 6, 7, 8, 9, 10, 12, 16], // clock: clockwork (midnight); late: no_sleep, solo
+  months: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 11, 12], // steady
+});
+steadyYear.personality = { id: 'night_owls', title: 'The Night Owls', blurb: 'Peak hour: 12 AM. Sleep is a suggestion.', peak_hour: 0 };
+
+export const patternFixtures = { elevenAm, roundTheClock, wednesdays, evenKeel, steadyYear };
 
 export const viewports = {
   'se-320x568': { width: 320, height: 568, mobile: true },

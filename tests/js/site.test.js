@@ -162,7 +162,7 @@ test('scripts are classic, namespaced and make no network calls', () => {
     }
   }
   // Recap strings never reach innerHTML: only the constant glyph markup does.
-  for (const file of ['js/slides.js', 'js/player.js', 'js/app.js', 'js/card.js']) {
+  for (const file of ['js/insights.js', 'js/slides.js', 'js/player.js', 'js/app.js', 'js/card.js']) {
     const code = fs.readFileSync(path.join(WEB, file), 'utf8');
     assert.doesNotMatch(code.replace(/\/\*[\s\S]*?\*\//g, ''), /innerHTML|insertAdjacentHTML|outerHTML/, `${file}: builds DOM without innerHTML`);
   }
