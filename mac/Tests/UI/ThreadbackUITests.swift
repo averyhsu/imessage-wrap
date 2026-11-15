@@ -57,8 +57,100 @@ class ThreadbackUITestCase: XCTestCase {
         let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
         if let shot { shootWindow(app, shot) }
         XCTAssertFalse(element(app, "onboarding.ready").exists, "nothing is on before the click")
+        waitUntilSettled(sheet)
         sheet.buttons["Turn on"].click()
         return words
+    }
+
+    /// The one-time "keeps answering from the menu bar" notice: if it appears within
+    /// `timeout`, clicks OK once it can be clicked and checks that it went away. Returns
+    /// whether it appeared.
+    @discardableResult
+    func dismissMenuBarNotice(_ app: XCUIApplication, timeout: TimeInterval, _ label: String) -> Bool {
+        // The notice is the only sheet with a "Quit Threadback" button.
+        var sheet: XCUIElement?
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let first = app.sheets.firstMatch
+            if first.exists, first.buttons["Quit Threadback"].exists { sheet = first; break }
+            usleep(250_000)
+        } while Date() < deadline
+        guard let sheet else {
+            note("menu-bar notice (\(label)): not shown")
+            return false
+        }
+        let ok = sheet.buttons["OK"]
+        XCTAssertTrue(ok.waitForExistence(timeout: 5))
+        waitUntilSettled(sheet)
+        ok.click()
+        let gone = sheet.waitForNonExistence(timeout: 5)
+        XCTAssertTrue(gone, "the notice goes away when OK is clicked (\(label))")
+        XCTAssertNotEqual(app.state, .notRunning, "OK keeps Threadback running (\(label))")
+        note("menu-bar notice (\(label)): shown, OK clicked, gone \(gone), still running \(app.state != .notRunning)")
+        return true
+    }
+
+    /// Waits until a sheet has stopped sliding in: a click is aimed at where a button will
+    /// be, so a click during the animation can land on the button below it.
+    func waitUntilSettled(_ sheet: XCUIElement) {
+        var last = sheet.frame
+        for _ in 0..<20 {
+            usleep(150_000)
+            let now = sheet.frame
+            if now == last && sheet.buttons.firstMatch.isHittable { break }
+            last = now
+        }
+        usleep(300_000)
+    }
+
+    /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
+    func reopen() {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
+        guard let url = running?.bundleURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        let done = expectation(description: "opened")
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+            if let error { print("WRAPPED_NOTE reopen error: \(error)") }
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 20)
+    }
+
+    /// Onboarding with one chat, close, Add a chat, a second chat, close, reopen: how many
+    /// menu-bar notices appeared, and what is on the status window at the end.
+    func twoChatWalk(_ app: XCUIApplication) -> (notices: Int, sheetsOverStatus: Int, turnedOff: Bool) {
+        var notices = 0
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        if dismissMenuBarNotice(app, timeout: 10, "walk, first close") { notices += 1 }
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(app, "status.addChat").waitForExistence(timeout: 15))
+        if app.sheets.count > 0, dismissMenuBarNotice(app, timeout: 1, "walk, after reopen") { notices += 1 }
+        element(app, "status.addChat").click()
+        guard element(app, "chat.turnOn.1").waitForExistence(timeout: 15) else { return (notices, app.sheets.count, false) }
+        turnOnChat(app, 1)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        sleep(2)
+        let beforeDone = app.sheets.count
+        element(app, "onboarding.done").click()
+        sleep(2)
+        reopen()
+        _ = element(app, "status.last.1").waitForExistence(timeout: 15)
+        sleep(1)
+        let over = app.sheets.count
+        note("walk: \(notices) notice(s) dismissed; sheets after the second chat's consent \(beforeDone); sheets over the status window \(over)")
+        if over > 0, dismissMenuBarNotice(app, timeout: 1, "walk, over the status window") { notices += 1 }
+        element(app, "status.turnOff.1").click()
+        let turnedOff = element(app, "status.turnOffNote").waitForExistence(timeout: 10)
+        return (notices, over, turnedOff)
     }
 
     func launch(_ arguments: [String]) -> XCUIApplication {
@@ -193,19 +285,6 @@ final class OnboardingUITests: ThreadbackUITestCase {
 
 /// The lifecycle: never running invisibly by surprise.
 final class LifecycleUITests: ThreadbackUITestCase {
-    /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
-    func reopen() {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "io.github.averyhsu.threadback.mac").first
-        guard let url = running?.bundleURL else { return }
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.activates = true
-        let done = expectation(description: "opened")
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-            if let error { print("WRAPPED_NOTE reopen error: \(error)") }
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 20)
-    }
 
     /// More than one chat: Add a chat, two rows, turn one off, Pause all.
     func test5_TwoChatsAddTurnOffPause() throws {
@@ -218,19 +297,22 @@ final class LifecycleUITests: ThreadbackUITestCase {
         turnOnChat(app, 0)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
         element(app, "onboarding.done").click()
-        let sheet = app.sheets.firstMatch
-        if sheet.waitForExistence(timeout: 10) { sheet.buttons["OK"].click() }
+        // The first close with a chat on explains the menu bar: once per install, never again.
+        XCTAssertTrue(dismissMenuBarNotice(app, timeout: 10, "first close"), "the first close explains the menu bar")
         sleep(2)
         reopen()
         XCTAssertTrue(element(app, "status.addChat").waitForExistence(timeout: 15))
+        XCTAssertEqual(app.sheets.count, 0, "nothing is left on the window after the notice")
         element(app, "status.addChat").click()
         XCTAssertTrue(element(app, "chat.isOn.0").waitForExistence(timeout: 15), "the chooser marks the chat that is on")
         turnOnChat(app, 1)
         XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
         element(app, "onboarding.done").click()
+        XCTAssertFalse(dismissMenuBarNotice(app, timeout: 4, "second close"), "the menu-bar notice appears only once per install")
         sleep(2)
         reopen()
         XCTAssertTrue(element(app, "status.last.1").waitForExistence(timeout: 15), "two chats are listed")
+        XCTAssertEqual(app.sheets.count, 0, "no sheet over the status window")
         shootWindow(app, "status-1-two-chats")
         note("status with two chats: \(text(of: element(app, "status.access"))) | \(text(of: element(app, "status.last.0"))) | \(text(of: element(app, "status.about")))")
         element(app, "status.turnOff.1").click()
@@ -242,6 +324,51 @@ final class LifecycleUITests: ThreadbackUITestCase {
         shootWindow(app, "status-2-one-off-paused")
         element(app, "status.quit").click()
         XCTAssertTrue(app.wait(for: .notRunning, timeout: 15))
+    }
+
+    /// Test 8: a second close request while the notice is up (as a double click on Done
+    /// sends) still gives one notice, and nothing is left on the window for later.
+    func test8_ASecondCloseRequestNeverStacksASecondNotice() throws {
+        let app = try setUpFixture(extra: ["-TBDoubleClose", "YES"])
+        let walk = twoChatWalk(app)
+        XCTAssertEqual(walk.notices, 1, "one notice per install, whatever the close requests")
+        XCTAssertEqual(walk.sheetsOverStatus, 0, "no notice over the status window later")
+        XCTAssertTrue(walk.turnedOff, "Turn off works after the walk")
+        app.terminate()
+    }
+
+    /// Test 9: the notice answered with its other button, Quit Threadback. It still counts
+    /// as shown: after opening Threadback again and turning on a second chat, closing the
+    /// window shows no second notice and leaves nothing over the status window.
+    func test9_QuitOnTheNoticeStillCountsAsShown() throws {
+        let app = try setUpFixture()
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let sheet = app.sheets.firstMatch
+        XCTAssertTrue(sheet.waitForExistence(timeout: 10), "the first close explains the menu bar")
+        waitUntilSettled(sheet)
+        sheet.buttons["Quit Threadback"].click()
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 15), "Quit Threadback in the notice quits")
+        let again = try setUpFixture(reset: false)
+        XCTAssertTrue(element(again, "status.addChat").waitForExistence(timeout: 30), "opened again: the chat is still on")
+        XCTAssertEqual(again.sheets.count, 0, "no notice on opening again")
+        element(again, "status.addChat").click()
+        XCTAssertTrue(element(again, "chat.turnOn.1").waitForExistence(timeout: 15))
+        turnOnChat(again, 1)
+        XCTAssertTrue(element(again, "onboarding.ready").waitForExistence(timeout: 30))
+        element(again, "onboarding.done").click()
+        XCTAssertFalse(dismissMenuBarNotice(again, timeout: 4, "after Quit on the notice"), "the menu-bar notice appears only once per install")
+        sleep(2)
+        reopen()
+        XCTAssertTrue(element(again, "status.last.1").waitForExistence(timeout: 15), "two chats are listed")
+        XCTAssertEqual(again.sheets.count, 0, "no sheet over the status window")
+        again.terminate()
     }
 
     private func setUpFixture(reset: Bool = true, extra: [String] = []) throws -> XCUIApplication {
@@ -300,31 +427,58 @@ final class LifecycleUITests: ThreadbackUITestCase {
     /// Test 2 (the app): a second copy does not run alongside the first. It brings the first
     /// one's window forward and quits, so a /wrapped is answered once.
     func test7_ASecondCopyShowsTheFirstAndQuits() throws {
-        let app = launch(["-TBResetOnboarding", "YES"])
+        // The first copy, set up with a chat on.
+        let app = try setUpFixture()
         XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+
+        // A second copy, launched with the flag that would wipe every setting. The copies are
+        // followed by process id: XCTest's own handle can switch to the second copy.
         let bundle = "io.github.averyhsu.threadback.mac"
-        let url = try XCTUnwrap(NSRunningApplication.runningApplications(withBundleIdentifier: bundle).first?.bundleURL)
+        let running = { NSRunningApplication.runningApplications(withBundleIdentifier: bundle).filter { !$0.isTerminated } }
+        let first = try XCTUnwrap(running().first)
+        XCTAssertEqual(running().count, 1)
+        let url = try XCTUnwrap(first.bundleURL)
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
+        configuration.arguments = ["-TBResetOnboarding", "YES"]
+        var secondPid: pid_t = 0
         let opened = expectation(description: "second copy launched")
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { second, error in
             if let error { print("WRAPPED_NOTE second copy error: \(error)") }
+            secondPid = second?.processIdentifier ?? 0
             opened.fulfill()
         }
         wait(for: [opened], timeout: 30)
-        var copies = 0
-        var most = 0
-        for _ in 0..<20 {
-            copies = NSRunningApplication.runningApplications(withBundleIdentifier: bundle).filter { !$0.isTerminated }.count
-            most = max(most, copies)
-            if copies == 1 && most == 2 { break }
-            sleep(1)
+        var secondGone = false
+        for _ in 0..<40 {
+            secondGone = secondPid != 0 && kill(secondPid, 0) != 0
+            if secondGone { break }
+            usleep(500_000)
         }
-        note("single instance: at most \(most) copies running, \(copies) after the second launch")
-        XCTAssertEqual(copies, 1, "the second copy quit")
-        XCTAssertNotEqual(app.state, .notRunning, "the first copy still runs")
-        XCTAssertTrue(element(app, "onboarding.continue").exists, "with its window")
-        app.terminate()
+        let firstAlive = kill(first.processIdentifier, 0) == 0
+        note("single instance: first copy pid \(first.processIdentifier) alive \(firstAlive); second copy pid \(secondPid) quit \(secondGone); copies now \(running().count)")
+        XCTAssertTrue(secondGone, "the second copy quit")
+        XCTAssertTrue(firstAlive, "the first copy still runs")
+        XCTAssertEqual(running().map(\.processIdentifier), [first.processIdentifier], "only the first copy is left")
+
+        // Quit the first copy, then open Threadback again: the chat is still on, so the
+        // second copy changed nothing.
+        _ = first.terminate()
+        for _ in 0..<30 where kill(first.processIdentifier, 0) == 0 { usleep(500_000) }
+        if kill(first.processIdentifier, 0) == 0 { _ = first.forceTerminate() }
+        let again = try setUpFixture(reset: false)
+        let title = element(again, "status.title")
+        XCTAssertTrue(title.waitForExistence(timeout: 30))
+        XCTAssertEqual(text(of: title), "On.", "the second copy did not reset the settings")
+        XCTAssertTrue(element(again, "status.last.0").exists, "the chat is still on")
+        note("after a second copy launched with the reset flag: \(text(of: title))")
+        again.terminate()
     }
 
     func test1_ClosingTheWindowBeforeSetupQuits() throws {

@@ -125,6 +125,14 @@ That build did not send the link yet, because the site was not live then.
    the row in System Settings was not, so the guide page's wording for it is marked as
    approximate.
 
+8. **One failed test run with no proven cause.** In one CI run the one-time message
+   "Threadback keeps answering from the menu bar" appeared a second time and blocked the
+   test's clicks. It did not happen again in the runs that followed, which repeat that
+   sequence seven times each, and four likely causes were ruled out. The message now counts
+   as shown the moment it appears, a second one cannot start while one is up, and settings
+   are saved before the app quits. Test builds record every window event, so a repeat would
+   name its cause. The worst case on a real Mac is seeing that message twice.
+
 The checks for these are in [`STATUS.md`](../STATUS.md), "Your checks".
 
 ## An independent review

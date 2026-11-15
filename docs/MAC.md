@@ -1,5 +1,12 @@
 # The Mac helper: type `/wrapped`, get the recap in the thread
 
+> **Most people should use the Mac app instead.** It does the same job, is set up by
+> clicking, and needs no Terminal and no Full Disk Access:
+> [get Threadback for Mac](https://averyhsu.github.io/imessage-wrap/mac/)
+> ([write-up](MAC-APP.md)). This page is the command-line version the app grew out of, for
+> people who prefer Terminal. It can do two things the app does not: include the text of the
+> most-reacted messages (`--quotes`) and write the awards with AI (`--ai`).
+
 If one person in a group chat runs this small helper on their Mac, **anyone** in that chat can
 type `/wrapped` and the recap appears right there in the conversation:
 
@@ -12,10 +19,12 @@ type `/wrapped` and the recap appears right there in the conversation:
 Everything is computed on your Mac from your own Messages history. Nothing is uploaded.
 
 > **Honest status.** The helper is tested end to end *except for the last step*: handing a
-> message to the Messages app. That step cannot be tested without a real Mac that is signed in
-> to iMessage, and on macOS 26 and 27 it is known to be fragile for group chats (see
-> [Limits](#limits)). The [2-minute checklist](#the-2-minute-real-mac-checklist) below is how
-> you find out whether it works on your Mac. See [What has been tested](#what-has-been-tested).
+> message to the Messages app. That step cannot be tested without a real Mac that is signed
+> in to iMessage, and on macOS 26 and 27 it is known to be fragile for group chats (see
+> [Limits](#limits)). The Mac app, which sends the same way, has answered a real `/wrapped`
+> on one Mac running macOS 26.7.1; this helper's own send has not been run on a real Mac.
+> The [2-minute checklist](#the-2-minute-real-mac-checklist) below is how you find out
+> whether it works on yours. See [What has been tested](#what-has-been-tested).
 
 ## What you need
 

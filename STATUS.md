@@ -51,6 +51,11 @@ CI runs on `main`: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac
 Results: [Actions](https://github.com/averyhsu/imessage-wrap/actions). Mac app builds are
 on the [Releases page](https://github.com/averyhsu/imessage-wrap/releases).
 
+After the last merge (2026-11-15) the public site was driven in a browser once more: the
+front page, the demo story to its last slide, the Mac guide with its Download button, the
+maker with sample data, and the link the maker produced. No errors, and no requests to any
+other site.
+
 ## What is not proven
 
 None of this has been claimed as working. It needs real devices.
@@ -79,6 +84,18 @@ None of this has been claimed as working. It needs real devices.
    System Settings were not (check 4).
 7. **The numbers on a real chat.** The app has read one real database and produced a
    recap. Nobody has compared its numbers with a hand count of a real chat.
+
+**One failed test run whose cause was not found.** After the merge, one CI run of the Mac
+app failed. The one-time message "Threadback keeps answering from the menu bar" came up a
+second time, over the status window, so the test's clicks on Turn off, Pause all and Quit
+never landed. The app's code was the same as in the runs that had passed. It has not
+happened again: the last four runs were green, and each repeats that sequence
+seven times. Four likely causes were tested and ruled out; the real one is still unknown.
+The app was changed so that each way the message could come back is closed (it counts as
+shown the moment it appears, a second one cannot start while one is up, and settings are
+saved before the app quits), and test builds now record every window event, so a repeat
+would name its cause. On a real Mac the worst case is seeing that message twice and
+clicking OK twice. Nothing is sent because of it.
 
 **Everything else**
 

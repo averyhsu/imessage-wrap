@@ -1,4 +1,4 @@
-# XcodeGen spec for "Threadback for Mac" (feasibility spike). Generate the project with:
+# XcodeGen spec for "Threadback for Mac". Generate the project with:
 #   cd mac && ./scripts/prepare.sh && xcodegen generate
 # The generated ThreadbackMac.xcodeproj and mac/Generated/ are not committed.
 #
