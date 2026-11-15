@@ -24,7 +24,13 @@
     MAKE_PATH: 'make/',
 
     /** Relative path of the page that walks someone through installing the Mac app. */
-    MAC_PATH: 'mac/'
+    MAC_PATH: 'mac/',
+
+    /**
+     * Where the story's "get one for your chat" link goes: the landing page's section that
+     * shows both ways (the Mac app, the browser). Relative to the story page (index.html).
+     */
+    GET_PATH: './#get'
   };
 
   root.WrappedConfig = Config;

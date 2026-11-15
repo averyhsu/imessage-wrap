@@ -867,8 +867,8 @@
         h('div', 'btn-row', [button('share', 'Share card', 'share'), button('replay', 'Replay', 'replay')])
       ];
     } else {
-      var makeLink = h('a', 'sum__make', 'Make one for your chat  →');
-      makeLink.href = Config.MAKE_PATH;
+      var makeLink = h('a', 'sum__make', 'Get one for your chat  →');
+      makeLink.href = Config.GET_PATH;
       makeLink.setAttribute('data-web-only', '');
       actions = [
         button('share', 'Share card', 'share', 'btn--primary'),
