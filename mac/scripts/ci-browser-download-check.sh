@@ -136,8 +136,8 @@ else
   say "  DOWNLOAD FAILED"; FAIL=1
 fi
 
-say "-- diagnosis: the old artifact (the app zip inside the artifact's own zip)"
-N="$(fetch "diagnosis-nested-zip" "$ROOT/nested/Downloads" | tail -1)"
+say "-- (the old nested-zip diagnosis was retired: it only used up artifact storage)"
+N=""
 if [ -f "$N" ]; then
   say "  outer zip, the entry for the inner file (zipinfo -v):"
   zipinfo -v "$N" 2>&1 | grep -E "Central directory entry|file system or operating system of origin|version of encoding software|minimum software version|compression method|file security status|extended local header|file last modified|32-bit CRC|compressed size|uncompressed size|length of filename|length of extra field|Zip64|There is no file comment|ZIP64|zip64" | sed 's/^/    /' | head -24
