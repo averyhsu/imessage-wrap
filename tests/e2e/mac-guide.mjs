@@ -122,7 +122,8 @@ async function open(opts = {}) {
   context.on('weberror', (e) => problems.push('pageerror: ' + e.error().message));
   context.on('requestfailed', (r) => problems.push('requestfailed: ' + r.url() + ' ' + (r.failure() ? r.failure().errorText : '')));
   await page.goto(PAGE);
-  await page.evaluate(() => document.fonts.ready);
+  // (Playwright's Firefox may not answer an evaluate in a page with JavaScript off: see nojs.)
+  if (opts.js !== false || IS_CHROMIUM) await page.evaluate(() => document.fonts.ready);
   return {
     context, page, problems, foreign,
     clean(label) {
@@ -396,6 +397,14 @@ await section('devices', 'iPhone, iPad, Android, Windows, Linux: "This part need
 await section('nojs', 'Without JavaScript every step is shown, with macOS\'s words and no dead buttons', async () => {
   const s = await open({ js: false });
   const { page } = s;
+  if (!IS_CHROMIUM) {
+    const answers = await Promise.race([page.evaluate(() => true).catch(() => false), new Promise((resolve) => setTimeout(() => resolve(false), 10000))]);
+    if (!answers) {
+      note('Playwright gets no answer from a script run in this page with JavaScript turned off (10 s); the no-JavaScript page is checked in the other engines');
+      await s.close();
+      return;
+    }
+  }
   const v = await page.evaluate(() => {
     const shown = (el) => !!el && !el.hidden && getComputedStyle(el).display !== 'none' && el.getClientRects().length > 0;
     return {
