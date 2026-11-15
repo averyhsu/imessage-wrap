@@ -433,10 +433,18 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
 
 // ── 3. share card ──────────────────────────────────────────────────────────────────────
 await section('share', 'Share card: 1080×1350 PNG, download fallback, Web Share', async () => {
-  const s = await open();
+  // The download fallback is for a browser without Web Share. Desktop Chromium on Linux has
+  // none; WebKit on macOS has it (as Safari does), so there it is taken away for this part.
+  const s = await open(IS_CHROMIUM ? {} : { init: () => {
+    window.__hadShare = typeof navigator.share === 'function';
+    delete Navigator.prototype.share;
+    delete Navigator.prototype.canShare;
+  } });
   const { page } = s;
   await page.goto(server.url + '?demo=1');
   await waitForStory(page);
+  if (await page.evaluate(() => window.__hadShare)) note('this engine has Web Share (as Safari does); the download fallback is checked with navigator.share taken away');
+  eq(await page.evaluate(() => typeof navigator.share), 'undefined', 'this part runs without Web Share');
 
   const direct = await page.evaluate(async () => {
     const stats = WrappedData.normalize(WRAPPED_DEMO);

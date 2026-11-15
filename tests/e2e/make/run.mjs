@@ -1446,6 +1446,9 @@ await section('name', 'Your name: asked first, needed for a recap, "Me" only by 
   ok((await page.getAttribute('#me-name', 'aria-describedby')).split(' ').includes('me-error'), 'with the message tied to it');
   ok(/first name/i.test(await text(page, '#status')), 'and the live region says so');
   await page.waitForTimeout(500);
+  // A smooth scroll can take longer than that (WebKit on a busy runner): give it until it
+  // comes to rest, then measure.
+  await page.waitForFunction(() => { const r = document.getElementById('me-field').getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }, null, { timeout: 3000 }).catch(() => {});
   const box = await page.locator('#me-field').boundingBox();
   const tall = page.viewportSize().height;
   ok(box.y >= 0 && box.y + box.height <= tall, 'the field is scrolled into view');
