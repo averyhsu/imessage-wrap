@@ -1,10 +1,10 @@
 /*
  * The Mac app's download page (web/mac/): the one place its download address lives.
  *
- * MAC_DOWNLOAD_URL stays empty until there is a public download. While it is empty the
- * page shows "The download is not public yet" and a link to the project instead of the
- * Download button. To publish, put the address of the zip (or .dmg) here, for example a
- * GitHub release asset, and nothing else needs to change. tests/js/mac-site.test.js checks
+ * MAC_DOWNLOAD_URL is the public download: the disk image attached to the newest release
+ * on GitHub (the Mac app workflow publishes one from every change to the app that reaches
+ * main). If it is ever emptied, the page shows "The download is not public yet" and a link
+ * to the project instead of the Download button. tests/js/mac-site.test.js checks
  * the shape of the value; tests/e2e/mac-guide.mjs renders both states.
  */
 (function (root) {
@@ -12,7 +12,7 @@
 
   var MacConfig = {
     /** Absolute https:// address, or a path relative to web/mac/. Empty: not public yet. */
-    MAC_DOWNLOAD_URL: '',
+    MAC_DOWNLOAD_URL: 'https://github.com/averyhsu/imessage-wrap/releases/latest/download/Threadback-for-Mac.dmg',
 
     /** Where the project and its source code live. */
     SOURCE_URL: 'https://github.com/averyhsu/imessage-wrap',

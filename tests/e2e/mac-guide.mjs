@@ -195,7 +195,7 @@ await section('walk', 'One step at a time: "I did this" opens the next step and 
   const s = await open();
   const { page } = s;
   let v = await snap(page);
-  eq(v.state, { current: 1, all: false, device: 'mac', download: '' }, 'starts at step 1 on a Mac, with no download configured');
+  eq(v.state, { current: 1, all: false, device: 'mac', download: MacConfig.MAC_DOWNLOAD_URL }, 'starts at step 1 on a Mac, with the committed download');
   eq(v.open, [true, false, false, false, false], 'only step 1 is open');
   eq(v.classes, ['is-active', 'is-locked', 'is-locked', 'is-locked', 'is-locked'], 'the others are locked');
   eq(v.label, 'Step 1 of 5', 'the progress label says where you are');
@@ -239,7 +239,7 @@ await section('walk', 'One step at a time: "I did this" opens the next step and 
   eq(v.label, 'All 5 steps', 'the progress label says so');
   await page.click('#show-all');
   v = await snap(page);
-  eq([v.state, v.open], [{ current: 2, all: false, device: 'mac', download: '' }, [false, true, false, false, false]], 'back to one step, where you were');
+  eq([v.state, v.open], [{ current: 2, all: false, device: 'mac', download: MacConfig.MAC_DOWNLOAD_URL }, [false, true, false, false, false]], 'back to one step, where you were');
 
   // The progress bar jumps to a step too.
   await page.locator('#rail > li:nth-child(4) button').click();
@@ -319,8 +319,14 @@ await section('deeplink', 'The Privacy & Security button links straight to that 
 
 // ── 4. download: not public yet, and configured ───────────────────────────────────────
 await section('download', 'Download: "not public yet" while the address is empty; a button once it is set', async () => {
-  eq(MacConfig.MAC_DOWNLOAD_URL, '', 'the committed config has no download yet');
+  eq(MacConfig.MAC_DOWNLOAD_URL, 'https://github.com/averyhsu/imessage-wrap/releases/latest/download/Threadback-for-Mac.dmg',
+    'the committed config points at the newest release on GitHub');
   let s = await open();
+  ok(await s.page.locator('#download').isVisible(), 'as committed: the Download button is shown');
+  eq(await s.page.getAttribute('#download', 'href'), MacConfig.MAC_DOWNLOAD_URL, 'as committed: it points at that release');
+  s.clean('download (as committed)');
+  await s.close();
+  s = await open({ download: '' });
   let page = s.page;
   ok(await page.locator('#download').isHidden(), 'empty address: no Download button');
   ok(await page.locator('#download-none').isVisible(), 'empty address: the honest line is shown');
