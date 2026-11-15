@@ -1,10 +1,11 @@
-// Shared helpers for the end-to-end scripts: a tiny static server for web/, Chromium
-// launch, and page-side utilities for driving the story.
+// Shared helpers for the end-to-end scripts: a tiny static server for web/, the browser
+// launch (BROWSER=chromium|webkit|firefox, default chromium), and page-side utilities for
+// driving the story.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { chromium } from 'playwright';
+import { chromium, webkit, firefox } from 'playwright';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '../..');
@@ -56,11 +57,70 @@ export async function startServer(dir = WEB) {
   };
 }
 
+// ── which browser ──────────────────────────────────────────────────────────────────────
+// Every suite runs in Chromium by default. BROWSER=webkit or BROWSER=firefox runs the same
+// checks in that engine; where a check leans on something only Chromium's automation offers,
+// the suite says so in one line (see note()) and checks the same behaviour another way.
+const ENGINES = { chromium, webkit, firefox };
+export const BROWSER = (process.env.BROWSER || 'chromium').toLowerCase();
+if (!ENGINES[BROWSER]) throw new Error(`BROWSER must be one of ${Object.keys(ENGINES).join(', ')} (got "${process.env.BROWSER}")`);
+export const IS_CHROMIUM = BROWSER === 'chromium';
+
+const noted = new Set();
+/** Say once per run why a check is different in this engine. */
+export function note(reason) {
+  if (noted.has(reason)) return;
+  noted.add(reason);
+  console.log(`  ~ [${BROWSER}] ${reason}`);
+}
+
 export async function launch() {
+  console.log(`Browser: ${BROWSER}`);
+  if (BROWSER === 'firefox') {
+    // Firefox's async clipboard asks the user (a "Paste" menu) before readText() resolves;
+    // this is the preference Firefox's own tests use to answer it, so the clipboard checks
+    // still read what the page really wrote.
+    return firefox.launch({ firefoxUserPrefs: { 'dom.events.testing.asyncClipboard': true } });
+  }
+  if (BROWSER === 'webkit') return webkit.launch();
   // PW_CHANNEL=chrome uses an installed Google Chrome instead of Playwright's Chromium.
   const channel = process.env.PW_CHANNEL || undefined;
   return chromium.launch({ channel, args: ['--font-render-hinting=none', '--disable-lcd-text'] });
 }
+
+// Which permission names each engine's automation can grant. Chromium: both clipboard
+// permissions. WebKit: clipboard-read only (writing needs no grant there). Firefox: neither
+// (see the preference in launch()).
+const GRANTABLE = { webkit: ['clipboard-read'], firefox: [] };
+function grantable(permissions) {
+  if (IS_CHROMIUM || !permissions) return permissions;
+  const keep = permissions.filter((p) => !/^clipboard-/.test(p) || GRANTABLE[BROWSER].includes(p));
+  const dropped = permissions.filter((p) => !keep.includes(p));
+  if (dropped.length) note(`Playwright cannot grant ${dropped.join(', ')} here; the page's clipboard calls run without that grant`);
+  return keep;
+}
+
+/**
+ * newContext() options for this engine. Playwright's Firefox has no isMobile (meta viewport
+ * and mobile layout emulation): there a phone is its viewport size plus a touch screen.
+ */
+export function contextOptions(options) {
+  const out = { ...options };
+  if (BROWSER === 'firefox' && 'isMobile' in out) {
+    if (out.isMobile) note('isMobile is not supported by Playwright in Firefox: phones are the viewport size with touch only');
+    delete out.isMobile;
+  }
+  if (out.permissions) out.permissions = grantable(out.permissions);
+  return out;
+}
+
+/** context.grantPermissions() limited to what this engine can grant. */
+export function grant(context, permissions) {
+  return context.grantPermissions(grantable(permissions));
+}
+
+/** A request the browser cut short on purpose (navigation away), in this engine's words. */
+export const ABORTED = /^(net::ERR_ABORTED|NS_BINDING_ABORTED|cancelled|Load request cancelled)$/i;
 
 /** Wait until the story is running and the display font is in. */
 export async function waitForStory(page) {

@@ -12,7 +12,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch, waitForStory, showSettled, findOverflow } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, startServer, launch, contextOptions, grant, waitForStory, showSettled, findOverflow } from './lib.mjs';
 import { fixtures, viewports } from './fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -22,6 +22,8 @@ const Data = require(path.join(WEB, 'js/normalize.js'));
 const vector = require(path.join(ROOT, 'tests/vectors/payload-v1.json'));
 
 const UPDATE_SCREENSHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SCREENSHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = UPDATE_SCREENSHOTS ? path.join(ROOT, 'docs/screenshots/web') : path.join(ROOT, 'test-results/web-screenshots');
 const ALL_SLIDES = ['cover', 'total', 'clock', 'persona', 'late', 'week', 'year', 'senders', 'moty', 'taps', 'awards', 'sum'];
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
@@ -60,7 +62,7 @@ const origin = new URL(server.url).origin;
 /** A context that records console errors, page errors and every request that leaves the origin. */
 async function open(opts = {}) {
   const vp = opts.viewport || viewports['phone-390x844'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!vp.mobile,
@@ -69,7 +71,7 @@ async function open(opts = {}) {
     acceptDownloads: true,
     bypassCSP: !!opts.wideFont,
     ...(opts.context || {}),
-  });
+  }));
   const problems = [];
   const foreign = [];
   const requests = [];
@@ -295,7 +297,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   await waitForStory(page);
   eq(await page.locator('.slide.is-active .cover__name').innerText(), 'me & u', 'the story survives a reload from the fragment');
   eq(s.requests.filter((u) => u.includes('w1=')).length - sentBefore, 1, 'only the first request ever carried the recap; the reload did not');
-  await s.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grant(s.context, ['clipboard-read', 'clipboard-write']);
   await page.evaluate(() => WrappedStory.goTo(WrappedStory.total - 1));
   await page.locator('.slide.is-active [data-action="copy"]').click();
   await page.waitForSelector('.toast.is-on');
@@ -310,7 +312,7 @@ await section('links', 'Payload links: fragment, query, vector, broken', async (
   ok(true, 'changing the fragment loads the new recap');
 
   // Copy link gives back a link that decodes to the same stats.
-  await s.context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await grant(s.context, ['clipboard-read', 'clipboard-write']);
   await page.goto(server.url + '#w1=' + vector.payload);
   await page.reload();
   await waitForStory(page);
@@ -1174,7 +1176,7 @@ await section('shots', `Screenshots of every slide → ${path.relative(ROOT, SHO
 await browser.close();
 await server.close();
 
-console.log(`\n${checks} checks, ${failures.length} failed`);
+console.log(`\n${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);

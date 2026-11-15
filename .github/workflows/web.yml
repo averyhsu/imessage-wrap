@@ -1,6 +1,8 @@
 # Web story: unit tests (codec, normalize, formatting) and the Playwright end-to-end run
 # (every slide, the robustness matrix, embed bridge, file:// + CSP, zero foreign requests),
 # and the Mac app's download page (the walkthrough, devices, download states, layout).
+# The Chromium job is the reference; the "Other engines" jobs run the same two suites in
+# WebKit (Safari's engine: everyone who opens a recap on an iPhone) and Firefox.
 name: Web story
 
 on:
@@ -88,6 +90,68 @@ jobs:
         with:
           retention-days: 3
           name: web-screenshots
+          path: |
+            test-results/web-screenshots/
+            test-results/mac-guide-screenshots/
+          if-no-files-found: warn
+
+  engines:
+    name: End-to-end in ${{ matrix.browser }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { browser: webkit, os: ubuntu-latest }
+          - { browser: firefox, os: ubuntu-latest }
+          # The closest a runner gets to Safari: WebKit on macOS.
+          - { browser: webkit, os: macos-latest }
+    env:
+      BROWSER: ${{ matrix.browser }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install ${{ matrix.browser }}
+        timeout-minutes: 12
+        run: |
+          npx playwright install --with-deps ${{ matrix.browser }}
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            timeout 120 sudo apt-get install -y --no-install-recommends fonts-inter fonts-noto-color-emoji \
+              || echo "::warning::extra fonts unavailable; layout checks use fallback fonts"
+          fi
+
+      - name: End-to-end tests
+        run: npm run test:e2e
+
+      - name: Mac app download page (web/mac/)
+        if: ${{ !cancelled() }}
+        run: npm run test:mac-guide
+
+      - name: The test run left tracked files alone
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::the end-to-end runs modified or created files in the repository:"
+            git status --porcelain
+            exit 1
+          fi
+
+      - name: Upload screenshots
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          retention-days: 3
+          name: web-screenshots-${{ matrix.browser }}-${{ matrix.os }}
           path: |
             test-results/web-screenshots/
             test-results/mac-guide-screenshots/

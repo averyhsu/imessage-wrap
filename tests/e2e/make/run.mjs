@@ -1,4 +1,5 @@
-// End-to-end checks for the "Make your own" page (web/make/), in headless Chromium.
+// End-to-end checks for the "Make your own" page (web/make/), in headless Chromium (or
+// BROWSER=webkit / BROWSER=firefox).
 //
 //   npm run test:make                       everything; exits non-zero on any failure
 //   node tests/e2e/make/run.mjs --only=mac,paste
@@ -20,7 +21,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch, waitForStory, showSettled } from '../lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, ABORTED, startServer, launch, contextOptions, waitForStory, showSettled } from '../lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Engine = require(path.join(WEB, 'make/engine.js'));
@@ -33,6 +34,8 @@ Engine.useCodec(require(path.join(WEB, 'js/vendor/fflate.min.js')));
 const PYTHON = process.env.PYTHON || 'python3';
 const LA = 'America/Los_Angeles';
 const UPDATE_SHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = path.join(ROOT, UPDATE_SHOTS ? 'docs/screenshots/web' : 'test-results/make-screenshots');
 const VIEWPORTS = {
   'phone-360': { width: 360, height: 740, mobile: true },
@@ -126,7 +129,7 @@ const MAKE = server.url + 'make/';
 /** A page that records console errors, failed requests, CSP violations and foreign requests. */
 async function open(opts = {}) {
   const vp = opts.viewport || VIEWPORTS['desktop-1440'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!vp.mobile,
@@ -136,7 +139,7 @@ async function open(opts = {}) {
     reducedMotion: opts.still ? 'reduce' : (opts.reducedMotion || 'no-preference'),
     permissions: opts.permissions || [],
     bypassCSP: !!(opts.still || opts.bypassCSP),
-  });
+  }));
   const problems = [];
   const foreign = [];
   const requests = [];
@@ -178,7 +181,7 @@ async function open(opts = {}) {
     // somewhere else (a test does that on purpose) is not a failure of the page.
     let inPreview = false;
     try { inPreview = r.frame() !== page.mainFrame(); } catch { inPreview = false; }
-    if (why === 'net::ERR_ABORTED' && inPreview) return;
+    if (ABORTED.test(why) && inPreview) return;
     problems.push('requestfailed: ' + r.url() + ' ' + why);
   });
   if (opts.goto !== false) {
@@ -1976,7 +1979,7 @@ fs.rmSync(TMP, { recursive: true, force: true });
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
-console.log(`${checks} checks, ${failures.length} failed`);
+console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);

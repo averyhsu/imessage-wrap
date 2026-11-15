@@ -1,4 +1,5 @@
-// End-to-end checks for the Mac app's download page (web/mac/), in headless Chromium.
+// End-to-end checks for the Mac app's download page (web/mac/), in headless Chromium (or
+// BROWSER=webkit / BROWSER=firefox).
 //
 //   npm run test:mac-guide                     everything; exits non-zero on any failure
 //   node tests/e2e/mac-guide.mjs --only=walk,keyboard
@@ -16,7 +17,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { ROOT, WEB, startServer, launch } from './lib.mjs';
+import { ROOT, WEB, BROWSER, IS_CHROMIUM, note, startServer, launch, contextOptions } from './lib.mjs';
 
 const require = createRequire(import.meta.url);
 const Config = require(path.join(WEB, 'js/config.js'));
@@ -24,6 +25,8 @@ const MacConfig = require(path.join(WEB, 'mac/mac-config.js'));
 const Guide = require(path.join(WEB, 'mac/mac.js'));
 
 const UPDATE_SHOTS = process.argv.includes('--update-screenshots');
+// The committed pictures are Chromium's; another engine may only write to test-results/.
+if (UPDATE_SHOTS && !IS_CHROMIUM) { console.error('--update-screenshots runs in Chromium only (BROWSER=' + BROWSER + ')'); process.exit(2); }
 const SHOTS = path.join(ROOT, UPDATE_SHOTS ? 'docs/screenshots/web' : 'test-results/mac-guide-screenshots');
 const only = (process.argv.find((a) => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const wants = (name) => only.length === 0 || only.includes(name);
@@ -87,7 +90,7 @@ function configWith(url) {
 /** A page that records console errors, failed requests, CSP violations and foreign requests. */
 async function open(opts = {}) {
   const vp = opts.viewport || VIEWPORTS['desktop-1440'];
-  const context = await browser.newContext({
+  const context = await browser.newContext(contextOptions({
     viewport: { width: vp.width, height: vp.height },
     deviceScaleFactor: opts.scale || 1,
     hasTouch: !!(vp.mobile || opts.touch),
@@ -96,7 +99,7 @@ async function open(opts = {}) {
     locale: 'en-US',
     reducedMotion: opts.reducedMotion || 'reduce',
     javaScriptEnabled: opts.js !== false,
-  });
+  }));
   const problems = [];
   const foreign = [];
   context.on('request', (req) => {
@@ -516,7 +519,7 @@ await server.close();
 
 console.log('\n' + '─'.repeat(72));
 for (const flow of flows) console.log(`${flow.passed ? '✓' : '✗'} ${flow.name.padEnd(9)} ${String(flow.checks).padStart(4)} checks`);
-console.log(`${checks} checks, ${failures.length} failed`);
+console.log(`${checks} checks, ${failures.length} failed (${BROWSER})`);
 if (failures.length) {
   console.log('\nFailures:');
   for (const f of failures) console.log(' - ' + f);
