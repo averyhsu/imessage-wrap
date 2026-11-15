@@ -160,6 +160,8 @@
   var AWARD_MIN_SENDERS = 3;
   var AWARD_MIN_COUNT = 3;
   var NOVELIST_MIN_MESSAGES = 20;
+  var NOVELIST_MIN_WORDS = 10;        // per message: words >= messages * 10
+  var MINIMALIST_MAX_HALVES = 7;      // at most 3.5 words per message: words * 2 <= messages * 7
   var DOUBLE_TEXT_MIN_RUN = 5;
   var EARLY_FROM = 5, EARLY_TO = 9;   // local hours 5..8
   var LINK = /https?:\/\//;           // a web link: exact lowercase ASCII, anywhere in the text
@@ -1026,7 +1028,7 @@
       function (f) { return pct(f.T - f.weekend, f.T) + ' of messages Monday to Friday'; }),
     trait('always_on', function (f) { return f.T >= 200; }, function (f) { return f.best3 / f.T; }, false, 0.20, 0.125,
       function (f) { return 'Only ' + pct(f.best3, f.T) + ' of messages in its busiest three hours'; }),
-    trait('daily_ritual', function (f) { return f.P >= 28; }, function (f) { return f.D / f.P; }, true, 0.92, 1.0,
+    trait('daily_ritual', function (f) { return f.P >= 28; }, function (f) { return f.D / f.P; }, true, 0.97, 1.0,
       function (f) { return 'Active on ' + thousands(f.D) + ' of ' + thousands(f.P) + ' days'; }),
     trait('flash_mob', function (f) { return f.P >= 28 && f.D >= 3; }, function (f) { return f.day1 / f.T; }, true, 0.15, 0.50,
       function (f) { return pct(f.day1, f.T) + ' of the messages landed on a single day'; }),
@@ -1038,7 +1040,7 @@
       function (f) { return 'About one message every ' + thousands(nearest(f.P, f.T)) + ' days'; }),
     trait('photo_dump', always, function (f) { return f.A / f.T; }, true, 0.25, 0.60,
       function (f) { return pct(f.A, f.T) + ' of messages carry a photo, video or file'; }),
-    trait('hype_squad', function (f) { return f.R >= 20; }, function (f) { return f.R / f.T; }, true, 0.40, 1.0,
+    trait('hype_squad', function (f) { return f.R >= 20; }, function (f) { return f.R / f.T; }, true, 0.50, 1.0,
       function (f) { return thousands(f.R) + ' tapbacks on ' + thousands(f.T) + ' messages'; }),
     trait('comedy_club', function (f) { return f.R >= 20 && f.R * 20 >= f.T; }, function (f) { return f.laugh / f.R; },
       true, 0.50, 0.85, function (f) { return pct(f.laugh, f.R) + ' of all tapbacks are Ha Ha'; }),
@@ -1226,8 +1228,12 @@
     winners.link_dropper = most(LINKS, AWARD_MIN_COUNT);
     winners.favorite = most(RECV, AWARD_MIN_COUNT);
     winners.double_texter = most(RUN, DOUBLE_TEXT_MIN_RUN);
-    winners.novelist = wordsPerMessage(longWinded, -1);
-    winners.minimalist = terse.length >= 2 ? wordsPerMessage(terse, 1) : null;
+    var novelist = wordsPerMessage(longWinded, -1);
+    winners.novelist = novelist && compareRatio(qualifying.get(novelist[0])[WORDS], qualifying.get(novelist[0])[MSG],
+      NOVELIST_MIN_WORDS, 1) >= 0 ? novelist : null;
+    var minimalist = terse.length >= 2 ? wordsPerMessage(terse, 1) : null;
+    winners.minimalist = minimalist && compareRatio(qualifying.get(minimalist[0])[WORDS], qualifying.get(minimalist[0])[MSG],
+      MINIMALIST_MAX_HALVES, 2) <= 0 ? minimalist : null;
     var lurker = null;
     qualifying.forEach(function (c, name) {
       if (lurker === null || c[MSG] < qualifying.get(lurker)[MSG] ||

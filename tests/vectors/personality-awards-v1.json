@@ -43,8 +43,8 @@
    {"name": "7 always_on at the floor", "set": {"best3": 200}, "id": "always_on", "reason": "Only 20% of messages in its busiest three hours"},
    {"name": "7 always_on just over", "set": {"best3": 201}, "id": "dinner_table"},
 
-   {"name": "8 daily_ritual at the floor", "set": {"D": 92}, "id": "daily_ritual", "reason": "Active on 92 of 100 days"},
-   {"name": "8 daily_ritual just under", "set": {"D": 91}, "id": "dinner_table"},
+   {"name": "8 daily_ritual at the floor", "set": {"D": 97}, "id": "daily_ritual", "reason": "Active on 97 of 100 days"},
+   {"name": "8 daily_ritual just under", "set": {"D": 96}, "id": "dinner_table"},
    {"name": "8 daily_ritual with thousands", "set": {"P": 1000, "D": 1000}, "id": "daily_ritual", "reason": "Active on 1,000 of 1,000 days"},
 
    {"name": "9 flash_mob at the floor", "set": {"day1": 150}, "id": "flash_mob", "reason": "15% of the messages landed on a single day"},
@@ -66,8 +66,8 @@
    {"name": "13 photo_dump at the floor", "set": {"A": 250}, "id": "photo_dump", "reason": "25% of messages carry a photo, video or file"},
    {"name": "13 photo_dump just under", "set": {"A": 249}, "id": "dinner_table"},
 
-   {"name": "14 hype_squad at the floor", "set": {"R": 400}, "id": "hype_squad", "reason": "400 tapbacks on 1,000 messages"},
-   {"name": "14 hype_squad just under", "set": {"R": 399}, "id": "dinner_table"},
+   {"name": "14 hype_squad at the floor", "set": {"R": 500}, "id": "hype_squad", "reason": "500 tapbacks on 1,000 messages"},
+   {"name": "14 hype_squad just under", "set": {"R": 499}, "id": "dinner_table"},
    {"name": "14 hype_squad with thousands", "set": {"R": 1500}, "id": "hype_squad", "reason": "1,500 tapbacks on 1,000 messages"},
 
    {"name": "15 comedy_club at the floor", "set": {"laugh": 100}, "id": "comedy_club", "reason": "50% of all tapbacks are Ha Ha"},
@@ -139,8 +139,7 @@
      "c": [10, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]},
     "expect": [
      ["yapper", "a", "40 messages. Nobody asked."],
-     ["lurker", "c", "10 messages. Reads everything, says little."],
-     ["novelist", "a", "2.0 words per message. A paragraph person."]]},
+     ["lurker", "c", "10 messages. Reads everything, says little."]]},
 
    {"name": "thresholds: 3 of each and a run of 5 are enough",
     "people": {
@@ -164,19 +163,18 @@
      ["yapper", "a", "40 messages. Nobody asked."],
      ["lurker", "c", "10 messages. Reads everything, says little."],
      ["link_dropper", "a", "Shared 3 links."],
-     ["double_texter", "a", "5 messages in a row. No reply needed."],
-     ["novelist", "a", "2.0 words per message. A paragraph person."]]},
+     ["double_texter", "a", "5 messages in a row. No reply needed."]]},
 
    {"name": "the quietest person gets something more specific first",
     "people": {
-     "yap": [100, 500],
-     "mid": [50, 200],
+     "yap": [100, 1000],
+     "mid": [50, 150],
      "quiet": [10, 30, 0, 0, 0, 0, 0, 0, 0, 0, 5]},
     "expect": [
      ["yapper", "yap", "100 messages. Nobody asked."],
      ["starter", "quiet", "Sent the first message of the day 5 times."],
-     ["minimalist", "mid", "4.0 words per message. Straight to the point."],
-     ["novelist", "yap", "5.0 words per message. A paragraph person."],
+     ["minimalist", "mid", "3.0 words per message. Straight to the point."],
+     ["novelist", "yap", "10.0 words per message. A paragraph person."],
      ["lurker", "quiet", "10 messages. Reads everything, says little."]]},
 
    {"name": "one person wins everything: deferred awards fill the list in table order",
@@ -222,7 +220,7 @@
      ["lurker", "cat", "8 messages. Reads everything, says little."],
      ["closer", "amy", "Had the last word on 4 days."],
      ["double_texter", "amy", "6 messages in a row. No reply needed."],
-     ["novelist", "bob", "1.0 words per message. A paragraph person."]]},
+     ["minimalist", "bob", "1.0 words per message. Straight to the point."]]},
 
    {"name": "minimalist: exact ratios, at least two candidates, at least one word",
     "people": {
@@ -232,8 +230,7 @@
     "expect": [
      ["yapper", "a", "3,000,000 messages. Nobody asked."],
      ["minimalist", "b", "0.3 words per message. Straight to the point."],
-     ["lurker", "c", "10 messages. Reads everything, says little."],
-     ["novelist", "a", "0.3 words per message. A paragraph person."]]},
+     ["lurker", "c", "10 messages. Reads everything, says little."]]},
 
    {"name": "minimalist: a tie goes to more messages",
     "people": {
@@ -253,8 +250,49 @@
      "c": [10, 10]},
     "expect": [
      ["yapper", "a", "40 messages. Nobody asked."],
+     ["lurker", "c", "10 messages. Reads everything, says little."]]},
+
+   {"name": "novelist: 10 words per message is enough",
+    "people": {
+     "a": [40, 400],
+     "b": [30, 30],
+     "c": [10, 10]},
+    "expect": [
+     ["yapper", "a", "40 messages. Nobody asked."],
+     ["minimalist", "b", "1.0 words per message. Straight to the point."],
      ["lurker", "c", "10 messages. Reads everything, says little."],
-     ["novelist", "a", "2.0 words per message. A paragraph person."]]}
+     ["novelist", "a", "10.0 words per message. A paragraph person."]]},
+
+   {"name": "novelist: just under 10 words per message is not (399 in 40)",
+    "people": {
+     "a": [40, 399],
+     "b": [30, 30],
+     "c": [10, 10]},
+    "expect": [
+     ["yapper", "a", "40 messages. Nobody asked."],
+     ["minimalist", "b", "1.0 words per message. Straight to the point."],
+     ["lurker", "c", "10 messages. Reads everything, says little."]]},
+
+   {"name": "minimalist: 3.5 words per message is still terse",
+    "people": {
+     "a": [40, 140],
+     "b": [30, 300],
+     "c": [10, 10]},
+    "expect": [
+     ["yapper", "a", "40 messages. Nobody asked."],
+     ["novelist", "b", "10.0 words per message. A paragraph person."],
+     ["lurker", "c", "10 messages. Reads everything, says little."],
+     ["minimalist", "a", "3.5 words per message. Straight to the point."]]},
+
+   {"name": "minimalist: just over 3.5 words per message is not (141 in 40)",
+    "people": {
+     "a": [40, 141],
+     "b": [30, 300],
+     "c": [10, 10]},
+    "expect": [
+     ["yapper", "a", "40 messages. Nobody asked."],
+     ["novelist", "b", "10.0 words per message. A paragraph person."],
+     ["lurker", "c", "10 messages. Reads everything, says little."]]}
   ]
  },
 

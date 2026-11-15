@@ -147,6 +147,8 @@ AWARD_MIN_MESSAGES = 5
 AWARD_MIN_SENDERS = 3
 AWARD_MIN_COUNT = 3
 NOVELIST_MIN_MESSAGES = 20
+NOVELIST_MIN_RATIO = Fraction(10)           # the Novelist writes at least 10 words per message
+MINIMALIST_MAX_RATIO = Fraction(7, 2)       # the Minimalist at most 3.5
 DOUBLE_TEXT_MIN_RUN = 5
 EARLY_HOURS = (5, 9)                # local hours 5..8
 _QUESTION_MARKS = ("?", "\uff1f")
@@ -709,7 +711,7 @@ _TRAITS = (
      lambda f: "%s of messages Monday to Friday" % _pct(f["T"] - f["weekend"], f["T"])),
     ("always_on", lambda f: f["T"] >= 200, lambda f: f["best3"] / f["T"], False, 0.20, 0.125,
      lambda f: "Only %s of messages in its busiest three hours" % _pct(f["best3"], f["T"])),
-    ("daily_ritual", lambda f: f["P"] >= 28, lambda f: f["D"] / f["P"], True, 0.92, 1.0,
+    ("daily_ritual", lambda f: f["P"] >= 28, lambda f: f["D"] / f["P"], True, 0.97, 1.0,
      lambda f: "Active on %s of %s days" % (_thousands(f["D"]), _thousands(f["P"]))),
     ("flash_mob", lambda f: f["P"] >= 28 and f["D"] >= 3, lambda f: f["day1"] / f["T"], True, 0.15, 0.50,
      lambda f: "%s of the messages landed on a single day" % _pct(f["day1"], f["T"])),
@@ -721,7 +723,7 @@ _TRAITS = (
      lambda f: "About one message every %s days" % _thousands(_nearest(f["P"], f["T"]))),
     ("photo_dump", lambda f: True, lambda f: f["A"] / f["T"], True, 0.25, 0.60,
      lambda f: "%s of messages carry a photo, video or file" % _pct(f["A"], f["T"])),
-    ("hype_squad", lambda f: f["R"] >= 20, lambda f: f["R"] / f["T"], True, 0.40, 1.0,
+    ("hype_squad", lambda f: f["R"] >= 20, lambda f: f["R"] / f["T"], True, 0.50, 1.0,
      lambda f: "%s tapbacks on %s messages" % (_thousands(f["R"]), _thousands(f["T"]))),
     ("comedy_club", lambda f: f["R"] >= 20 and f["R"] * 20 >= f["T"], lambda f: f["laugh"] / f["R"],
      True, 0.50, 0.85, lambda f: "%s of all tapbacks are Ha Ha" % _pct(f["laugh"], f["R"])),
@@ -855,10 +857,16 @@ def _awards(people: Dict[str, List[int]]) -> List[Dict[str, Any]]:
     winners["link_dropper"] = most(_LINKS, AWARD_MIN_COUNT)
     winners["favorite"] = most(_RECV, AWARD_MIN_COUNT)
     winners["double_texter"] = most(_RUN, DOUBLE_TEXT_MIN_RUN)
-    winners["novelist"] = words_per_message(
+    def ratio(name: str) -> Fraction:
+        return Fraction(qualifying[name][_WORDS], qualifying[name][_MSG])
+
+    novelist = words_per_message(
         [n for n, c in qualifying.items() if c[_MSG] >= NOVELIST_MIN_MESSAGES], -1)
+    winners["novelist"] = novelist if novelist and ratio(novelist[0]) >= NOVELIST_MIN_RATIO else None
     terse = [n for n, c in qualifying.items() if c[_MSG] >= NOVELIST_MIN_MESSAGES and c[_WORDS] >= 1]
-    winners["minimalist"] = words_per_message(terse, 1) if len(terse) >= 2 else None
+    minimalist = words_per_message(terse, 1) if len(terse) >= 2 else None
+    winners["minimalist"] = (minimalist if minimalist and ratio(minimalist[0]) <= MINIMALIST_MAX_RATIO
+                             else None)
     lurker = min(qualifying, key=lambda n: (qualifying[n][_MSG], _u16(n)))
     winners["lurker"] = (lurker, _thousands(qualifying[lurker][_MSG]))
 

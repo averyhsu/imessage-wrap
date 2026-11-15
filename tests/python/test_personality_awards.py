@@ -178,8 +178,8 @@ class Awards(unittest.TestCase):
     def test_needs_three_qualifying_senders(self):
         self.assertEqual(S._awards(people({"a": [50], "b": [5], "c": [4]})), [])
         got = S._awards(people({"a": [50], "b": [5], "c": [5], "d": [1, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]}))
-        # d does not qualify; the spec sets no minimum for words per message
-        self.assertEqual([a["id"] for a in got], ["yapper", "lurker", "novelist"])
+        # d does not qualify; nobody writes 10 words per message, so there is no Novelist
+        self.assertEqual([a["id"] for a in got], ["yapper", "lurker"])
 
     def test_table(self):
         self.assertEqual([(a[0], a[1], a[2]) for a in S.AWARDS], [
@@ -214,16 +214,18 @@ class Awards(unittest.TestCase):
         self.assertEqual(got["lurker"]["detail"], "1,000 messages. Reads everything, says little.")
 
     def test_novelist_ratio_is_exact_and_rounds_half_up(self):
-        for words, messages, shown in ((45, 20, "2.3"), (49, 20, "2.5"), (41, 20, "2.1"),
-                                       (239, 20, "12.0"), (25001, 20, "1250.1")):
+        for words, messages, shown in ((205, 20, "10.3"), (209, 20, "10.5"), (201, 20, "10.1"),
+                                       (200, 20, "10.0"), (239, 20, "12.0"), (25001, 20, "1250.1")):
             got = {a["id"]: a for a in S._awards(people({"a": [messages, words], "b": [50, 50],
                                                          "c": [10, 10]}))}
             self.assertEqual(got["novelist"]["winner"], "a")
             self.assertEqual(got["novelist"]["detail"], shown + " words per message. A paragraph person.")
         got = {a["id"]: a["winner"] for a in S._awards(people({
-            "a": [3000000, 1000000], "b": [1000000, 333333], "c": [30, 1]}))}
-        self.assertEqual(got["novelist"], "a")              # 1/3 against 333333/1000000
+            "a": [3000000, 30000001], "b": [1000000, 10000000], "c": [30, 1]}))}
+        self.assertEqual(got["novelist"], "a")              # 10.0000003 against 10
         self.assertEqual(got["minimalist"], "c")
+        got = {a["id"] for a in S._awards(people({"a": [3000000, 29999999], "b": [50, 50], "c": [10, 10]}))}
+        self.assertNotIn("novelist", got)                   # 9.9999997 is not 10
 
 
 class FromRows(unittest.TestCase):

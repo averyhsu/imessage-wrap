@@ -19,7 +19,7 @@ A tap-through story, in the style of Instagram or Spotify stories, built from on
 - how many messages, words and photos, and the longest streak
 - activity by hour, weekday and month, and the busiest single day
 - the chat's **personality**, from what makes it stand out, with the number behind it
-  ("The Daily Ritual: active on 301 of 314 days")
+  ("The Firehose: 154 messages a day, on average")
 - who was up after midnight
 - who carried the conversation
 - the **message of the year**, picked by tapbacks

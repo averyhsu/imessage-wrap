@@ -27,11 +27,11 @@ contract. If you change it, bump `v` and update every consumer in the same commi
   "busiest_day": { "date": "2026-07-04", "messages": 612 },
 
   "personality": {                    // see §3
-    "id": "daily_ritual",
-    "emoji": "📆",
-    "title": "The Daily Ritual",
-    "reason": "Active on 301 of 314 days",   // the number behind the title; never a name
-    "blurb": "Active on 301 of 314 days. Skipping a day is not an option.",
+    "id": "firehose",
+    "emoji": "🚿",
+    "title": "The Firehose",
+    "reason": "154 messages a day, on average",   // the number behind the title; never a name
+    "blurb": "154 messages a day, on average. Mute at your own risk.",
     "peak_hour": 23                   // index of max(by_hour), lowest index wins ties
   },
 
@@ -250,13 +250,13 @@ Counts get thousands separators (`1,500`). `{h12}` is an hour as `11 PM`, `12 AM
 | 5 | `weekend_warriors` | 🎉 | The Weekend Warriors | none | weekend / T | high | 0.45 | 0.75 | `{pct(weekend,T)} of messages on Saturday and Sunday` | Weekdays are for recovering. |
 | 6 | `weekday_regulars` | 💼 | The Weekday Regulars | P >= 14 | weekend / T | low | 0.10 | 0.0 | `{pct(T-weekend,T)} of messages Monday to Friday` | Weekends are for other chats. |
 | 7 | `always_on` | 🔋 | The Always-On Group Chat | T >= 200 | best3 / T | low | 0.20 | 0.125 | `Only {pct(best3,T)} of messages in its busiest three hours` | There is no off switch. |
-| 8 | `daily_ritual` | 📆 | The Daily Ritual | P >= 28 | D / P | high | 0.92 | 1.0 | `Active on {D} of {P} days` | Skipping a day is not an option. |
+| 8 | `daily_ritual` | 📆 | The Daily Ritual | P >= 28 | D / P | high | 0.97 | 1.0 | `Active on {D} of {P} days` | Skipping a day is not an option. |
 | 9 | `flash_mob` | ⚡ | The Flash Mob | P >= 28 and D >= 3 | day1 / T | high | 0.15 | 0.50 | `{pct(day1,T)} of the messages landed on a single day` | When it rains, it pours. |
 | 10 | `seasonal_special` | 🏖️ | The Seasonal Special | P >= 180 | month1 / T | high | 0.40 | 0.80 | `{pct(month1,T)} of messages came in {Month}` (full English month name) | The rest of the year is the off-season. |
 | 11 | `firehose` | 🚿 | The Firehose | none | T / P | high | 100 | 500 | `{T/P rounded} messages a day, on average` | Mute at your own risk. |
 | 12 | `slow_burn` | 🕯️ | The Slow Burn | P >= 90 | P / T | high | 2 | 7 | `About one message every {P/T rounded} days` | In no hurry at all. |
 | 13 | `photo_dump` | 📸 | The Photo Dump | none | A / T | high | 0.25 | 0.60 | `{pct(A,T)} of messages carry a photo, video or file` | Words optional. |
-| 14 | `hype_squad` | 🙌 | The Hype Squad | R >= 20 | R / T | high | 0.40 | 1.0 | `{R} tapbacks on {T} messages` | Nothing goes unnoticed. |
+| 14 | `hype_squad` | 🙌 | The Hype Squad | R >= 20 | R / T | high | 0.50 | 1.0 | `{R} tapbacks on {T} messages` | Nothing goes unnoticed. |
 | 15 | `comedy_club` | 😂 | The Comedy Club | R >= 20 and R*20 >= T | laugh / R | high | 0.50 | 0.85 | `{pct(laugh,R)} of all tapbacks are Ha Ha` | Everyone here thinks they are funny. They are right. |
 | 16 | `love_fest` | 💖 | The Love Fest | R >= 20 and R*20 >= T | love / R | high | 0.60 | 0.90 | `{pct(love,R)} of all tapbacks are hearts` | It is very supportive in here. |
 | 17 | `essayists` | 📝 | The Essayists | Wd > 0 | Wd / T | high | 14 | 30 | `{x} words per message, on average` | Every text is a paragraph. |
@@ -313,8 +313,8 @@ Per-sender counters, over the sender's countable messages in the period:
 | 10 | `link_dropper` | 🔗 | The Link Dropper | most links (>= 3) | `Shared {n} links.` |
 | 11 | `favorite` | ⭐ | The Crowd Favorite | most standing tapbacks received (>= 3) | `{n} tapbacks received.` |
 | 12 | `double_texter` | 📲 | The Double Texter | longest run (>= 5) | `{n} messages in a row. No reply needed.` |
-| 13 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages) | `{x} words per message. A paragraph person.` |
-| 14 | `minimalist` | ✂️ | The Minimalist | lowest words per message among senders with >= 20 messages and >= 1 word; only when at least two senders pass that bar | `{x} words per message. Straight to the point.` |
+| 13 | `novelist` | 📚 | The Novelist | highest words per message (>= 20 messages); only when that is at least 10 (words >= messages * 10) | `{x} words per message. A paragraph person.` |
+| 14 | `minimalist` | ✂️ | The Minimalist | lowest words per message among senders with >= 20 messages and >= 1 word; only when at least two senders pass that bar and the lowest is at most 3.5 (words * 2 <= messages * 7) | `{x} words per message. Straight to the point.` |
 | 15 | `lurker` | 👻 | The Lurker | fewest messages among qualifying senders | `{n} messages. Reads everything, says little.` |
 
 The Lurker comes last on purpose: the quietest person gets something more specific when

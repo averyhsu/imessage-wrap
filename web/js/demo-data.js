@@ -72,11 +72,11 @@ window.WRAPPED_DEMO = {
     "messages": 612
   },
   "personality": {
-    "id": "daily_ritual",
-    "emoji": "📆",
-    "title": "The Daily Ritual",
-    "reason": "Active on 301 of 314 days",
-    "blurb": "Active on 301 of 314 days. Skipping a day is not an option.",
+    "id": "firehose",
+    "emoji": "🚿",
+    "title": "The Firehose",
+    "reason": "154 messages a day, on average",
+    "blurb": "154 messages a day, on average. Mute at your own risk.",
     "peak_hour": 23
   },
   "late_night": {

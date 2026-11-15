@@ -166,7 +166,7 @@ test('awards: counter vectors', () => {
 test('awards: need three qualifying senders', () => {
   assert.deepEqual(I.awards(people({ a: [50], b: [5], c: [4] })), []);
   const got = I.awards(people({ a: [50], b: [5], c: [5], d: [1, 0, 0, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9] }));
-  assert.deepEqual(got.map((a) => a.id), ['yapper', 'lurker', 'novelist']);
+  assert.deepEqual(got.map((a) => a.id), ['yapper', 'lurker']);       // nobody writes 10 words per message
 });
 
 test('awards: table', () => {
@@ -203,14 +203,16 @@ test('awards: details use thousands', () => {
 });
 
 test('awards: novelist ratio is exact and rounds half up', () => {
-  for (const [words, messages, shown] of [[45, 20, '2.3'], [49, 20, '2.5'], [41, 20, '2.1'], [239, 20, '12.0'], [25001, 20, '1250.1']]) {
+  for (const [words, messages, shown] of [[205, 20, '10.3'], [209, 20, '10.5'], [201, 20, '10.1'], [200, 20, '10.0'], [239, 20, '12.0'], [25001, 20, '1250.1']]) {
     const novelist = I.awards(people({ a: [messages, words], b: [50, 50], c: [10, 10] })).find((a) => a.id === 'novelist');
     assert.equal(novelist.winner, 'a');
     assert.equal(novelist.detail, shown + ' words per message. A paragraph person.');
   }
-  const got = new Map(I.awards(people({ a: [3000000, 1000000], b: [1000000, 333333], c: [30, 1] })).map((a) => [a.id, a.winner]));
-  assert.equal(got.get('novelist'), 'a');           // 1/3 against 333333/1000000
+  const got = new Map(I.awards(people({ a: [3000000, 30000001], b: [1000000, 10000000], c: [30, 1] })).map((a) => [a.id, a.winner]));
+  assert.equal(got.get('novelist'), 'a');           // 10.0000003 against 10
   assert.equal(got.get('minimalist'), 'c');
+  const ids = I.awards(people({ a: [3000000, 29999999], b: [50, 50], c: [10, 10] })).map((a) => a.id);
+  assert.ok(!ids.includes('novelist'), '9.9999997 is not 10');
 });
 
 test('awards: ratios compare exactly past 2^53', () => {
