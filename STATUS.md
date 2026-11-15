@@ -85,6 +85,18 @@ None of this has been claimed as working. It needs real devices.
 7. **The numbers on a real chat.** The app has read one real database and produced a
    recap. Nobody has compared its numbers with a hand count of a real chat.
 
+**One failed test run whose cause was not found.** After the merge, one CI run of the Mac
+app failed. The one-time message "Threadback keeps answering from the menu bar" came up a
+second time, over the status window, so the test's clicks on Turn off, Pause all and Quit
+never landed. The app's code was the same as in the runs that had passed. It has not
+happened again: the three runs that followed were green, and each now repeats that sequence
+seven times. Four likely causes were tested and ruled out; the real one is still unknown.
+The app was changed so that each way the message could come back is closed (it counts as
+shown the moment it appears, a second one cannot start while one is up, and settings are
+saved before the app quits), and test builds now record every window event, so a repeat
+would name its cause. On a real Mac the worst case is seeing that message twice and
+clicking OK twice. Nothing is sent because of it.
+
 **Everything else**
 
 8. **The link on a real phone**: whether a preview card (and its short video) appears,

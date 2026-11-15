@@ -422,6 +422,16 @@ Once the owner's two tests had passed (D15), the Mac app stopped being an experi
   Create without a name could scroll the name field out of view. This is the engine in a
   test harness, not the Safari app on a phone, which stays on the list of things to check
   on a real device.
+- **A failed test after the merge was treated as a possible fault, not as a flaky test.**
+  One run failed on a commit that changed only wording: the one-time menu-bar message
+  appeared twice and covered the buttons the test needed. The follow-up was not merged on
+  the strength of "the app code is unchanged". Four likely causes were tested in CI and
+  ruled out, and the failure never came back, so the cause is recorded as unknown. What was
+  done instead: the message's bookkeeping was made stricter in the app, the tests now
+  assert that it appears exactly once (after OK, after a double close request, and after
+  its Quit button), the two-chat sequence runs seven times per CI run, and test builds log
+  every window event. The temporary code used to replay the old behaviour was removed
+  before merging. No test was skipped or loosened.
 - **Accepted, not changed.** A person without a contact name whose handle is an e-mail
   address shows as the part before the `@` (up to 16 characters), which can be a full name;
   and two people who share a first name and an initial are shown with their full contact
