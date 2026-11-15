@@ -30,7 +30,7 @@ the week, the year, top senders, message of the year, tapbacks, awards, summary 
 ## Version A: in a browser, today
 
 ```sh
-git clone -b claude/imessage-wrapped-build-84gdoo https://github.com/averyhsu/imessage-wrap
+git clone https://github.com/averyhsu/imessage-wrap
 cd imessage-wrap && npm ci && npm run serve
 ```
 

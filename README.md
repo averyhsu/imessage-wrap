@@ -34,12 +34,12 @@ A tap-through story, in the style of Instagram or Spotify stories, built from on
 | **Mac helper** | Anyone in the chat types `/wrapped`; the recap card, a short summary and the link appear in the thread. | A Mac signed in to Messages. Today it is a Terminal tool ([guide](docs/MAC.md)); a double-clickable app with a few-click setup exists as a prototype ([what it would take](docs/MAC-APP.md)). |
 | **iPhone app** | Threadback in the Messages app drawer: send a recap someone made as a card, and play it inside Messages. It does not make recaps itself (see below for why). | Xcode today; TestFlight later. [Guide](ios/README.md) |
 
-**Today the public site is not switched on and the code is on a working branch, not yet on
-`main`** (both are waiting for the owner; see [STATUS.md](STATUS.md)). Until then, run the
-same pages on your own computer:
+**The public site may not be switched on yet** (see [STATUS.md](STATUS.md)). If
+`https://averyhsu.github.io/imessage-wrap/` does not open, run the same pages on your own
+computer:
 
 ```sh
-git clone -b claude/imessage-wrapped-build-84gdoo https://github.com/averyhsu/imessage-wrap
+git clone https://github.com/averyhsu/imessage-wrap
 cd imessage-wrap
 npm ci && npm run serve
 # demo story:     http://127.0.0.1:4173/?demo=1

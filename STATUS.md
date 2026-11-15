@@ -1,13 +1,14 @@
 # Status
 
-_Last updated: 2026-11-11._
+_Last updated: 2026-11-15._
 
 **In one paragraph.** The recap story, the browser maker, the command-line tool, the Mac
 helper and the iPhone app with its Messages extension are all built and pass their tests.
-Nobody outside this repository can use them yet, because two switches are yours: the public
-site is off, and the code is on a working branch rather than `main`. Everything was built
-without a real iPhone or Mac, so the things only a device can prove are listed below as
-unproven, each with a short check you can run.
+The code is on `main`. Nobody outside this repository can use the web pages until the
+public site is switched on, which takes two clicks from the owner (see "Decisions"). A Mac
+app that answers `/wrapped` has since been built and proven on the owner's own Mac.
+Everything else was built without a real iPhone or Mac, so the things only a device can
+prove are listed below as unproven, each with a short check you can run.
 
 "Seen working" below means it ran here, or in a CI run that passed and whose output was
 looked at. Nothing is listed on a build agent's word alone.
@@ -44,13 +45,6 @@ the real API).
 
 CI on this branch: `Web story`, `Make page`, `engine`, `Mac helper`, `iOS`, `Mac app`. Results:
 [Actions](https://github.com/averyhsu/imessage-wrap/actions).
-
-State of CI when this was written: every workflow is green on the last commit that touched
-its code, with one exception. The final story fix (`072bdc3`, one small change to how the
-page reacts to a new link) triggered `Web story`, `Make page` and `iOS` runs that GitHub had
-still not started more than an hour later. All suites were run on that exact commit here and
-passed (story 3,081 browser checks, maker 565, Python 447, JavaScript 220). If those three
-runs are not green when you read this, re-run them from the Actions page.
 
 ## What is not proven
 
@@ -125,8 +119,8 @@ Nothing below has been done. Each needs your yes.
 
 | Decision | What happens if yes | Cost |
 |----------|--------------------|------|
-| **Turn on the public site** (GitHub Pages) | The demo, the maker and recap links work at `https://averyhsu.github.io/imessage-wrap/`. In the repo: Settings → Pages → Source: "GitHub Actions", then run the "Publish site" workflow. **Settle the address first**: a recap link contains the site's address, so links already shared would stop working if the repo were renamed or the site moved. | Free. The site is public. |
-| **Merge this branch into `main`** | CI runs on `main`; the one-line installer and the README's plain `git clone` work. | Free |
+| **Turn on the public site** (GitHub Pages) | **Approved by the owner on 2026-11-15; two clicks left, both yours.** (1) Repo → Settings → Pages → Source: "GitHub Actions". (2) Repo → Actions → "Publish site" → Run workflow. Then the demo, the maker, the Mac guide and recap links work at `https://averyhsu.github.io/imessage-wrap/`, and `/wrapped` replies can carry the link to the story. Keep this address: links already shared would stop working if the repo were renamed. | Free. The site is public. |
+| **Merge into `main`** | **Done on 2026-11-15** at the owner's request. CI runs on `main`; the one-line installer and a plain `git clone` work. | Free |
 | **Send into a real group chat** | Check C step 2, then the Mac helper can answer `/wrapped` in the chats you name. | Free. Messages come from your Apple ID. |
 | **Apple Developer Program** | **Declined for now (owner, 2026-11-12).** It would give TestFlight for the iPhone app and a Mac app that opens with one click. Without it the Mac app ships by the free route (see [MAC-APP.md](docs/MAC-APP.md)). | $99 a year |
 | **Finish the Mac app** | **Yes (owner, 2026-11-12):** the Mac app is the direction for `/wrapped`. Next: your two tests (check F), which decide how it is finished. | – |
@@ -135,7 +129,7 @@ Nothing below has been done. Each needs your yes.
 
 ## What's next
 
-1. With your yes: public site on and branch merged; then checks A, B and C.
+1. The two clicks that publish the site; then checks A, B and C, and the story link is switched on in the Mac app's replies.
 2. Check E. If the Shortcut reports senders in group chats, build the last link for an
    iPhone-only path: the app takes the Shortcut's output and makes the recap itself, so it
    can be sent from the Messages drawer without a browser.

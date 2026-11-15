@@ -37,15 +37,6 @@ library into it, and adds two commands, `threadback` and `wrapped` (the same thi
 names), to `~/.local/bin`. It uses no `sudo`, changes nothing system-wide, and sends nothing.
 If it says `~/.local/bin` is not on your PATH, run the one line it prints.
 
-<details>
-<summary>Installing before this branch is merged into <code>main</code></summary>
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/averyhsu/imessage-wrap/claude/imessage-wrapped-build-84gdoo/install.sh \
-  | THREADBACK_REF=claude/imessage-wrapped-build-84gdoo bash
-```
-</details>
-
 To remove it again: `curl -fsSL https://raw.githubusercontent.com/averyhsu/imessage-wrap/main/install.sh | bash -s -- --uninstall`
 
 Uninstalling removes exactly what was installed: the two commands, the private Python
