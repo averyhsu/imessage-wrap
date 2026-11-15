@@ -317,6 +317,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// Settings written just before quitting (the notice's Quit button sets "told" and quits
+    /// in the same moment) must reach the preferences store before the process ends.
+    func applicationWillTerminate(_ notification: Notification) {
+        if DebugOptions.flag("TBNoticeLegacy") { return }   // CI diagnostics: the old behaviour
+        let flushed = UserDefaults.standard.synchronize()
+        Trace.note("quitting: settings flushed \(flushed), told about the menu bar \(UserDefaults.standard.bool(forKey: toldKey))")
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }

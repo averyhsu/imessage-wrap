@@ -57,6 +57,7 @@ class ThreadbackUITestCase: XCTestCase {
         let words = sheet.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
         if let shot { shootWindow(app, shot) }
         XCTAssertFalse(element(app, "onboarding.ready").exists, "nothing is on before the click")
+        waitUntilSettled(sheet)
         sheet.buttons["Turn on"].click()
         return words
     }
@@ -80,12 +81,26 @@ class ThreadbackUITestCase: XCTestCase {
         }
         let ok = sheet.buttons["OK"]
         XCTAssertTrue(ok.waitForExistence(timeout: 5))
-        for _ in 0..<20 where !ok.isHittable { usleep(100_000) }
+        waitUntilSettled(sheet)
         ok.click()
         let gone = sheet.waitForNonExistence(timeout: 5)
         XCTAssertTrue(gone, "the notice goes away when OK is clicked (\(label))")
-        note("menu-bar notice (\(label)): shown, OK clicked, gone \(gone)")
+        XCTAssertNotEqual(app.state, .notRunning, "OK keeps Threadback running (\(label))")
+        note("menu-bar notice (\(label)): shown, OK clicked, gone \(gone), still running \(app.state != .notRunning)")
         return true
+    }
+
+    /// Waits until a sheet has stopped sliding in: a click is aimed at where a button will
+    /// be, so a click during the animation can land on the button below it.
+    func waitUntilSettled(_ sheet: XCUIElement) {
+        var last = sheet.frame
+        for _ in 0..<20 {
+            usleep(150_000)
+            let now = sheet.frame
+            if now == last && sheet.buttons.firstMatch.isHittable { break }
+            last = now
+        }
+        usleep(300_000)
     }
 
     /// Opens the running app again the way Finder, Spotlight or Launchpad do (a reopen).
@@ -506,6 +521,55 @@ final class NoticeDiagnosticsUITests: ThreadbackUITestCase {
     func testLegacyNoticeOneCloseRequest() throws { try run(["-TBNoticeLegacy", "YES"], "legacy notice, one close request") }
     func testLegacyNoticeTwoCloseRequests() throws { try run(["-TBNoticeLegacy", "YES", "-TBDoubleClose", "YES"], "legacy notice, two close requests") }
 
+    /// The first notice answered with its other button, Quit Threadback (where a click aimed
+    /// at OK lands while the sheet is still sliding in), then Threadback opened again and the
+    /// rest of the old test5 sequence: is "told" still set, and what is on the status window?
+    private func quitThenWalk(_ extra: [String], _ label: String) throws {
+        guard let fixture = env["THREADBACK_FIXTURE"] else { throw XCTSkip("THREADBACK_FIXTURE is not set") }
+        let args = ["-TBDatabase", fixture + "/mac/chat.db", "-TBContacts", fixture + "/mac/AddressBook", "-TBMe", "Amara",
+                    "-TBNoAutomation", "YES", "-TBTimeZone", "America/Los_Angeles"] + extra
+        let app = launch(["-TBResetOnboarding", "YES"] + args)
+        var steps: [String] = []
+        XCTAssertTrue(element(app, "onboarding.continue").waitForExistence(timeout: 30))
+        element(app, "onboarding.continue").click()
+        element(app, "onboarding.connect").click()
+        XCTAssertTrue(element(app, "onboarding.toChats").waitForExistence(timeout: 30))
+        element(app, "onboarding.toChats").click()
+        turnOnChat(app, 0)
+        XCTAssertTrue(element(app, "onboarding.ready").waitForExistence(timeout: 30))
+        element(app, "onboarding.done").click()
+        let sheet = app.sheets.firstMatch
+        steps.append("notice shown: \(sheet.waitForExistence(timeout: 10))")
+        waitUntilSettled(sheet)
+        sheet.buttons["Quit Threadback"].click()
+        steps.append("quit: \(app.wait(for: .notRunning, timeout: 15))")
+        let again = launch(args)
+        steps.append("status after opening again: \(element(again, "status.addChat").waitForExistence(timeout: 30))")
+        element(again, "status.addChat").click()
+        if element(again, "chat.turnOn.1").waitForExistence(timeout: 15) {
+            turnOnChat(again, 1)
+            _ = element(again, "onboarding.ready").waitForExistence(timeout: 30)
+            element(again, "onboarding.done").click()
+            sleep(2)
+            steps.append("sheets after the second close: \(again.sheets.count)")
+            reopen()
+            steps.append("two chats listed: \(element(again, "status.last.1").waitForExistence(timeout: 15))")
+            sleep(1)
+            let over = again.sheets.count
+            steps.append("sheets over the status window: \(over)")
+            if over > 0 {
+                let words = again.sheets.firstMatch.staticTexts.allElementsBoundByIndex.map { text(of: $0) }.joined(separator: " | ")
+                steps.append("it says: \(String(words.prefix(60)))")
+                if extra.contains("-TBNoticeLegacy") { shootWindow(again, "status-9-notice-over-status") }
+            }
+        }
+        note("diagnostic \(label): " + steps.joined(separator: "; "))
+        again.terminate()
+    }
+
+    func testLegacyNoticeQuitThenOpenAgain() throws { try quitThenWalk(["-TBNoticeLegacy", "YES"], "legacy notice answered with Quit, then opened again") }
+    func testNoticeQuitThenOpenAgain() throws { try quitThenWalk([], "current notice answered with Quit, then opened again") }
+
     /// The first notice is left unanswered, as if the OK click had not reached it, and the
     /// rest of the old test5 sequence runs as it did: does each step still work, and what is
     /// on the status window at the end?
@@ -540,8 +604,9 @@ final class NoticeDiagnosticsUITests: ThreadbackUITestCase {
             steps.append("sheet after Turn on: \(String(words.prefix(80)))")
             if sheet.buttons["Turn on"].exists { sheet.buttons["Turn on"].click(); steps.append("clicked Turn on in the consent sheet") }
         }
-        step("second chat ready", element(app, "onboarding.ready").waitForExistence(timeout: 10))
-        element(app, "onboarding.done").click()
+        let ready = element(app, "onboarding.ready").waitForExistence(timeout: 10)
+        step("second chat ready", ready)
+        if ready { element(app, "onboarding.done").click() }
         sleep(2)
         reopen()
         step("two chats listed", element(app, "status.last.1").waitForExistence(timeout: 10))
