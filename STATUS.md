@@ -105,10 +105,11 @@ clicking OK twice. Nothing is sent because of it.
 **One slow iPhone test run.** While this change was in CI, one run of the iPhone app's
 tests failed: a test that waits up to 30 seconds for the story's very first start in the
 Simulator gave up. The same recap then started in 0.3 seconds in the same test, the other
-69 tests passed, and that whole run was two to five times slower than usual. The next run
-passed. Measured here, the story's first start is about 18% heavier than before (five more
-layout passes for the new lines), which is not enough to explain it. GitHub does not let
-this session re-run a job, so there is one passing run after it, not several.
+69 tests passed, and that whole run was two to five times slower than usual. The next two
+runs passed, one on the working branch and one on `main`. Measured here, the story's first
+start is about 18% heavier than before (five more layout passes for the new lines), which
+is not enough to explain it. GitHub does not let this session re-run a job, so the failed
+run itself was never repeated.
 
 **Everything else**
 
